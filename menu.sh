@@ -95,6 +95,10 @@ case $op in
   bash monitor.sh
   ;;
 
+08|8)
+  bash modules/protocols.sh
+  ;;
+
 06)
   echo -e "${Y}Actualizando script...${N}"
   git pull

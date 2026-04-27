@@ -54,8 +54,7 @@ read -p "➤ Opcion: " op
 case $op in
 
 1|01)
-  apt install openssh-server -y
-  systemctl restart ssh
+  bash modules/ssh.sh
   ;;
 
 2|02)

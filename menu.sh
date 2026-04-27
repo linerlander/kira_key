@@ -22,7 +22,7 @@ RAM_PERC=$(free | awk '/Mem:/ {printf("%.2f"), $3/$2 * 100}')
 # CPU
 CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
 
-# Función puerto real
+# Funciones
 check_port() {
   ss -tuln | grep -q ":$1 " && echo -e "${G}[ON]${N}" || echo -e "${R}[OFF]${N}"
 }
@@ -31,73 +31,59 @@ check_port() {
 SSH_PORTS=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}')
 SSH_STATUS=$(systemctl is-active ssh 2>/dev/null)
 
-if [ "$SSH_STATUS" = "active" ]; then
-  SSH_STATE="${G}[ON]${N}"
-else
-  SSH_STATE="${R}[OFF]${N}"
-fi
+[ "$SSH_STATUS" = "active" ] && SSH_STATE="${G}[ON]${N}" || SSH_STATE="${R}[OFF]${N}"
 
-# DNS (puerto 53)
+# Puertos SSH en una línea
+SSH_LIST=""
+for p in $SSH_PORTS; do
+  SSH_LIST+="$p "
+done
+
+# Servicios reales
 DNS_STATE=$(check_port 53)
-
-# HTTP
 HTTP_STATE=$(check_port 80)
-
-# HTTPS
 HTTPS_STATE=$(check_port 443)
 
-# BadVPN (proceso real)
-if pgrep -f badvpn >/dev/null; then
-  BADVPN_STATE="${G}[ON]${N}"
-else
-  BADVPN_STATE="${R}[OFF]${N}"
-fi
+# BadVPN
+pgrep -f badvpn >/dev/null && BADVPN_STATE="${G}[ON]${N}" || BADVPN_STATE="${R}[OFF]${N}"
 
 while true; do
 clear
 
-echo -e "${C}════════════════════════════════════════════════════${N}"
-echo -e "${W}🔥 SCRIPT KIRA - PANEL VPS 🔥${N}"
-echo -e "${C}════════════════════════════════════════════════════${N}"
+# Banner KIRA estilo hacker 🇵🇪
+echo -e "${R}██╗  ██╗${W}██╗${R}██████╗  █████╗ ${N}"
+echo -e "${R}██║ ██╔╝${W}██║██╔══██╗██╔══██╗${N}"
+echo -e "${W}█████╔╝ ${R}██║██████╔╝███████║${N}"
+echo -e "${W}██╔═██╗ ${R}██║██╔══██╗██╔══██║${N}"
+echo -e "${R}██║  ██╗${W}██║██║  ██║██║  ██║${N}"
+echo -e "${R}╚═╝  ╚═╝${W}╚═╝╚═╝  ╚═╝╚═╝  ╚═╝${N}"
 
-echo -e " ${W}IP:${N} $IP   ${W}FECHA:${N} $FECHA"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+echo -e " ${W}IP:${N} $IP    ${W}FECHA:${N} $FECHA"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
 
-echo -e "${C}════════════════════════════════════════════════════${N}"
+# LINEA PRINCIPAL (tipo panel pro)
+printf " SSH: %b %-10s   System-DNS: %b\n" "$SSH_STATE" "$SSH_LIST" "$DNS_STATE"
+printf " HTTP: %b        HTTPS: %b\n" "$HTTP_STATE" "$HTTPS_STATE"
+printf " BadVPN: %b\n" "$BADVPN_STATE"
 
-# SSH real
-echo -e " ${W}SSH:${N} $SSH_STATE"
-echo -ne " ${W}Puertos SSH:${N} "
-if [ -n "$SSH_PORTS" ]; then
-  for p in $SSH_PORTS; do
-    echo -ne "$p "
-  done
-  echo ""
-else
-  echo "Ninguno"
-fi
+echo -e "${Y}════════════════════════════════════════════════════${N}"
 
-# Servicios reales
-echo -e " ${W}System-DNS (53):${N} $DNS_STATE"
-echo -e " ${W}HTTP (80):${N} $HTTP_STATE"
-echo -e " ${W}HTTPS (443):${N} $HTTPS_STATE"
-echo -e " ${W}BadVPN:${N} $BADVPN_STATE"
+echo -e " ${W}RAM:${N} ${USED_RAM}/${TOTAL_RAM}MB (${RAM_PERC}%)   ${W}CPU:${N} ${CPU}%"
 
-echo -e "${C}════════════════════════════════════════════════════${N}"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
 
-echo -e " ${W}RAM:${N} ${USED_RAM}MB / ${TOTAL_RAM}MB (${RAM_PERC}%)"
-echo -e " ${W}CPU:${N} ${CPU}%"
-
-echo -e "${C}════════════════════════════════════════════════════${N}"
-
+# MENU (manteniendo todo)
 echo -e "${W}[01]${N} CONTROL USUARIOS"
 echo -e "${W}[02]${N} OPTIMIZAR VPS"
 echo -e "${W}[03]${N} USUARIOS ONLINE"
 echo -e "${W}[04]${N} AUTO INICIO"
 echo -e "${W}[05]${N} INSTALADOR DE PROTOCOLOS"
+echo -e "${W}[06]${N} MONITOR EN TIEMPO REAL"
 
-echo -e "${C}════════════════════════════════════════════════════${N}"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
 echo -e "${R}[0] SALIR${N}"
-echo -e "${C}════════════════════════════════════════════════════${N}"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
 
 read -p "➤ Opcion: " op
 
@@ -105,6 +91,10 @@ case $op in
 
 5|05)
   bash modules/protocols.sh
+  ;;
+
+6|06)
+  bash monitor.sh
   ;;
 
 0)

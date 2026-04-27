@@ -13,7 +13,6 @@ N='\033[0m'
 REPO="linerlander/kira_key"
 BRANCH="main"
 INSTALL_DIR="$HOME/kira_key"
-
 RAW_VERSION="https://raw.githubusercontent.com/$REPO/$BRANCH/version.txt"
 
 # ========= IR AL DIRECTORIO =========
@@ -22,7 +21,7 @@ cd "$INSTALL_DIR" 2>/dev/null || {
   exit
 }
 
-# ========= SINCRONIZAR (CLAVE 🔥) =========
+# ========= SINCRONIZAR SOLO INFO =========
 git fetch --all >/dev/null 2>&1
 
 # ========= VERSIONES =========
@@ -34,7 +33,7 @@ REMOTE_VERSION=$(curl -s "$RAW_VERSION?$(date +%s)" | tr -d '\r\n ')
 
 # ========= COMMITS =========
 LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
-REMOTE_COMMIT=$(git ls-remote https://github.com/$REPO.git refs/heads/$BRANCH | awk '{print $1}')
+REMOTE_COMMIT=$(git ls-remote origin $BRANCH | awk '{print $1}')
 
 # ========= ESTADO =========
 if [[ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]]; then
@@ -88,12 +87,12 @@ case $op in
   cp -r "$INSTALL_DIR" "$BACKUP_DIR"
   echo -e "${C}✔ Backup creado${N}"
 
-  # UPDATE REAL
+  # ACTUALIZAR (AQUÍ ESTÁ LA CLAVE 🔥)
   git reset --hard origin/$BRANCH >/dev/null 2>&1
 
   chmod +x *.sh modules/*.sh
 
-  # VALIDACION
+  # VALIDAR
   NEW_COMMIT=$(git rev-parse HEAD)
   NEW_VERSION=$(cat version.txt 2>/dev/null | tr -d '\r\n ')
 

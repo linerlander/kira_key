@@ -1,102 +1,78 @@
 #!/bin/bash
 
 # ========= COLORES =========
-R='\033[38;5;196m'
-G='\033[38;5;46m'
-Y='\033[38;5;226m'
-C='\033[38;5;51m'
-P='\033[38;5;201m'
 W='\033[1;37m'
-D='\033[38;5;240m'
+D='\033[38;5;245m'
+Y='\033[38;5;220m'
+R='\033[38;5;196m'
+C='\033[38;5;51m'
 N='\033[0m'
 
-# ========= RUTA SEGURA =========
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# ========= MENU =========
 while true; do
 clear
 
-echo -e "${G}"
-echo "██╗  ██╗██╗██████╗  █████╗ "
-echo "██║ ██╔╝██║██╔══██╗██╔══██╗"
-echo "█████╔╝ ██║██████╔╝███████║"
-echo "██╔═██╗ ██║██╔══██╗██╔══██║"
-echo "██║  ██╗██║██║  ██║██║  ██║"
-echo "╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝"
-echo -e "${N}"
+echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e " ${Y}🔐 ADMINISTRADOR DE USUARIOS SSH | PANEL KIRA${N}"
+echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " 🔐 ${W}KIRA USER MANAGER${N} 🔐"
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
+# ===== STATS =====
 RAM=$(free -m | awk '/Mem:/ {print $4}')
-CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print $2+$4}')
+CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print int($2+$4)}')
 
-printf " ▶ RAM: %sMB   ▶ CPU: %s%%\n" "$RAM" "$CPU"
+echo -e " ${C}▶ M LIBRE:${N} ${W}${RAM}M   ${C}▶ USO CPU:${N} ${W}${CPU}%${N}"
 
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-printf " [01] 👤 AGREGAR USUARIO\n"
-printf " [02] ❌ BORRAR USUARIO\n"
-printf " [03] 🔄 RENOVAR USUARIO\n"
-printf " [04] 📋 USUARIOS REGISTRADOS\n"
-printf " [05] 🌐 USUARIOS ONLINE\n"
-printf " [06] 🖥️ BANNER\n"
-printf " [07] 📊 LOG\n"
-printf " [08] 🔒 BLOQUEAR\n"
-printf " [09] 💾 BACKUP\n"
-printf " [10] ⚙️ SSR/SS\n"
-printf " [11] 🤖 TELEGRAM\n"
-printf " [12] 🧪 VERIFICADOR\n"
-printf " [13] 📡 CHECKUSER\n"
-printf " [14] 🔥 MULTILOGIN\n"
+# ===== MENU =====
+echo -e " ${Y}[01]${N} ➤ ${W}AGREGAR USUARIO${N} ${D}(HWID/NORMAL/TOKEN)${N} 📝"
+echo -e " ${Y}[02]${N} ➤ ${W}BORRAR USUARIO(S)${N} 🗑️"
+echo -e " ${Y}[03]${N} ➤ ${W}EDITAR / RENOVAR${N} 🔄"
+echo -e " ${Y}[04]${N} ➤ ${W}USUARIOS REGISTRADOS${N} 📋"
+echo -e " ${Y}[05]${N} ➤ ${W}USUARIOS CONECTADOS${N} 🌐"
+echo -e " ${Y}[06]${N} ➤ ${W}BANNER SSH${N} 🎭"
+echo -e " ${Y}[07]${N} ➤ ${W}LOG DE CONSUMO${N} 📊"
+echo -e " ${Y}[08]${N} ➤ ${W}BLOQUEAR USUARIO${N} ${R}(LOCKED)${N} 🔒"
+echo -e " ${Y}[09]${N} ➤ ${W}BACKUP USUARIOS${N} 💾"
+echo -e " ${Y}[10]${N} ➤ ${W}MENU SSR/SS${N} ⚙️"
+echo -e " ${Y}[11]${N} ➤ ${W}BOT TELEGRAM${N} ${Y}(BETA)${N} 🤖"
+echo -e " ${Y}[12]${N} ➤ ${W}VERIFICADOR${N} 🧪"
+echo -e " ${Y}[13]${N} ➤ ${W}CHECKUSER${N} ${R}(OFF)${N} 📡"
+echo -e " ${Y}[14]${N} ➤ ${W}CONTROL MULTILOGIN${N} 💥"
 
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " [0] VOLVER"
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e " ${R}[0]${N} ➤ ${W}[ REGRESAR ]${N}"
+echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-read -p " ▶ Opcion : " op
+echo -e "${D}( CONTADOR: ${Y}ON${D} )   ( KILL MULTISESSION: ${R}OFF${D} )${N}"
+
+echo ""
+read -p " ► Opción: " op
 
 case $op in
 
-# 👉 AGREGAR USUARIO (MODULE)
 1|01)
 bash "$DIR/modules/user_add.sh"
 ;;
 
-# 👉 BORRAR USUARIO
 2|02)
-read -p "Usuario a eliminar: " u
+read -p "Usuario: " u
 userdel -r "$u" 2>/dev/null
 rm -f /etc/kira/limits/$u
 rm -f /etc/kira/expire/$u
-echo -e "${G}✔ Usuario eliminado${N}"
+echo -e "${Y}✔ Usuario eliminado${N}"
 sleep 2
 ;;
 
-# 👉 RENOVAR (placeholder)
-3|03)
-echo -e "${Y}En desarrollo...${N}"
-sleep 2
-;;
-
-# 👉 LISTAR
 4|04)
 awk -F: '$3>=1000 {print $1}' /etc/passwd
 read -p "Enter..."
 ;;
 
-# 👉 ONLINE
 5|05)
 who
 read -p "Enter..."
-;;
-
-# 👉 OTROS (placeholder pro)
-6|06|7|07|8|08|9|09|10|11|12|13|14)
-echo -e "${Y}Modulo en desarrollo...${N}"
-sleep 2
 ;;
 
 0)
@@ -104,7 +80,7 @@ break
 ;;
 
 *)
-echo -e "${R}Opcion invalida${N}"
+echo -e "${R}Opción inválida${N}"
 sleep 1
 ;;
 

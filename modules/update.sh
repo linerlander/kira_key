@@ -16,16 +16,24 @@ INSTALL_DIR="$HOME/kira_key"
 
 RAW_VERSION="https://raw.githubusercontent.com/$REPO/$BRANCH/version.txt"
 
+# ========= IR AL DIRECTORIO =========
+cd "$INSTALL_DIR" 2>/dev/null || {
+  echo -e "${R}Error: no se encontró kira_key${N}"
+  exit
+}
+
+# ========= SINCRONIZAR (CLAVE 🔥) =========
+git fetch --all >/dev/null 2>&1
+
 # ========= VERSIONES =========
-LOCAL_VERSION=$(cat "$INSTALL_DIR/version.txt" 2>/dev/null | tr -d '\r\n ')
+LOCAL_VERSION=$(cat version.txt 2>/dev/null | tr -d '\r\n ')
 REMOTE_VERSION=$(curl -s "$RAW_VERSION?$(date +%s)" | tr -d '\r\n ')
 
-# fallback si falla
 [ -z "$LOCAL_VERSION" ] && LOCAL_VERSION="N/A"
 [ -z "$REMOTE_VERSION" ] && REMOTE_VERSION="ERROR"
 
 # ========= COMMITS =========
-LOCAL_COMMIT=$(git -C "$INSTALL_DIR" rev-parse HEAD 2>/dev/null)
+LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
 REMOTE_COMMIT=$(git ls-remote https://github.com/$REPO.git refs/heads/$BRANCH | awk '{print $1}')
 
 # ========= ESTADO =========
@@ -38,7 +46,7 @@ fi
 while true; do
 clear
 
-# ========= BANNER KIRA =========
+# ========= BANNER =========
 echo -e "${R}██╗  ██╗${W}██╗${R}██████╗  █████╗ ${N}"
 echo -e "${R}██║ ██╔╝${W}██║██╔══██╗██╔══██╗${N}"
 echo -e "${W}█████╔╝ ${R}██║██████╔╝███████║${N}"
@@ -80,10 +88,7 @@ case $op in
   cp -r "$INSTALL_DIR" "$BACKUP_DIR"
   echo -e "${C}✔ Backup creado${N}"
 
-  cd "$INSTALL_DIR" || exit
-
-  # UPDATE
-  git fetch --all >/dev/null 2>&1
+  # UPDATE REAL
   git reset --hard origin/$BRANCH >/dev/null 2>&1
 
   chmod +x *.sh modules/*.sh

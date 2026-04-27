@@ -27,9 +27,7 @@ bar() {
 
   printf "$COLOR"
   printf "%0.s█" $(seq 1 $filled)
-
   printf "$D"
-  
   printf "%0.s░" $(seq 1 $empty)
 
   printf "$N"

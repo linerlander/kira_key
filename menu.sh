@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# 🎨 COLORES PRO (neón estilo hacker)
-R='\033[38;5;196m'   # rojo fuerte
-G='\033[38;5;46m'    # verde neón
-Y='\033[38;5;226m'   # amarillo brillante
-C='\033[38;5;51m'    # cyan
-W='\033[38;5;255m'   # blanco limpio
-D='\033[38;5;240m'   # gris suave
+# 🎨 COLORES PRO (neón)
+R='\033[38;5;196m'
+G='\033[38;5;46m'
+Y='\033[38;5;226m'
+C='\033[38;5;51m'
+W='\033[38;5;255m'
+D='\033[38;5;240m'
 N='\033[0m'
 
 # IP
@@ -23,7 +23,7 @@ RAM_PERC=$(free | awk '/Mem:/ {printf("%.2f"), $3/$2 * 100}')
 # CPU
 CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
 
-# Funciones
+# Función check puerto
 check_port() {
   ss -tuln | grep -q ":$1 " && echo -e "${G}● ON${N}" || echo -e "${R}● OFF${N}"
 }
@@ -33,12 +33,6 @@ SSH_PORTS=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}')
 SSH_STATUS=$(systemctl is-active ssh 2>/dev/null)
 
 [ "$SSH_STATUS" = "active" ] && SSH_STATE="${G}● ON${N}" || SSH_STATE="${R}● OFF${N}"
-
-# Puertos SSH en una línea
-SSH_LIST=""
-for p in $SSH_PORTS; do
-  SSH_LIST+="${C}$p${N} "
-done
 
 # Servicios reales
 DNS_STATE=$(check_port 53)
@@ -63,8 +57,16 @@ echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " ${Y}IP:${N} ${W}$IP${N}    ${Y}FECHA:${N} ${W}$FECHA${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# PANEL PRO (ALINEADO)
-printf " ${W}SSH:${N} %b ${C}%-12s${N}   ${W}DNS(53):${N} %b\n" "$SSH_STATE" "$SSH_LIST" "$DNS_STATE"
+# 🔥 PANEL PRO (CORREGIDO SIN BUG DE COLORES)
+
+printf " ${W}SSH:${N} %b " "$SSH_STATE"
+
+for p in $SSH_PORTS; do
+  printf "${C}%s${N} " "$p"
+done
+
+printf "   ${W}DNS(53):${N} %b\n" "$DNS_STATE"
+
 printf " ${W}HTTP(80):${N} %b      ${W}HTTPS(443):${N} %b\n" "$HTTP_STATE" "$HTTPS_STATE"
 printf " ${W}BadVPN:${N} %b\n" "$BADVPN_STATE"
 
@@ -74,7 +76,7 @@ echo -e " ${Y}RAM:${N} ${W}${USED_RAM}/${TOTAL_RAM}MB${N} (${G}${RAM_PERC}%${N})
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# MENU (MEJOR COLOR)
+# MENU
 echo -e " ${G}[01]${N} ${W}CONTROL USUARIOS${N}"
 echo -e " ${G}[02]${N} ${W}OPTIMIZAR VPS${N}"
 echo -e " ${G}[03]${N} ${W}USUARIOS ONLINE${N}"

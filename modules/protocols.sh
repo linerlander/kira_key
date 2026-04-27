@@ -20,24 +20,24 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " 🍄 ${W}INSTALACION DE PROTOCOLOS${Y} ( KIRA ) 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 PROTOCOLOS (ALINEADO PERFECTO)
-printf "${W}[01]${N} %-14s %-10b   ${W}[11]${N} %-16s ${R}[OFF]${N}\n" "OpenSSH" "$(status ssh)" "Psiphon Server"
-printf "${W}[02]${N} %-14s %-10b   ${W}[12]${N} %-16s ${Y}[BETA]${N}\n" "Dropbear" "$(status dropbear)" "TCP DNS"
-printf "${W}[03]${N} %-14s ${R}[OFF]${N}   ${W}[13]${N} %-16s ${R}[OFF]${N}\n" "OpenVPN" "Webmin"
-printf "${W}[04]${N} %-14s ${R}[OFF]${N}   ${W}[14]${N} %-16s ${R}[OFF]${N}\n" "SSL/TLS" "SlowDNS"
-printf "${W}[05]${N} %-14s ${R}[OFF]${N}   ${W}[15]${N} %-16s ${R}[OFF]${N}\n" "Shadowsocks" "SSL→Python"
-printf "${W}[06]${N} %-14s %-10b   ${W}[16]${N} %-16s ${R}[OFF]${N}\n" "Squid Proxy" "$(status squid)" "SSH Multiplex"
-printf "${W}[07]${N} %-14s ${C}[PyD]${N}   ${W}[17]${N} %-16s ${Y}[BETA]${N}\n" "Proxy Python" "Over WebSocket"
-printf "${W}[08]${N} %-14s ${R}[OFF]${N}   ${W}[18]${N} %-16s ${R}[OFF]${N}\n" "V2Ray Switch" "SOCKS5"
-printf "${W}[09]${N} %-14s ${R}[OFF]${N}   ${W}[19]${N} %-16s ${R}[OFF]${N}\n" "CEA (Clash)" "Protocolos UDP"
-printf "${W}[10]${N} %-14s ${R}[OFF]${N}   ${W}[20]${N} %-16s ${Y}[DEV]${N}\n" "Trojan-Go" "Funciones"
+# 🔥 PROTOCOLOS (PERFECTAMENTE ALINEADO)
+printf "${W}[01]${N} %-14s %-10b   ${W}[11]${N} %-16s %-8b\n" "OpenSSH" "$(status ssh)" "Psiphon Server" "${R}[OFF]${N}"
+printf "${W}[02]${N} %-14s %-10b   ${W}[12]${N} %-16s %-8b\n" "Dropbear" "$(status dropbear)" "TCP DNS" "${Y}[BETA]${N}"
+printf "${W}[03]${N} %-14s %-10b   ${W}[13]${N} %-16s %-8b\n" "OpenVPN" "${R}[OFF]${N}" "Webmin" "${R}[OFF]${N}"
+printf "${W}[04]${N} %-14s %-10b   ${W}[14]${N} %-16s %-8b\n" "SSL/TLS" "${R}[OFF]${N}" "SlowDNS" "${R}[OFF]${N}"
+printf "${W}[05]${N} %-14s %-10b   ${W}[15]${N} %-16s %-8b\n" "Shadowsocks" "${R}[OFF]${N}" "SSL→Python" "${R}[OFF]${N}"
+printf "${W}[06]${N} %-14s %-10b   ${W}[16]${N} %-16s %-8b\n" "Squid Proxy" "$(status squid)" "SSH Multiplex" "${R}[OFF]${N}"
+printf "${W}[07]${N} %-14s %-10b   ${W}[17]${N} %-16s %-8b\n" "Proxy Python" "${C}[PyD]${N}" "Over WebSocket" "${Y}[BETA]${N}"
+printf "${W}[08]${N} %-14s %-10b   ${W}[18]${N} %-16s %-8b\n" "V2Ray Switch" "${R}[OFF]${N}" "SOCKS5" "${R}[OFF]${N}"
+printf "${W}[09]${N} %-14s %-10b   ${W}[19]${N} %-16s %-8b\n" "CEA (Clash)" "${R}[OFF]${N}" "Protocolos UDP" "${R}[OFF]${N}"
+printf "${W}[10]${N} %-14s %-10b   ${W}[20]${N} %-16s %-8b\n" "Trojan-Go" "${R}[OFF]${N}" "Funciones" "${Y}[DEV]${N}"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 echo -e " 🍄 ${W}HERRAMIENTAS Y SERVICIOS${N} 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 SERVICIOS (YA ESTABA BIEN, SOLO AJUSTE MINIMO)
+# 🔥 SERVICIOS (ALINEADO)
 printf "${W}[21]${N} %-16s ${R}[OFF]${N}   ${W}[22]${N} %-14s ${G}[ON]${N}\n" "Block Torrent" "BadVPN"
 printf "${W}[23]${N} %-16s ${R}[OFF]${N}   ${W}[24]${N} %-14s ${R}[OFF]${N}\n" "TCP BBR" "Fail2Ban"
 printf "${W}[25]${N} %-16s ${G}[443]${N}   ${W}[26]${N} %-14s ${C}[RUN]${N}\n" "Archivo Online" "SpeedTest"

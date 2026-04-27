@@ -76,7 +76,7 @@ case $op in
 
   chmod +x *.sh modules/*.sh
 
-  # VALIDACION
+  # VALIDACION  
   NEW_COMMIT=$(git rev-parse HEAD)
 
   if [[ "$NEW_COMMIT" == "$REMOTE_COMMIT" ]]; then

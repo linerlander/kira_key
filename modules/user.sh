@@ -51,27 +51,22 @@ echo -e "${R}Formato invalido. Usa 30m / 2h / 1d${N}"
 fi
 done
 
-unit=$(echo "$tiempo" | grep -o '[smhd]$')
-value=$(echo "$tiempo" | grep -o '^[0-9]\+')
-
-case $unit in
-s) exp=$(date -d "$value seconds" +"%Y-%m-%d %H:%M:%S") ;;
-m) exp=$(date -d "$value minutes" +"%Y-%m-%d %H:%M:%S") ;;
-h) exp=$(date -d "$value hours" +"%Y-%m-%d %H:%M:%S") ;;
-d) exp=$(date -d "$value days" +"%Y-%m-%d %H:%M:%S") ;;
-esac
-
 read -p "Limite conexiones (default 1): " limit
 [ -z "$limit" ] && limit=1
 
-# CREACION CORRECTA
+# CREACION CORRECTA (FIX REAL)
 useradd -m -s /bin/bash "$user"
 echo "$user:$pass" | chpasswd
 passwd -u "$user"
-chage -E "$exp" "$user"
+chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
+# GUARDAR LIMITE
 mkdir -p /etc/kira/limits
 echo "$limit" > /etc/kira/limits/$user
+
+# GUARDAR EXPIRACION REAL (PRO)
+mkdir -p /etc/kira/expire
+echo "$(date +%s) $tiempo" > /etc/kira/expire/$user
 
 IP=$(curl -s ifconfig.me)
 PORT=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
@@ -87,7 +82,7 @@ printf " 👤 USER    : %s\n" "$user"
 printf " 🔑 PASS    : %s\n" "$pass"
 printf " 📡 PUERTO  : %s\n" "$PORT"
 printf " 📊 LIMITE  : %s\n" "$limit"
-printf " ⏳ EXPIRA  : %s\n" "$exp"
+printf " ⏳ TIEMPO  : %s\n" "$tiempo"
 
 echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
@@ -106,15 +101,19 @@ read -p "Limite: " limit
 
 [ -z "$limit" ] && limit=1
 
-exp=$(date -d "$dias days" +"%Y-%m-%d %H:%M:%S")
-
+# CREACION CORRECTA
 useradd -m -s /bin/bash "$user"
 echo "$user:$pass" | chpasswd
 passwd -u "$user"
-chage -E "$exp" "$user"
+chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
+# GUARDAR LIMITE
 mkdir -p /etc/kira/limits
 echo "$limit" > /etc/kira/limits/$user
+
+# GUARDAR EXPIRACION (DIAS)
+mkdir -p /etc/kira/expire
+echo "$(date +%s) ${dias}d" > /etc/kira/expire/$user
 
 IP=$(curl -s ifconfig.me)
 
@@ -122,8 +121,8 @@ echo -e "\n${G}✔ USUARIO CREADO${N}"
 echo -e "🌐 IP: $IP"
 echo -e "👤 User: $user"
 echo -e "🔑 Pass: $pass"
-echo -e "⏳ Expira: $exp"
 echo -e "📊 Limite: $limit"
+echo -e "⏳ Tiempo: ${dias} dias"
 
 read -p "Enter..."
 ;;
@@ -136,9 +135,22 @@ done
 }
 
 # ========= FUNCIONES =========
-eliminar_user() { read -p "Usuario: " u; userdel -r "$u"; rm -f /etc/kira/limits/$u; }
-listar_users() { awk -F: '$3>=1000 {print $1}' /etc/passwd; read -p "Enter..."; }
-online_users() { who; read -p "Enter..."; }
+eliminar_user() {
+read -p "Usuario: " u
+userdel -r "$u"
+rm -f /etc/kira/limits/$u
+rm -f /etc/kira/expire/$u
+}
+
+listar_users() {
+awk -F: '$3>=1000 {print $1}' /etc/passwd
+read -p "Enter..."
+}
+
+online_users() {
+who
+read -p "Enter..."
+}
 
 # ========= MENU =========
 while true; do

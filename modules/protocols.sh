@@ -17,34 +17,34 @@ while true; do
 clear
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " 🍄 ${W}INSTALACION DE PROTOCOLOS${Y} ( KIRA ) 🍄${N}"
+echo -e " 🍄 ${W}INSTALACION DE PROTOCOLOS${Y} ( KIRA ) 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 PROTOCOLOS (ALINEADO)
-printf "${W}[01]${N} OpenSSH        %-12b   ${W}[11]${N} Psiphon Server   ${R}[OFF]${N}\n" "$(status ssh)"
-printf "${W}[02]${N} Dropbear       %-12b   ${W}[12]${N} TCP DNS          ${Y}[BETA]${N}\n" "$(status dropbear)"
-printf "${W}[03]${N} OpenVPN        ${R}[OFF]${N}        ${W}[13]${N} Webmin           ${R}[OFF]${N}\n"
-printf "${W}[04]${N} SSL/TLS        ${R}[OFF]${N}        ${W}[14]${N} SlowDNS          ${R}[OFF]${N}\n"
-printf "${W}[05]${N} Shadowsocks    ${R}[OFF]${N}        ${W}[15]${N} SSL→Python       ${R}[OFF]${N}\n"
-printf "${W}[06]${N} Squid Proxy    %-12b   ${W}[16]${N} SSH Multiplex    ${R}[OFF]${N}\n" "$(status squid)"
-printf "${W}[07]${N} Proxy Python   ${C}[PyD]${N}        ${W}[17]${N} Over WebSocket   ${Y}[BETA]${N}\n"
-printf "${W}[08]${N} V2Ray Switch   ${R}[OFF]${N}        ${W}[18]${N} SOCKS5           ${R}[OFF]${N}\n"
-printf "${W}[09]${N} CEA (Clash)    ${R}[OFF]${N}        ${W}[19]${N} Protocolos UDP   ${R}[OFF]${N}\n"
-printf "${W}[10]${N} Trojan-Go      ${R}[OFF]${N}        ${W}[20]${N} Funciones        ${Y}[DEV]${N}\n"
+# 🔥 PROTOCOLOS (ALINEADO PERFECTO)
+printf "${W}[01]${N} %-14s %-10b   ${W}[11]${N} %-16s ${R}[OFF]${N}\n" "OpenSSH" "$(status ssh)" "Psiphon Server"
+printf "${W}[02]${N} %-14s %-10b   ${W}[12]${N} %-16s ${Y}[BETA]${N}\n" "Dropbear" "$(status dropbear)" "TCP DNS"
+printf "${W}[03]${N} %-14s ${R}[OFF]${N}   ${W}[13]${N} %-16s ${R}[OFF]${N}\n" "OpenVPN" "Webmin"
+printf "${W}[04]${N} %-14s ${R}[OFF]${N}   ${W}[14]${N} %-16s ${R}[OFF]${N}\n" "SSL/TLS" "SlowDNS"
+printf "${W}[05]${N} %-14s ${R}[OFF]${N}   ${W}[15]${N} %-16s ${R}[OFF]${N}\n" "Shadowsocks" "SSL→Python"
+printf "${W}[06]${N} %-14s %-10b   ${W}[16]${N} %-16s ${R}[OFF]${N}\n" "Squid Proxy" "$(status squid)" "SSH Multiplex"
+printf "${W}[07]${N} %-14s ${C}[PyD]${N}   ${W}[17]${N} %-16s ${Y}[BETA]${N}\n" "Proxy Python" "Over WebSocket"
+printf "${W}[08]${N} %-14s ${R}[OFF]${N}   ${W}[18]${N} %-16s ${R}[OFF]${N}\n" "V2Ray Switch" "SOCKS5"
+printf "${W}[09]${N} %-14s ${R}[OFF]${N}   ${W}[19]${N} %-16s ${R}[OFF]${N}\n" "CEA (Clash)" "Protocolos UDP"
+printf "${W}[10]${N} %-14s ${R}[OFF]${N}   ${W}[20]${N} %-16s ${Y}[DEV]${N}\n" "Trojan-Go" "Funciones"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 echo -e " 🍄 ${W}HERRAMIENTAS Y SERVICIOS${N} 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 SERVICIOS (ALINEADO)
-printf "${W}[21]${N} Block Torrent   ${R}[OFF]${N}     ${W}[22]${N} BadVPN        ${G}[ON]${N}\n"
-printf "${W}[23]${N} TCP BBR         ${R}[OFF]${N}     ${W}[24]${N} Fail2Ban      ${R}[OFF]${N}\n"
-printf "${W}[25]${N} Archivo Online  ${G}[443]${N}     ${W}[26]${N} SpeedTest     ${C}[RUN]${N}\n"
-printf "${W}[27]${N} Detalles VPS    ${C}[INFO]${N}    ${W}[28]${N} Block Ads     ${R}[OFF]${N}\n"
-printf "${W}[29]${N} DNS Netflix     ${R}[OFF]${N}     ${W}[30]${N} Herramientas  ${C}[EXTRA]${N}\n"
-printf "${W}[31]${N} Reiniciar Serv. ${C}[SYS]${N}     ${W}[32]${N} Brook Server  ${R}[OFF]${N}\n"
-printf "${W}[33]${N} Firewall        ${C}[IPT]${N}     ${W}[34]${N} Cambiar Pass  ${Y}[ROOT]${N}\n"
+# 🔥 SERVICIOS (YA ESTABA BIEN, SOLO AJUSTE MINIMO)
+printf "${W}[21]${N} %-16s ${R}[OFF]${N}   ${W}[22]${N} %-14s ${G}[ON]${N}\n" "Block Torrent" "BadVPN"
+printf "${W}[23]${N} %-16s ${R}[OFF]${N}   ${W}[24]${N} %-14s ${R}[OFF]${N}\n" "TCP BBR" "Fail2Ban"
+printf "${W}[25]${N} %-16s ${G}[443]${N}   ${W}[26]${N} %-14s ${C}[RUN]${N}\n" "Archivo Online" "SpeedTest"
+printf "${W}[27]${N} %-16s ${C}[INFO]${N}  ${W}[28]${N} %-14s ${R}[OFF]${N}\n" "Detalles VPS" "Block Ads"
+printf "${W}[29]${N} %-16s ${R}[OFF]${N}   ${W}[30]${N} %-14s ${C}[EXTRA]${N}\n" "DNS Netflix" "Herramientas"
+printf "${W}[31]${N} %-16s ${C}[SYS]${N}   ${W}[32]${N} %-14s ${R}[OFF]${N}\n" "Reiniciar Serv." "Brook Server"
+printf "${W}[33]${N} %-16s ${C}[IPT]${N}   ${W}[34]${N} %-14s ${Y}[ROOT]${N}\n" "Firewall" "Cambiar Pass"
 printf "${W}[35]${N} AToken Mods\n"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"

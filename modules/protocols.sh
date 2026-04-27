@@ -72,6 +72,13 @@ case $op in
   apt install squid -y
   systemctl restart squid
   ;;
+7|07)
+bash modules/proxy_python.sh
+;;
+
+17|17)
+bash modules/websocket.sh
+;;
 
 22)
   echo "BadVPN activo (manual)"

@@ -10,147 +10,8 @@ W='\033[1;37m'
 D='\033[38;5;240m'
 N='\033[0m'
 
-# ========= CREAR USUARIO =========
-crear_user() {
-
-while true; do
-clear
-
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e "${W}        ⚜️   CREADOR DE CUENTAS KIRA  ⚜️${N}"
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
-echo -e " ${W}[01]${N} ⚡ DEMO (Kira-2025)"
-echo -e " ${W}[02]${N} 👤 SSH NORMAL"
-echo -e " ${W}[00]${N} ⬅ VOLVER"
-
-echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
-read -p " ► Opcion : " op
-
-case $op in
-
-# ===== DEMO =====
-1|01)
-
-clear
-
-rand=$(shuf -i 100-999 -n 1)
-user="Kira-2025$rand"
-pass=$(openssl rand -hex 4)
-
-echo -e "${G}✔ Usuario generado:${N} ${W}$user${N}"
-
-# VALIDACION TIEMPO
-while true; do
-read -p "Tiempo (Ej: 30m / 2h / 1d): " tiempo
-if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
-break
-else
-echo -e "${R}Formato invalido. Usa 30m / 2h / 1d${N}"
-fi
-done
-
-read -p "Limite conexiones (default 1): " limit
-[ -z "$limit" ] && limit=1
-
-# CREACION CORRECTA (FIX REAL)
-useradd -m -s /bin/bash "$user"
-echo "$user:$pass" | chpasswd
-passwd -u "$user"
-chage -I -1 -m 0 -M 99999 -E -1 "$user"
-
-# GUARDAR LIMITE
-mkdir -p /etc/kira/limits
-echo "$limit" > /etc/kira/limits/$user
-
-# GUARDAR EXPIRACION REAL (PRO)
-mkdir -p /etc/kira/expire
-echo "$(date +%s) $tiempo" > /etc/kira/expire/$user
-
-IP=$(curl -s ifconfig.me)
-PORT=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
-
-clear
-
-echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ✔ USUARIO CREADO CORRECTAMENTE"
-echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
-printf " 🌐 IP      : %s\n" "$IP"
-printf " 👤 USER    : %s\n" "$user"
-printf " 🔑 PASS    : %s\n" "$pass"
-printf " 📡 PUERTO  : %s\n" "$PORT"
-printf " 📊 LIMITE  : %s\n" "$limit"
-printf " ⏳ TIEMPO  : %s\n" "$tiempo"
-
-echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
-read -p "Enter para continuar..."
-;;
-
-# ===== NORMAL =====
-2|02)
-
-clear
-
-read -p "Usuario: " user
-read -p "Password: " pass
-read -p "Dias: " dias
-read -p "Limite: " limit
-
-[ -z "$limit" ] && limit=1
-
-# CREACION CORRECTA
-useradd -m -s /bin/bash "$user"
-echo "$user:$pass" | chpasswd
-passwd -u "$user"
-chage -I -1 -m 0 -M 99999 -E -1 "$user"
-
-# GUARDAR LIMITE
-mkdir -p /etc/kira/limits
-echo "$limit" > /etc/kira/limits/$user
-
-# GUARDAR EXPIRACION (DIAS)
-mkdir -p /etc/kira/expire
-echo "$(date +%s) ${dias}d" > /etc/kira/expire/$user
-
-IP=$(curl -s ifconfig.me)
-
-echo -e "\n${G}✔ USUARIO CREADO${N}"
-echo -e "🌐 IP: $IP"
-echo -e "👤 User: $user"
-echo -e "🔑 Pass: $pass"
-echo -e "📊 Limite: $limit"
-echo -e "⏳ Tiempo: ${dias} dias"
-
-read -p "Enter..."
-;;
-
-0|00) break ;;
-*) echo -e "${R}Opcion invalida${N}"; sleep 1 ;;
-
-esac
-done
-}
-
-# ========= FUNCIONES =========
-eliminar_user() {
-read -p "Usuario: " u
-userdel -r "$u"
-rm -f /etc/kira/limits/$u
-rm -f /etc/kira/expire/$u
-}
-
-listar_users() {
-awk -F: '$3>=1000 {print $1}' /etc/passwd
-read -p "Enter..."
-}
-
-online_users() {
-who
-read -p "Enter..."
-}
+# ========= RUTA SEGURA =========
+DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ========= MENU =========
 while true; do
@@ -198,12 +59,54 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 read -p " ▶ Opcion : " op
 
 case $op in
-1|01) crear_user ;;
-2|02) eliminar_user ;;
-4|04) listar_users ;;
-5|05) online_users ;;
-0) break ;;
-*) echo -e "${R}Opcion invalida${N}"; sleep 1 ;;
-esac
 
+# 👉 AGREGAR USUARIO (MODULE)
+1|01)
+bash "$DIR/modules/user_add.sh"
+;;
+
+# 👉 BORRAR USUARIO
+2|02)
+read -p "Usuario a eliminar: " u
+userdel -r "$u" 2>/dev/null
+rm -f /etc/kira/limits/$u
+rm -f /etc/kira/expire/$u
+echo -e "${G}✔ Usuario eliminado${N}"
+sleep 2
+;;
+
+# 👉 RENOVAR (placeholder)
+3|03)
+echo -e "${Y}En desarrollo...${N}"
+sleep 2
+;;
+
+# 👉 LISTAR
+4|04)
+awk -F: '$3>=1000 {print $1}' /etc/passwd
+read -p "Enter..."
+;;
+
+# 👉 ONLINE
+5|05)
+who
+read -p "Enter..."
+;;
+
+# 👉 OTROS (placeholder pro)
+6|06|7|07|8|08|9|09|10|11|12|13|14)
+echo -e "${Y}Modulo en desarrollo...${N}"
+sleep 2
+;;
+
+0)
+break
+;;
+
+*)
+echo -e "${R}Opcion invalida${N}"
+sleep 1
+;;
+
+esac
 done

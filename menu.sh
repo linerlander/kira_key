@@ -131,19 +131,7 @@ case $op in
   ;;
 
 7|07)
-  echo -e "${Y}🔄 Actualizando script...${N}"
-
-  cd ~/kira_key || exit
-
-  git fetch --all >/dev/null 2>&1
-  git reset --hard origin/main >/dev/null 2>&1
-
-  chmod +x *.sh modules/*.sh
-
-  echo -e "${G}✔ Script actualizado${N}"
-  sleep 2
-
-  exec bash menu.sh
+  bash modules/update.sh
   ;;
 
 0)

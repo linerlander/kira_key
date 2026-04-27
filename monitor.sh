@@ -22,21 +22,27 @@ bar() {
 clear
 tput civis
 
+# Detectar interfaz automáticamente
+IFACE=$(ip route | grep default | awk '{print $5}')
+
 while true; do
 tput cup 0 0
 
+# CPU
 CPU_IDLE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/")
 CPU=$(printf "%.0f" "$(echo "100 - $CPU_IDLE" | bc)")
 
+# RAM
 RAM_USED=$(free | awk '/Mem:/ {print $3}')
 RAM_TOTAL=$(free | awk '/Mem:/ {print $2}')
 RAM_P=$(awk "BEGIN {printf \"%d\", ($RAM_USED/$RAM_TOTAL)*100}")
 
-RX1=$(cat /sys/class/net/eth0/statistics/rx_bytes)
-TX1=$(cat /sys/class/net/eth0/statistics/tx_bytes)
+# Red
+RX1=$(cat /sys/class/net/$IFACE/statistics/rx_bytes)
+TX1=$(cat /sys/class/net/$IFACE/statistics/tx_bytes)
 sleep 1
-RX2=$(cat /sys/class/net/eth0/statistics/rx_bytes)
-TX2=$(cat /sys/class/net/eth0/statistics/tx_bytes)
+RX2=$(cat /sys/class/net/$IFACE/statistics/rx_bytes)
+TX2=$(cat /sys/class/net/$IFACE/statistics/tx_bytes)
 
 RX_RATE=$(( (RX2-RX1)/1024 ))
 TX_RATE=$(( (TX2-TX1)/1024 ))
@@ -59,6 +65,14 @@ echo -e "${C}══════════════════════�
 
 ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -6
 
-echo -e "${Y}CTRL + C para salir${N}"
+echo -e "${Y}[0] SALIR${N}"
+
+# Espera input sin romper el loop
+read -t 0.5 -n 1 key
+if [[ "$key" == "0" ]]; then
+  tput cnorm
+  clear
+  break
+fi
 
 done

@@ -2,6 +2,7 @@
 
 while true; do
 clear
+
 echo "=================================="
 echo "        🔥 SCRIPT KIRA 🔥"
 echo "=================================="
@@ -36,4 +37,5 @@ case $op in
   sleep 1
   ;;
 esac
+
 done

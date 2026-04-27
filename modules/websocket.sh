@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ===== COLORES KIRA =====
+# ===== COLORES =====
 YL='\033[38;5;220m'
 GR='\033[38;5;118m'
 RD='\033[38;5;203m'
@@ -11,20 +11,26 @@ NC='\033[0m'
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
 
-# ===== ESTADO =====
+# ===== ESTADO DINAMICO =====
 get_status() {
+
 WS_STATUS=$(systemctl is-active kira-ws 2>/dev/null)
+
+[ "$WS_STATUS" = "active" ] && WS_COLOR="${GR}[ON]${NC}" || WS_COLOR="${RD}[OFF]${NC}"
 
 ss -tuln | grep -q ":443 " && SSL_STATUS="${GR}[ON]${NC}" || SSL_STATUS="${RD}[OFF]${NC}"
 ss -tuln | grep -q ":80 " && P80="${GR}[ON]${NC}" || P80="${RD}[OFF]${NC}"
 ss -tuln | grep -q ":8080 " && P8080="${GR}[ON]${NC}" || P8080="${RD}[OFF]${NC}"
 ss -tuln | grep -q ":2082 " && P2082="${GR}[ON]${NC}" || P2082="${RD}[OFF]${NC}"
+
+DOMAIN=$(cat $CONFIG 2>/dev/null)
+[ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WS =====
+# ===== INSTALAR WS CORRECTO =====
 install_ws() {
 
-echo -e "${CY}Instalando WebSocket...${NC}"
+echo -e "${CY}⬇️ Instalando WebSocket (wstunnel)...${NC}"
 
 wget -q https://github.com/erebe/wstunnel/releases/latest/download/wstunnel_linux_amd64 -O /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
@@ -35,7 +41,7 @@ Description=KIRA WebSocket
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel -s 127.0.0.1:${WS_PORT}
+ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
 Restart=always
 
 [Install]
@@ -46,6 +52,15 @@ systemctl daemon-reload
 systemctl enable kira-ws
 systemctl restart kira-ws
 
+sleep 2
+
+if systemctl is-active --quiet kira-ws; then
+    echo -e "${GR}✔ WebSocket activo${NC}"
+else
+    echo -e "${RD}✖ Error iniciando WebSocket${NC}"
+fi
+
+sleep 2
 }
 
 # ===== CONFIG MULTI WS + SSL =====
@@ -55,35 +70,16 @@ read -p "🌐 Dominio: " DOMAIN
 mkdir -p /etc/kira
 echo "$DOMAIN" > $CONFIG
 
+echo -e "${CY}⚙️ Instalando NGINX + SSL...${NC}"
+
 apt install nginx certbot python3-certbot-nginx -y
 
 # CONFIG MULTIPUERTO + RUTAS CAMUFLADAS
 cat > /etc/nginx/sites-enabled/default <<EOF
 
-# ===== PUERTO 80 =====
 server {
     listen 80;
-    server_name $DOMAIN;
-
-    location /ws { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /api { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /connect { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /graphql { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-}
-
-# ===== PUERTO 8080 =====
-server {
     listen 8080;
-    server_name $DOMAIN;
-
-    location /ws { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /api { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /connect { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /graphql { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-}
-
-# ===== PUERTO 2082 =====
-server {
     listen 2082;
     server_name $DOMAIN;
 
@@ -91,16 +87,16 @@ server {
     location /api { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
     location /connect { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
     location /graphql { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-}
 
+}
 EOF
 
 systemctl restart nginx
 
-# ===== SSL 443 =====
+# ===== GENERAR SSL =====
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# BLOQUE 443
+# BLOQUE SSL 443
 cat >> /etc/nginx/sites-enabled/default <<EOF
 
 server {
@@ -114,13 +110,14 @@ server {
     location /api { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 86400; }
     location /connect { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 86400; }
     location /graphql { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 86400; }
+
 }
 EOF
 
 systemctl restart nginx
 
-echo -e "${GR}✔ MULTI WS + SSL ACTIVO${NC}"
-sleep 2
+echo -e "${GR}✔ MULTI WS + SSL CONFIGURADO${NC}"
+sleep 3
 }
 
 # ===== MENU =====
@@ -133,7 +130,8 @@ echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━
 echo -e "   ${WH}WEBSOCKET MULTIPUERTO KIRA${NC}"
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo -e " WS        : ${GR}$WS_STATUS${NC}"
+echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
+echo -e " WS        : $WS_COLOR"
 echo -e " SSL 443   : $SSL_STATUS"
 echo -e " PORT 80   : $P80"
 echo -e " PORT 8080 : $P8080"
@@ -141,11 +139,11 @@ echo -e " PORT 2082 : $P2082"
 
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo -e " ${WH}[1]${NC} Instalar WebSocket"
-echo -e " ${WH}[2]${NC} Configurar MULTI WS + SSL"
-echo -e " ${WH}[3]${NC} Reiniciar servicios"
-echo -e " ${WH}[4]${NC} Detener WebSocket"
-echo -e " ${WH}[0]${NC} Volver"
+echo -e " ${WH}[1]${NC} ➤ Instalar WebSocket"
+echo -e " ${WH}[2]${NC} ➤ Configurar MULTI WS + SSL"
+echo -e " ${WH}[3]${NC} ➤ Reiniciar servicios"
+echo -e " ${WH}[4]${NC} ➤ Detener WebSocket"
+echo -e " ${WH}[0]${NC} ➤ Volver"
 
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 

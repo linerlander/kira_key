@@ -24,25 +24,121 @@ echo -e " ${Y}► MEM LIBRE:${N} ${RAM}MB   ${Y}► CPU:${N} ${CPU}%"
 echo -e "${D}────────────────────────────────────────────────────${N}"
 }
 
-# ========= FUNCIONES =========
-
+# ========= CREAR USUARIO (SUBMENU) =========
 crear_user() {
-read -p "Usuario: " u
-read -p "Password: " p
-read -p "Dias: " d
-read -p "Limite: " l
 
-exp=$(date -d "$d days" +"%Y-%m-%d")
+while true; do
+clear
 
-useradd -e "$exp" -M -s /bin/false "$u"
-echo "$u:$p" | chpasswd
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${W}        ⚜️   CREADOR DE CUENTAS TIPO  ⚜️${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+
+echo -e " ${W}[01]${N}  > SSH|DROPBEAR (DEMO)"
+echo -e " ${W}[02]${N}  > SSH|DROPBEAR"
+echo -e " ${W}[03]${N}  > HWID"
+echo -e " ${W}[04]${N}  > TOKEN"
+
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e " ${W}[05]${N}  > MODIFICAR TOKEN"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e " ${R}[00]${N}  ⇦ VOLVER"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+
+read -p " ► Opcion : " op
+
+case $op in
+
+# ===== DEMO =====
+1|01)
+user="demo$(date +%s | tail -c 4)"
+pass="1234"
+dias=1
+limit=1
+
+exp=$(date -d "$dias days" +"%Y-%m-%d")
+
+useradd -e "$exp" -M -s /bin/false "$user"
+echo "$user:$pass" | chpasswd
 
 mkdir -p /etc/kira/limits
-echo "$l" > /etc/kira/limits/$u
+echo "$limit" > /etc/kira/limits/$user
 
-echo -e "${G}✔ Usuario creado${N}"
+IP=$(curl -s ifconfig.me)
+PORT=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+
+echo -e "\n${G}✔ DEMO CREADO${N}"
+echo -e "IP: $IP"
+echo -e "User: $user"
+echo -e "Pass: $pass"
+echo -e "Port: $PORT"
+echo -e "Expira: $exp"
+read -p "Enter..."
+;;
+
+# ===== NORMAL =====
+2|02)
+read -p "Usuario: " user
+read -p "Password: " pass
+read -p "Dias: " dias
+read -p "Limite: " limit
+
+if id "$user" &>/dev/null; then
+echo -e "${R}✖ Usuario ya existe${N}"
 sleep 2
+continue
+fi
+
+exp=$(date -d "$dias days" +"%Y-%m-%d")
+
+useradd -e "$exp" -M -s /bin/false "$user"
+echo "$user:$pass" | chpasswd
+
+mkdir -p /etc/kira/limits
+echo "$limit" > /etc/kira/limits/$user
+
+IP=$(curl -s ifconfig.me)
+PORTS=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}' | tr '\n' ' ')
+
+echo -e "\n${G}✔ USUARIO CREADO${N}"
+echo -e "${Y}════════════════════════════${N}"
+echo -e "IP: $IP"
+echo -e "User: $user"
+echo -e "Pass: $pass"
+echo -e "Ports: $PORTS"
+echo -e "Expira: $exp"
+echo -e "Limite: $limit"
+echo -e "${Y}════════════════════════════${N}"
+read -p "Enter..."
+;;
+
+# ===== TOKEN =====
+4|04)
+token=$(openssl rand -hex 4)
+mkdir -p /etc/kira
+echo "$token" > /etc/kira/token.txt
+echo -e "${G}✔ TOKEN: $token${N}"
+sleep 2
+;;
+
+# ===== EDIT TOKEN =====
+5|05)
+read -p "Nuevo token: " token
+echo "$token" > /etc/kira/token.txt
+echo -e "${G}✔ TOKEN ACTUALIZADO${N}"
+sleep 2
+;;
+
+0|00) break ;;
+
+*) echo -e "${R}Opcion invalida${N}"; sleep 1 ;;
+
+esac
+
+done
 }
+
+# ========= FUNCIONES =========
 
 eliminar_user() {
 read -p "Usuario: " u
@@ -78,7 +174,7 @@ echo -e "${G}✔ Backup creado${N}"
 sleep 2
 }
 
-# ========= MENU =========
+# ========= MENU PRINCIPAL =========
 
 while true; do
 header
@@ -113,16 +209,8 @@ case $op in
 5|05) online_users ;;
 9|09) backup_users ;;
 
-6) echo "banner (pendiente)"; sleep 1 ;;
-7) echo "log consumo (pendiente)"; sleep 1 ;;
-8) echo "bloqueo usuario (pendiente)"; sleep 1 ;;
-10) echo "ssr menu (pendiente)"; sleep 1 ;;
-11) echo "telegram (pendiente)"; sleep 1 ;;
-12) echo "verificador (pendiente)"; sleep 1 ;;
-13) echo "checkuser (pendiente)"; sleep 1 ;;
-14) echo "multilogin activo"; sleep 1 ;;
-
 0) break ;;
+
 *) echo -e "${R}Opcion invalida${N}"; sleep 1 ;;
 
 esac

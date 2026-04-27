@@ -1,0 +1,6 @@
+#!/bin/bash
+
+apt update -y
+apt install curl -y
+
+echo "Instalacion lista"

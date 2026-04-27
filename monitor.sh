@@ -1,78 +1,111 @@
 #!/bin/bash
 
+# Colores
+R='\033[1;31m'
 G='\033[1;32m'
 Y='\033[1;33m'
-R='\033[1;31m'
 C='\033[1;36m'
 W='\033[1;37m'
 N='\033[0m'
 
-bar() {
-  percent=$1
-  size=20
-  filled=$((percent*size/100))
-  empty=$((size-filled))
+# IP
+IP=$(curl -s ifconfig.me)
 
-  printf "["
-  for ((i=0;i<filled;i++)); do printf "#"; done
-  for ((i=0;i<empty;i++)); do printf "-"; done
-  printf "] %d%%" "$percent"
-}
-
-clear
-tput civis
-
-# Detectar interfaz automáticamente
-IFACE=$(ip route | grep default | awk '{print $5}')
-
-while true; do
-tput cup 0 0
-
-# CPU
-CPU_IDLE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/")
-CPU=$(printf "%.0f" "$(echo "100 - $CPU_IDLE" | bc)")
+# Fecha
+FECHA=$(date "+%d/%m/%Y-%H:%M")
 
 # RAM
-RAM_USED=$(free | awk '/Mem:/ {print $3}')
-RAM_TOTAL=$(free | awk '/Mem:/ {print $2}')
-RAM_P=$(awk "BEGIN {printf \"%d\", ($RAM_USED/$RAM_TOTAL)*100}")
+TOTAL_RAM=$(free -m | awk '/Mem:/ {print $2}')
+USED_RAM=$(free -m | awk '/Mem:/ {print $3}')
+RAM_PERC=$(free | awk '/Mem:/ {printf("%.2f"), $3/$2 * 100}')
 
-# Red
-RX1=$(cat /sys/class/net/$IFACE/statistics/rx_bytes)
-TX1=$(cat /sys/class/net/$IFACE/statistics/tx_bytes)
-sleep 1
-RX2=$(cat /sys/class/net/$IFACE/statistics/rx_bytes)
-TX2=$(cat /sys/class/net/$IFACE/statistics/tx_bytes)
+# CPU
+CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
 
-RX_RATE=$(( (RX2-RX1)/1024 ))
-TX_RATE=$(( (TX2-TX1)/1024 ))
+# Funciones
+check_port() {
+  ss -tuln | grep -q ":$1 " && echo -e "${G}[ON]${N}" || echo -e "${R}[OFF]${N}"
+}
 
-echo -e "${C}════════════════════════════════════════════${N}"
-echo -e "${G}        MONITOR EN TIEMPO REAL${N}"
-echo -e "${C}════════════════════════════════════════════${N}"
+# SSH
+SSH_PORTS=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}')
+SSH_STATUS=$(systemctl is-active ssh 2>/dev/null)
 
-echo -ne "${W}CPU: ${R}"
-bar $CPU
-echo -e "${N}"
+[ "$SSH_STATUS" = "active" ] && SSH_STATE="${G}[ON]${N}" || SSH_STATE="${R}[OFF]${N}"
 
-echo -ne "${W}RAM: ${Y}"
-bar $RAM_P
-echo -e "${N}"
+# Puertos SSH en una línea
+SSH_LIST=""
+for p in $SSH_PORTS; do
+  SSH_LIST+="$p "
+done
 
-echo -e "${W}RED ↓: ${G}${RX_RATE} KB/s  ${W}↑: ${G}${TX_RATE} KB/s${N}"
+# Servicios reales
+DNS_STATE=$(check_port 53)
+HTTP_STATE=$(check_port 80)
+HTTPS_STATE=$(check_port 443)
 
-echo -e "${C}════════════════════════════════════════════${N}"
+# BadVPN
+pgrep -f badvpn >/dev/null && BADVPN_STATE="${G}[ON]${N}" || BADVPN_STATE="${R}[OFF]${N}"
 
-ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -6
+while true; do
+clear
 
-echo -e "${Y}[0] SALIR${N}"
+# Banner KIRA estilo hacker 🇵🇪
+echo -e "${R}██╗  ██╗${W}██╗${R}██████╗  █████╗ ${N}"
+echo -e "${R}██║ ██╔╝${W}██║██╔══██╗██╔══██╗${N}"
+echo -e "${W}█████╔╝ ${R}██║██████╔╝███████║${N}"
+echo -e "${W}██╔═██╗ ${R}██║██╔══██╗██╔══██║${N}"
+echo -e "${R}██║  ██╗${W}██║██║  ██║██║  ██║${N}"
+echo -e "${R}╚═╝  ╚═╝${W}╚═╝╚═╝  ╚═╝╚═╝  ╚═╝${N}"
 
-# Espera input sin romper el loop
-read -t 0.5 -n 1 key
-if [[ "$key" == "0" ]]; then
-  tput cnorm
-  clear
-  break
-fi
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+echo -e " ${W}IP:${N} $IP    ${W}FECHA:${N} $FECHA"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+
+# LINEA PRINCIPAL (tipo panel pro)
+printf " SSH: %b %-10s   System-DNS: %b\n" "$SSH_STATE" "$SSH_LIST" "$DNS_STATE"
+printf " HTTP: %b        HTTPS: %b\n" "$HTTP_STATE" "$HTTPS_STATE"
+printf " BadVPN: %b\n" "$BADVPN_STATE"
+
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+
+echo -e " ${W}RAM:${N} ${USED_RAM}/${TOTAL_RAM}MB (${RAM_PERC}%)   ${W}CPU:${N} ${CPU}%"
+
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+
+# MENU (manteniendo todo)
+echo -e "${W}[01]${N} CONTROL USUARIOS"
+echo -e "${W}[02]${N} OPTIMIZAR VPS"
+echo -e "${W}[03]${N} USUARIOS ONLINE"
+echo -e "${W}[04]${N} AUTO INICIO"
+echo -e "${W}[05]${N} INSTALADOR DE PROTOCOLOS"
+echo -e "${W}[06]${N} MONITOR EN TIEMPO REAL"
+
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+echo -e "${R}[0] SALIR${N}"
+echo -e "${Y}════════════════════════════════════════════════════${N}"
+
+read -p "➤ Opcion: " op
+
+case $op in
+
+5|05)
+  bash modules/protocols.sh
+  ;;
+
+6|06)
+  bash monitor.sh
+  ;;
+
+0)
+  exit
+  ;;
+
+*)
+  echo -e "${R}Opcion invalida${N}"
+  sleep 1
+  ;;
+
+esac
 
 done

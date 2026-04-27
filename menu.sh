@@ -52,6 +52,7 @@ echo -e "${Y}[03]${N} ${W}VER USUARIOS ONLINE ${G}[ON]${N}"
 echo -e "${Y}[04]${N} ${W}VER PROCESOS ACTIVOS"
 echo -e "${Y}[05]${N} ${W}VER USO DE DISCO"
 echo -e "${Y}[07]${N} ${W}MONITOR EN TIEMPO REAL"
+echo -e "${Y}[08]${N} ${W}INSTALAR PROTOCOLOS"
 
 echo ""
 echo -e "${Y}[06]${N} ${W}UPDATE SCRIPT"

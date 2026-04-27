@@ -10,7 +10,7 @@ D='\033[38;5;240m'
 N='\033[0m'
 
 # 🔗 TU REPO
-REPO_URL="https://raw.githubusercontent.com/USUARIO/REPO/main/version.txt"
+REPO_URL="https://raw.githubusercontent.com/linerlander/kira_key/main/version.txt"
 
 # 📦 VERSIONES
 LOCAL_VERSION=$(cat ~/kira_key/version.txt 2>/dev/null)

@@ -8,8 +8,13 @@ C='\033[38;5;51m'
 W='\033[38;5;255m'
 N='\033[0m'
 
+# 🔥 STATUS CORRECTO (SIN echo -e)
 status() {
-  systemctl is-active --quiet $1 && echo -e "${G}[ON]${N}" || echo -e "${R}[OFF]${N}"
+  if systemctl is-active --quiet $1; then
+    printf "${G}[ON]${N}"
+  else
+    printf "${R}[OFF]${N}"
+  fi
 }
 
 while true; do
@@ -19,17 +24,17 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " 🍄 ${W}INSTALACION DE PROTOCOLOS${Y} ( KIRA ) 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 PROTOCOLOS (ALINEADO REAL)
-printf "${W}[01]${N} %-18s %-8s   ${W}[11]${N} %-22s %s\n" "OpenSSH" "$(status ssh)" "Psiphon Server" "${R}[OFF]${N}"
-printf "${W}[02]${N} %-18s %-8s   ${W}[12]${N} %-22s %s\n" "Dropbear" "$(status dropbear)" "TCP DNS" "${Y}[BETA]${N}"
-printf "${W}[03]${N} %-18s %-8s   ${W}[13]${N} %-22s %s\n" "OpenVPN" "${R}[OFF]${N}" "Webmin" "${R}[OFF]${N}"
-printf "${W}[04]${N} %-18s %-8s   ${W}[14]${N} %-22s %s\n" "SSL/TLS" "${R}[OFF]${N}" "SlowDNS" "${R}[OFF]${N}"
-printf "${W}[05]${N} %-18s %-8s   ${W}[15]${N} %-22s %s\n" "Shadowsocks" "${R}[OFF]${N}" "SSL→Python" "${R}[OFF]${N}"
-printf "${W}[06]${N} %-18s %-8s   ${W}[16]${N} %-22s %s\n" "Squid Proxy" "$(status squid)" "SSH Multiplex" "${R}[OFF]${N}"
-printf "${W}[07]${N} %-18s %-8s   ${W}[17]${N} %-22s %s\n" "Proxy Python" "${C}[PyD]${N}" "Over WebSocket" "${Y}[BETA]${N}"
-printf "${W}[08]${N} %-18s %-8s   ${W}[18]${N} %-22s %s\n" "V2Ray Switch" "${R}[OFF]${N}" "SOCKS5" "${R}[OFF]${N}"
-printf "${W}[09]${N} %-18s %-8s   ${W}[19]${N} %-22s %s\n" "CEA (Clash)" "${R}[OFF]${N}" "Protocolos UDP" "${R}[OFF]${N}"
-printf "${W}[10]${N} %-18s %-8s   ${W}[20]${N} %-22s %s\n" "Trojan-Go" "${R}[OFF]${N}" "Funciones" "${Y}[DEV]${N}"
+# 🔥 PROTOCOLOS (100% ALINEADO + COLORES OK)
+printf "${W}[01]${N} %-18s %-8b   ${W}[11]${N} %-22s %b\n" "OpenSSH" "$(status ssh)" "Psiphon Server" "${R}[OFF]${N}"
+printf "${W}[02]${N} %-18s %-8b   ${W}[12]${N} %-22s %b\n" "Dropbear" "$(status dropbear)" "TCP DNS" "${Y}[BETA]${N}"
+printf "${W}[03]${N} %-18s %-8b   ${W}[13]${N} %-22s %b\n" "OpenVPN" "${R}[OFF]${N}" "Webmin" "${R}[OFF]${N}"
+printf "${W}[04]${N} %-18s %-8b   ${W}[14]${N} %-22s %b\n" "SSL/TLS" "${R}[OFF]${N}" "SlowDNS" "${R}[OFF]${N}"
+printf "${W}[05]${N} %-18s %-8b   ${W}[15]${N} %-22s %b\n" "Shadowsocks" "${R}[OFF]${N}" "SSL→Python" "${R}[OFF]${N}"
+printf "${W}[06]${N} %-18s %-8b   ${W}[16]${N} %-22s %b\n" "Squid Proxy" "$(status squid)" "SSH Multiplex" "${R}[OFF]${N}"
+printf "${W}[07]${N} %-18s %-8b   ${W}[17]${N} %-22s %b\n" "Proxy Python" "${C}[PyD]${N}" "Over WebSocket" "${Y}[BETA]${N}"
+printf "${W}[08]${N} %-18s %-8b   ${W}[18]${N} %-22s %b\n" "V2Ray Switch" "${R}[OFF]${N}" "SOCKS5" "${R}[OFF]${N}"
+printf "${W}[09]${N} %-18s %-8b   ${W}[19]${N} %-22s %b\n" "CEA (Clash)" "${R}[OFF]${N}" "Protocolos UDP" "${R}[OFF]${N}"
+printf "${W}[10]${N} %-18s %-8b   ${W}[20]${N} %-22s %b\n" "Trojan-Go" "${R}[OFF]${N}" "Funciones" "${Y}[DEV]${N}"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 

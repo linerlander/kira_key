@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ===== COLORES =====
+# ===== COLORES KIRA =====
 YL='\033[38;5;220m'
 GR='\033[38;5;118m'
 RD='\033[38;5;203m'
@@ -10,6 +10,9 @@ NC='\033[0m'
 
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
+
+# ===== DEPENDENCIAS =====
+command -v curl >/dev/null || apt install curl -y
 
 # ===== ESTADO DINAMICO =====
 get_status() {
@@ -27,29 +30,51 @@ DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WS CORRECTO =====
+# ===== INSTALAR WEBSOCKET (ANTI-FALLOS) =====
 install_ws() {
 
-echo -e "${CY}⬇️ Instalando WebSocket (wstunnel)...${NC}"
+echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 
-wget -q https://github.com/erebe/wstunnel/releases/latest/download/wstunnel_linux_amd64 -O /usr/bin/wstunnel
+rm -f /usr/bin/wstunnel
+
+curl -L https://github.com/erebe/wstunnel/releases/download/v7.2/wstunnel_linux_amd64 -o /usr/bin/wstunnel
+
+# VALIDAR
+if [ ! -f /usr/bin/wstunnel ]; then
+    echo -e "${RD}✖ Error descargando wstunnel${NC}"
+    sleep 2
+    return
+fi
+
+file /usr/bin/wstunnel | grep -q "ELF"
+
+if [ $? -ne 0 ]; then
+    echo -e "${RD}✖ Descarga corrupta (bloqueo GitHub)${NC}"
+    rm -f /usr/bin/wstunnel
+    sleep 2
+    return
+fi
+
 chmod +x /usr/bin/wstunnel
 
+# SERVICIO
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
+ExecStart=/usr/bin/wstunnel -s 0.0.0.0:${WS_PORT}
 Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+systemctl daemon-reexec
 systemctl daemon-reload
-systemctl enable kira-ws
+systemctl enable kira-ws >/dev/null 2>&1
 systemctl restart kira-ws
 
 sleep 2
@@ -58,12 +83,13 @@ if systemctl is-active --quiet kira-ws; then
     echo -e "${GR}✔ WebSocket activo${NC}"
 else
     echo -e "${RD}✖ Error iniciando WebSocket${NC}"
+    systemctl status kira-ws --no-pager
 fi
 
-sleep 2
+sleep 3
 }
 
-# ===== CONFIG MULTI WS + SSL =====
+# ===== MULTI WS + NGINX + SSL =====
 setup_ws_full() {
 
 read -p "🌐 Dominio: " DOMAIN
@@ -74,9 +100,13 @@ echo -e "${CY}⚙️ Instalando NGINX + SSL...${NC}"
 
 apt install nginx certbot python3-certbot-nginx -y
 
-# CONFIG MULTIPUERTO + RUTAS CAMUFLADAS
-cat > /etc/nginx/sites-enabled/default <<EOF
+# LIMPIAR
+rm -f /etc/nginx/sites-enabled/default
 
+# ===== CONFIG MULTIPUERTO =====
+cat > /etc/nginx/conf.d/kira_ws.conf <<EOF
+
+# ===== HTTP MULTIPUERTO =====
 server {
     listen 80;
     listen 8080;
@@ -87,17 +117,19 @@ server {
     location /api { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
     location /connect { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
     location /graphql { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; }
-
 }
 EOF
 
 systemctl restart nginx
 
-# ===== GENERAR SSL =====
+# ===== SSL =====
+echo -e "${YL}⚠️ IMPORTANTE: Cloudflare en modo DNS ONLY (gris)${NC}"
+sleep 2
+
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# BLOQUE SSL 443
-cat >> /etc/nginx/sites-enabled/default <<EOF
+# ===== BLOQUE 443 =====
+cat >> /etc/nginx/conf.d/kira_ws.conf <<EOF
 
 server {
     listen 443 ssl;
@@ -110,13 +142,12 @@ server {
     location /api { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 86400; }
     location /connect { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 86400; }
     location /graphql { proxy_pass http://127.0.0.1:${WS_PORT}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 86400; }
-
 }
 EOF
 
 systemctl restart nginx
 
-echo -e "${GR}✔ MULTI WS + SSL CONFIGURADO${NC}"
+echo -e "${GR}✔ MULTI WS + SSL ACTIVO${NC}"
 sleep 3
 }
 

@@ -122,6 +122,10 @@ read -p "➤ Opcion: " op
 
 case $op in
 
+1|01)
+  bash modules/user.sh
+  ;;
+
 5|05)
   bash modules/protocols.sh
   ;;

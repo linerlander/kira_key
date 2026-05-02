@@ -80,7 +80,7 @@ bash modules/proxy_python.sh
 bash modules/websocket.sh
 ;;
 
-22|22))
+22|22)
   bash modules/badvpn.sh
   ;;
 

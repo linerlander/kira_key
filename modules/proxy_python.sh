@@ -48,17 +48,16 @@ mode_status() {
 # ===== INSTALAR PROXY =====
 install_proxy() {
 
-# detener antes (CRÍTICO)
+# detener limpio
 systemctl stop proxy-python 2>/dev/null
 pkill -9 -f proxy.py 2>/dev/null
 
 valid_ports
 [ -z "$PORTS" ] && PORTS="80"
 
-# asegurar únicos
 PORTS=$(echo $PORTS | tr ' ' '\n' | sort -u | xargs)
 
-# construir lista python segura
+# convertir a formato python
 PY_PORTS=""
 for p in $PORTS; do
   PY_PORTS="$PY_PORTS,$p"
@@ -93,7 +92,6 @@ def handle(client):
 
         first_line = request.split(b"\\n")[0]
 
-        # HTTPS
         if b"CONNECT" in first_line:
             host_port = first_line.split()[1]
             host, port = host_port.split(b":")
@@ -103,7 +101,6 @@ def handle(client):
             remote.connect((host.decode(), port))
             client.send(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
 
-        # HTTP
         else:
             url = first_line.split()[1]
 
@@ -122,7 +119,6 @@ def handle(client):
             remote.connect((host.decode(), port))
             remote.sendall(request)
 
-        # modo seguro
         if MODE == "secure":
             if b"Host:" not in request:
                 client.close()
@@ -159,7 +155,6 @@ while True:
     pass
 EOF
 
-# ===== SYSTEMD CORRECTO =====
 cat > /etc/systemd/system/proxy-python.service <<EOF
 [Unit]
 Description=KIRA Proxy Python
@@ -177,7 +172,8 @@ EOF
 systemctl daemon-reexec
 systemctl daemon-reload
 systemctl enable proxy-python
-systemctl restart proxy-python
+systemctl start proxy-python
+
 sleep 1
 }
 
@@ -207,7 +203,7 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " ${M}[1]${N} SIMPLE        $(mode_status simple)"
 echo -e " ${M}[2]${N} SEGURO        $(mode_status secure)"
 echo -e " ${M}[3]${N} WS 🔥         $(mode_status ws)"
-echo -e " ${M}[4]${N} DEBUG (errores)"
+echo -e " ${M}[4]${N} DEBUG"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e " ${M}[5]${N} Cambiar Banner"
@@ -218,7 +214,7 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " ${R}[0] SALIR${N}"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e "${D}💡 WS + 80 = máxima compatibilidad${N}"
+echo -e "${D}💡 WS + 80 recomendado${N}"
 
 read -p "➤ Opcion: " op
 
@@ -247,8 +243,7 @@ grep -qw "$NEWPORT" $PORT_FILE 2>/dev/null && echo -e "${Y}Ya existe${N}" && sle
 echo "$NEWPORT" >> $PORT_FILE
 echo -e "${G}✔ Puerto agregado${N}"
 
-systemctl restart proxy-python
-sleep 1
+install_proxy
 ;;
 
 7)
@@ -256,7 +251,6 @@ echo -e "${Y}Reseteando...${N}"
 
 OLD_PORTS=$(cat $PORT_FILE 2>/dev/null)
 
-systemctl disable proxy-python 2>/dev/null
 systemctl stop proxy-python 2>/dev/null
 pkill -9 -f proxy.py 2>/dev/null
 

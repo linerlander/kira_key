@@ -27,7 +27,7 @@ BANNER=$(cat $BANNER_FILE 2>/dev/null)
 [ -z "$MODE" ] && MODE="none"
 [ -z "$BANNER" ] && BANNER="KIRA"
 
-# ===== LIMPIAR / ORDENAR PUERTOS =====
+# ===== LIMPIAR PUERTOS =====
 valid_ports() {
     CLEAN=""
     for p in $PORTS; do
@@ -49,14 +49,9 @@ mode_status() {
 install_proxy() {
 
 valid_ports
-
-# fallback si vacío
 [ -z "$PORTS" ] && PORTS="80"
 
-# 🔥 NO eliminar puertos por uso (solo únicos)
 PORTS=$(echo $PORTS | tr ' ' '\n' | sort -u | xargs)
-
-# convertir a python
 PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
 
 cat > /usr/local/bin/proxy.py <<EOF
@@ -87,7 +82,6 @@ def handle(client):
 
         first_line = request.split(b"\\n")[0]
 
-        # HTTPS
         if b"CONNECT" in first_line:
             host_port = first_line.split()[1]
             host, port = host_port.split(b":")
@@ -97,7 +91,6 @@ def handle(client):
             remote.connect((host.decode(), port))
             client.send(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
 
-        # HTTP
         else:
             url = first_line.split()[1]
 
@@ -116,7 +109,6 @@ def handle(client):
             remote.connect((host.decode(), port))
             remote.sendall(request)
 
-        # modo seguro
         if MODE == "secure":
             if b"Host:" not in request:
                 client.close()
@@ -125,8 +117,8 @@ def handle(client):
         threading.Thread(target=forward, args=(client, remote)).start()
         forward(remote, client)
 
-    except:
-        pass
+    except Exception as e:
+        print("ERROR handle:", e)
     finally:
         client.close()
 
@@ -137,11 +129,14 @@ def start(port):
         s.bind(("0.0.0.0", port))
         s.listen(200)
 
+        print(f"[OK] Puerto activo: {port}")
+
         while True:
             c, _ = s.accept()
             threading.Thread(target=handle, args=(c,)).start()
-    except:
-        pass
+
+    except Exception as e:
+        print(f"[ERROR] Puerto {port}: {e}")
 
 for p in PORTS:
     threading.Thread(target=start, args=(p,)).start()
@@ -195,7 +190,7 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " ${M}[1]${N} SIMPLE        $(mode_status simple)"
 echo -e " ${M}[2]${N} SEGURO        $(mode_status secure)"
 echo -e " ${M}[3]${N} WS 🔥         $(mode_status ws)"
-echo -e " ${M}[4]${N} DEBUG"
+echo -e " ${M}[4]${N} DEBUG (ver errores)"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e " ${M}[5]${N} Cambiar Banner"
@@ -217,9 +212,8 @@ case $op in
 3) echo "ws" > $MODE_FILE; MODE="ws"; install_proxy ;;
 
 4)
-screen -dmS kira-proxy python3 /usr/local/bin/proxy.py
-echo -e "${C}✔ DEBUG activo${N}"
-sleep 2
+systemctl stop proxy-python
+python3 /usr/local/bin/proxy.py
 ;;
 
 5)
@@ -235,6 +229,8 @@ grep -qw "$NEWPORT" $PORT_FILE && echo -e "${Y}Ya existe${N}" && sleep 2 && cont
 
 echo "$NEWPORT" >> $PORT_FILE
 echo -e "${G}✔ Puerto agregado${N}"
+
+systemctl restart proxy-python
 sleep 1
 ;;
 
@@ -242,13 +238,9 @@ sleep 1
 > $PORT_FILE
 systemctl stop proxy-python
 pkill -f proxy.py
-
 sleep 1
-
-# liberar puertos
 fuser -k 80/tcp 2>/dev/null
 fuser -k 8080/tcp 2>/dev/null
-
 echo -e "${R}✔ Reset completo${N}"
 sleep 2
 ;;

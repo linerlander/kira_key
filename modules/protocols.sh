@@ -80,8 +80,8 @@ bash modules/proxy_python.sh
 bash modules/websocket.sh
 ;;
 
-22)
-  echo "BadVPN activo (manual)"
+22|22))
+  bash modules/badvpn.sh
   ;;
 
 31)

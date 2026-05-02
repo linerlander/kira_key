@@ -28,63 +28,61 @@ BANNER=$(cat $BANNER_FILE 2>/dev/null)
 # ===== INSTALAR PROXY =====
 install_proxy() {
 
-# limpiar procesos
 pkill -9 -f proxy.py 2>/dev/null
 
-# validar puertos
 [ -z "$PORTS" ] && PORTS="80"
 
 PORTS=$(echo $PORTS | tr ' ' '\n' | sort -u | xargs)
-
 PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
 
-# ===== PYTHON =====
+# ===== PYTHON PRO =====
 cat > /usr/local/bin/proxy.py <<EOF
-import socket, threading
+import socket
+import threading
+import time
 
 PORTS = [$PY_PORTS]
-BUFFER = 4096
 
-def handle(c):
+def start_server(port):
     try:
-        data = c.recv(BUFFER)
-        if not data:
-            c.close()
-            return
-
-        if b"CONNECT" in data:
-            c.send(b"HTTP/1.1 200 OK\\r\\n\\r\\n")
-        else:
-            c.send(b"HTTP/1.1 200 OK\\r\\n\\r\\n")
-
-    except Exception as e:
-        print("ERROR:", e)
-    finally:
-        c.close()
-
-def start(p):
-    try:
-        s = socket.socket()
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("0.0.0.0", p))
+        s.bind(("0.0.0.0", port))
         s.listen(200)
-        print("PUERTO ACTIVO:", p)
+
+        print(f"[OK] Puerto activo: {port}")
 
         while True:
-            c, _ = s.accept()
-            threading.Thread(target=handle, args=(c,)).start()
+            conn, addr = s.accept()
+            try:
+                data = conn.recv(4096)
+                if not data:
+                    conn.close()
+                    continue
+
+                # respuesta básica proxy
+                conn.send(b"HTTP/1.1 200 OK\\r\\n\\r\\n")
+
+            except Exception as e:
+                print("ERROR:", e)
+
+            conn.close()
 
     except Exception as e:
-        print("ERROR PUERTO", p, e)
+        print(f"[ERROR] {port} -> {e}")
 
+# 🔥 lanzar hilos correctos
 for p in PORTS:
-    threading.Thread(target=start, args=(p,)).start()
+    t = threading.Thread(target=start_server, args=(p,))
+    t.daemon = False
+    t.start()
 
+# 🔒 mantener vivo sin quemar CPU
 while True:
-    pass
+    time.sleep(60)
 EOF
 
-# ===== SYSTEMD =====
+# ===== SYSTEMD PRO =====
 cat > /etc/systemd/system/proxy-python.service <<EOF
 [Unit]
 Description=KIRA Proxy Python
@@ -93,6 +91,11 @@ After=network.target
 [Service]
 ExecStart=/usr/bin/python3 /usr/local/bin/proxy.py
 Restart=always
+RestartSec=3
+
+# 🔥 LOGS ACTIVOS
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -104,7 +107,7 @@ systemctl restart proxy-python
 
 sleep 1
 
-echo -e "${G}✔ Proxy iniciado${N}"
+echo -e "${G}✔ Proxy activo y permanente${N}"
 }
 
 # ===== MENU =====
@@ -119,9 +122,9 @@ echo -e " 🌐 Dominio : $DOMAIN"
 echo -e " 📡 Puertos : $PORTS"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${M}[1]${N} Iniciar Proxy"
+echo -e " ${M}[1]${N} Iniciar / Reiniciar Proxy"
 echo -e " ${M}[2]${N} Agregar Puerto"
-echo -e " ${M}[3]${N} Reset"
+echo -e " ${M}[3]${N} Reset Completo"
 echo -e " ${M}[4]${N} Ver Logs"
 echo -e " ${R}[0] Salir${N}"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
@@ -136,24 +139,43 @@ install_proxy
 
 2)
 read -p "Puerto: " P
+
+if ! [[ "$P" =~ ^[0-9]+$ ]]; then
+    echo -e "${R}Puerto inválido${N}"
+    sleep 2
+    continue
+fi
+
 echo "$P" >> $PORT_FILE
 PORTS=$(cat $PORT_FILE | xargs)
+
+echo -e "${G}✔ Puerto agregado${N}"
+sleep 1
 ;;
 
 3)
 pkill -9 -f proxy.py
 systemctl stop proxy-python
+systemctl disable proxy-python
+rm -f /usr/local/bin/proxy.py
+rm -f /etc/systemd/system/proxy-python.service
 > $PORT_FILE
-echo -e "${R}Reset completo${N}"
+
+echo -e "${R}✔ Reset TOTAL limpio${N}"
 sleep 2
 ;;
 
 4)
-journalctl -u proxy-python -n 20 --no-pager
+journalctl -u proxy-python -n 30 --no-pager
 read -p "Enter..."
 ;;
 
 0) break;;
+
+*)
+echo -e "${R}Opcion invalida${N}"
+sleep 1
+;;
 
 esac
 

@@ -31,28 +31,30 @@ install_badvpn() {
 
 echo -e "${Y}Instalando BadVPN...${N}"
 
-# limpiar viejo
 rm -f $BIN
 
-# descarga (doble método)
-wget -qO $BIN https://github.com/ambrop72/badvpn/releases/download/1.999.130/badvpn-udpgw \
-|| curl -L -o $BIN https://github.com/ambrop72/badvpn/releases/download/1.999.130/badvpn-udpgw
+# 🔥 DESCARGA ANTI-BLOQUEO
+wget -qO $BIN https://raw.githubusercontent.com/ChumoGH/scripts/main/badvpn-udpgw \
+|| curl -L -o $BIN https://raw.githubusercontent.com/ChumoGH/scripts/main/badvpn-udpgw
 
-# validar descarga
-if [ ! -f "$BIN" ]; then
-    echo -e "${R}✖ Error descargando BadVPN (bloqueo GitHub)${N}"
+# 🔍 VALIDAR DESCARGA REAL
+SIZE=$(stat -c%s "$BIN" 2>/dev/null)
+
+if [ -z "$SIZE" ] || [ "$SIZE" -lt 500000 ]; then
+    echo -e "${R}✖ Descarga corrupta (bloqueo GitHub/CDN)${N}"
+    rm -f $BIN
     return
 fi
 
 chmod +x $BIN
 
-# validar ejecutable
+# 🔍 VALIDAR BINARIO
 if ! $BIN --help >/dev/null 2>&1; then
     echo -e "${R}✖ Binario inválido o incompatible${N}"
     return
 fi
 
-# verificar puertos
+# 🔍 VERIFICAR PUERTOS
 for p in 7100 7200 7300; do
     if ss -tuln | grep -q ":$p "; then
         echo -e "${R}✖ Puerto $p en uso${N}"
@@ -60,7 +62,7 @@ for p in 7100 7200 7300; do
     fi
 done
 
-# crear servicio
+# ===== CREAR SERVICIO =====
 cat > $SERVICE_FILE <<EOF
 [Unit]
 Description=KIRA BadVPN UDPGW
@@ -81,7 +83,7 @@ systemctl restart $SERVICE
 
 sleep 2
 
-# verificar
+# ===== VERIFICAR =====
 if pgrep -f badvpn-udpgw >/dev/null; then
     echo -e "${G}✔ BadVPN ACTIVO${N}"
 else
@@ -114,11 +116,11 @@ echo -e " Puertos activos  : ${W}$PORTS${N}"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 📚 EXPLICACION
+# 📚 INFO
 echo -e "${W} Uso de puertos:${N}"
-echo -e " ${G}7100${N} ➜ Juegos (FreeFire, PUBG, etc)"
-echo -e " ${G}7200${N} ➜ Apps VPN (HTTP Injector, KPN)"
-echo -e " ${G}7300${N} ➜ DNS / UDP general"
+echo -e " ${G}7100${N} ➜ Juegos (FreeFire, PUBG)"
+echo -e " ${G}7200${N} ➜ HTTP Injector / KPN"
+echo -e " ${G}7300${N} ➜ DNS / tráfico UDP"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 

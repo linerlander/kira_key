@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# ===== COLORES =====
 G='\033[38;5;46m'
 R='\033[38;5;196m'
 Y='\033[38;5;226m'
@@ -9,61 +8,43 @@ D='\033[38;5;240m'
 N='\033[0m'
 
 SERVICE="kira-badvpn"
-SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
-BIN="/usr/bin/badvpn-udpgw"
+BIN="/usr/local/bin/badvpn-udpgw"
 
-# ===== ESTADO =====
 status_badvpn() {
-    if pgrep -f badvpn-udpgw >/dev/null; then
-        echo -e "${G}[ON]${N}"
-    else
-        echo -e "${R}[OFF]${N}"
-    fi
+    pgrep -f badvpn-udpgw >/dev/null && echo -e "${G}[ON]${N}" || echo -e "${R}[OFF]${N}"
 }
 
-# ===== PUERTOS ACTIVOS =====
 ports_active() {
     ss -tuln | grep -E '7100|7200|7300' | awk '{print $5}' | cut -d: -f2 | xargs
 }
 
-# ===== INSTALAR =====
+# ===== INSTALAR DESDE SOURCE =====
 install_badvpn() {
 
-echo -e "${Y}Instalando BadVPN...${N}"
+echo -e "${Y}Instalando BadVPN (compilando)...${N}"
 
-rm -f $BIN
+apt update -y
+apt install -y build-essential cmake git
 
-# 🔥 DESCARGA ANTI-BLOQUEO
-wget -qO $BIN https://raw.githubusercontent.com/ChumoGH/scripts/main/badvpn-udpgw \
-|| curl -L -o $BIN https://raw.githubusercontent.com/ChumoGH/scripts/main/badvpn-udpgw
+cd /root
+rm -rf badvpn
+git clone https://github.com/ambrop72/badvpn.git
 
-# 🔍 VALIDAR DESCARGA REAL
-SIZE=$(stat -c%s "$BIN" 2>/dev/null)
+cd badvpn
+mkdir build
+cd build
 
-if [ -z "$SIZE" ] || [ "$SIZE" -lt 500000 ]; then
-    echo -e "${R}✖ Descarga corrupta (bloqueo GitHub/CDN)${N}"
-    rm -f $BIN
+cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1
+make install
+
+# verificar binario
+if [ ! -f "$BIN" ]; then
+    echo -e "${R}✖ Error compilando BadVPN${N}"
     return
 fi
 
-chmod +x $BIN
-
-# 🔍 VALIDAR BINARIO
-if ! $BIN --help >/dev/null 2>&1; then
-    echo -e "${R}✖ Binario inválido o incompatible${N}"
-    return
-fi
-
-# 🔍 VERIFICAR PUERTOS
-for p in 7100 7200 7300; do
-    if ss -tuln | grep -q ":$p "; then
-        echo -e "${R}✖ Puerto $p en uso${N}"
-        return
-    fi
-done
-
-# ===== CREAR SERVICIO =====
-cat > $SERVICE_FILE <<EOF
+# crear servicio
+cat > /etc/systemd/system/kira-badvpn.service <<EOF
 [Unit]
 Description=KIRA BadVPN UDPGW
 After=network.target
@@ -76,26 +57,22 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reexec
 systemctl daemon-reload
-systemctl enable $SERVICE >/dev/null 2>&1
-systemctl restart $SERVICE
+systemctl enable kira-badvpn
+systemctl restart kira-badvpn
 
 sleep 2
 
-# ===== VERIFICAR =====
 if pgrep -f badvpn-udpgw >/dev/null; then
     echo -e "${G}✔ BadVPN ACTIVO${N}"
 else
-    echo -e "${R}✖ Error al iniciar BadVPN${N}"
-    echo -e "${Y}Detalle:${N}"
-    systemctl status $SERVICE --no-pager
+    echo -e "${R}✖ Error al iniciar${N}"
+    systemctl status kira-badvpn --no-pager
 fi
 }
 
-# ===== DETENER =====
 stop_badvpn() {
-systemctl stop $SERVICE
+systemctl stop kira-badvpn
 echo -e "${R}✔ BadVPN detenido${N}"
 }
 
@@ -108,25 +85,24 @@ PORTS=$(ports_active)
 [ -z "$PORTS" ] && PORTS="--"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${W}      ADMINISTRADOR BADVPN UDP - KIRA${N}"
+echo -e " ${W}      BADVPN UDP KIRA (COMPILADO)${N}"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " Estado           : $STATE"
-echo -e " Puertos activos  : ${W}$PORTS${N}"
+echo -e " Estado  : $STATE"
+echo -e " Puertos : ${W}$PORTS${N}"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 📚 INFO
-echo -e "${W} Uso de puertos:${N}"
-echo -e " ${G}7100${N} ➜ Juegos (FreeFire, PUBG)"
-echo -e " ${G}7200${N} ➜ HTTP Injector / KPN"
-echo -e " ${G}7300${N} ➜ DNS / tráfico UDP"
+echo -e "${W} Puertos:${N}"
+echo -e " ${G}7100${N} ➜ Juegos"
+echo -e " ${G}7200${N} ➜ HTTP Injector"
+echo -e " ${G}7300${N} ➜ DNS/UDP"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " ${W}[1]${N} ➤ INSTALAR / REINICIAR"
-echo -e " ${W}[2]${N} ➤ DETENER"
-echo -e " ${W}[0]${N} ➤ VOLVER"
+echo -e " ${W}[1]${N} Instalar (compilar)"
+echo -e " ${W}[2]${N} Detener"
+echo -e " ${W}[0]${N} Volver"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 

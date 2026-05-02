@@ -27,7 +27,7 @@ BANNER=$(cat $BANNER_FILE 2>/dev/null)
 [ -z "$MODE" ] && MODE="none"
 [ -z "$BANNER" ] && BANNER="KIRA"
 
-# ===== LIMPIAR PUERTOS =====
+# ===== LIMPIAR / ORDENAR PUERTOS =====
 valid_ports() {
     CLEAN=""
     for p in $PORTS; do
@@ -50,20 +50,13 @@ install_proxy() {
 
 valid_ports
 
-# 🔥 SI NO HAY PUERTOS → DEFAULT
+# fallback si vacío
 [ -z "$PORTS" ] && PORTS="80"
 
-# eliminar puertos ocupados
-FINAL_PORTS=""
-for p in $PORTS; do
-    if ! ss -tuln | grep -q ":$p "; then
-        FINAL_PORTS="$FINAL_PORTS $p"
-    fi
-done
+# 🔥 NO eliminar puertos por uso (solo únicos)
+PORTS=$(echo $PORTS | tr ' ' '\n' | sort -u | xargs)
 
-PORTS=$(echo $FINAL_PORTS | xargs)
-
-# 🔥 FIX CRÍTICO → FORMATO PYTHON
+# convertir a python
 PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
 
 cat > /usr/local/bin/proxy.py <<EOF
@@ -94,7 +87,7 @@ def handle(client):
 
         first_line = request.split(b"\\n")[0]
 
-        # HTTPS (CONNECT)
+        # HTTPS
         if b"CONNECT" in first_line:
             host_port = first_line.split()[1]
             host, port = host_port.split(b":")
@@ -102,10 +95,9 @@ def handle(client):
 
             remote = socket.socket()
             remote.connect((host.decode(), port))
-
             client.send(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
 
-        # HTTP NORMAL
+        # HTTP
         else:
             url = first_line.split()[1]
 
@@ -122,7 +114,6 @@ def handle(client):
 
             remote = socket.socket()
             remote.connect((host.decode(), port))
-
             remote.sendall(request)
 
         # modo seguro
@@ -183,7 +174,7 @@ auto_mode() {
 echo "ws" > $MODE_FILE
 echo "80 8080" > $PORT_FILE
 [ ! -f "$CONFIG" ] && read -p "🌐 Dominio: " DOMAIN && echo "$DOMAIN" > $CONFIG
-echo -e "${G}✔ Configuración automática lista${N}"
+echo -e "${G}✔ Auto configurado${N}"
 sleep 2
 }
 
@@ -241,7 +232,6 @@ read -p "➤ Puerto: " NEWPORT
 
 [[ ! "$NEWPORT" =~ ^[0-9]+$ ]] && echo -e "${R}Puerto inválido${N}" && sleep 2 && continue
 grep -qw "$NEWPORT" $PORT_FILE && echo -e "${Y}Ya existe${N}" && sleep 2 && continue
-ss -tuln | grep -q ":$NEWPORT " && echo -e "${R}Puerto ocupado${N}" && sleep 2 && continue
 
 echo "$NEWPORT" >> $PORT_FILE
 echo -e "${G}✔ Puerto agregado${N}"
@@ -252,6 +242,13 @@ sleep 1
 > $PORT_FILE
 systemctl stop proxy-python
 pkill -f proxy.py
+
+sleep 1
+
+# liberar puertos
+fuser -k 80/tcp 2>/dev/null
+fuser -k 8080/tcp 2>/dev/null
+
 echo -e "${R}✔ Reset completo${N}"
 sleep 2
 ;;

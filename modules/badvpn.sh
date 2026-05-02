@@ -1,116 +1,123 @@
 #!/bin/bash
 
-# ===== COLORES PRO =====
-YL='\033[38;5;220m'
-GR='\033[38;5;118m'
-RD='\033[38;5;203m'
-CY='\033[38;5;51m'
-WH='\033[1;37m'
-GY='\033[38;5;245m'
-NC='\033[0m'
+# 🎨 COLORES
+G='\033[38;5;46m'
+R='\033[38;5;196m'
+Y='\033[38;5;226m'
+W='\033[1;37m'
+N='\033[0m'
 
-CONF="/etc/kira/badvpn_ports"
+SERVICE="/etc/systemd/system/kira-badvpn.service"
 
-mkdir -p /etc/kira
-[ ! -f "$CONF" ] && echo "7100 7200 7300" > "$CONF"
-
-# ===== FUNCIONES =====
-
-port_active() {
-    ss -tuln | grep -q ":$1 "
-}
-
-status_port() {
-    if port_active "$1"; then
-        echo -e "${GR}[ON]${NC}"
+# ===== DETECTAR ESTADO =====
+status_badvpn() {
+    if pgrep -f badvpn-udpgw >/dev/null; then
+        echo -e "${G}[ON]${N}"
     else
-        echo -e "${RD}[OFF]${NC}"
+        echo -e "${R}[OFF]${N}"
     fi
 }
 
+# ===== MOSTRAR PUERTOS ACTIVOS =====
+ports_active() {
+    ss -tuln | grep -E '7100|7200|7300' | awk '{print $5}' | cut -d: -f2 | xargs
+}
+
+# ===== INSTALAR BADVPN =====
 install_badvpn() {
 
-if ! command -v badvpn-udpgw >/dev/null; then
-    echo -e "${CY}Instalando BadVPN...${NC}"
-    apt update -y
-    apt install badvpn -y
-fi
+echo -e "${Y}Instalando BadVPN...${N}"
 
-for p in $(cat $CONF); do
+# Descargar binario (evita bloqueo usando curl fallback)
+curl -L -o /usr/bin/badvpn-udpgw https://github.com/ambrop72/badvpn/releases/download/1.999.130/badvpn-udpgw 2>/dev/null
 
-    if port_active "$p"; then
-        continue
-    fi
-
-    screen -dmS badvpn_$p badvpn-udpgw --listen-addr 127.0.0.1:$p --max-clients 1000
-
-done
-
-}
-
-stop_badvpn() {
-    pkill badvpn-udpgw
-}
-
-add_port() {
-
-read -p "➤ Nuevo puerto: " newp
-
-if ss -tuln | grep -q ":$newp "; then
-    echo -e "${RD}Puerto ocupado${NC}"
-    sleep 2
+if [ ! -f /usr/bin/badvpn-udpgw ]; then
+    echo -e "${R}✖ Error descargando BadVPN (GitHub bloqueado)${N}"
     return
 fi
 
-echo "$newp" >> $CONF
+chmod +x /usr/bin/badvpn-udpgw
 
-echo -e "${GR}✔ Puerto agregado${NC}"
+# Crear servicio MULTI PUERTO
+cat > $SERVICE <<EOF
+[Unit]
+Description=KIRA BadVPN UDPGW
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/badvpn-udpgw \
+--listen-addr 127.0.0.1:7100 \
+--listen-addr 127.0.0.1:7200 \
+--listen-addr 127.0.0.1:7300 \
+--max-clients 1000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable kira-badvpn
+systemctl restart kira-badvpn
+
 sleep 2
+
+if pgrep -f badvpn-udpgw >/dev/null; then
+    echo -e "${G}✔ BadVPN instalado y activo${N}"
+else
+    echo -e "${R}✖ Error al iniciar BadVPN${N}"
+fi
+
+}
+
+# ===== DETENER =====
+stop_badvpn() {
+systemctl stop kira-badvpn
+echo -e "${R}✔ BadVPN detenido${N}"
 }
 
 # ===== MENU =====
 while true; do
 clear
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "      ${WH}Administrador BadVPN UDP | KIRA${NC}"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+STATE=$(status_badvpn)
+PORTS=$(ports_active)
+[ -z "$PORTS" ] && PORTS="--"
 
-echo -e "${GY}                 ACTIVE PORTS${NC}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e " ${W} ADMINISTRADOR BADVPN UDP - KIRA${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo ""
+echo -e " Estado : $STATE"
+echo -e " Puertos activos : ${W}$PORTS${N}"
 
-for p in $(cat $CONF); do
-    printf "   127.0.0.1:%-6s %b\n" "$p" "$(status_port $p)"
-done
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo ""
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# 📚 EXPLICACIÓN PRO
+echo -e "${W} ¿PARA QUE SIRVEN LOS PUERTOS?${N}"
+echo -e " ${G}7100${N} ➜ Juegos (FreeFire, PUBG, etc)"
+echo -e " ${G}7200${N} ➜ Apps VPN (HTTP Injector, KPN)"
+echo -e " ${G}7300${N} ➜ DNS / tráfico general UDP"
 
-echo -e " ${WH}[1]${NC} > AÑADIR 1+ PUERTO BadVPN"
-echo -e " ${WH}[2]${NC} > INICIAR BadVPN"
-echo -e " ${WH}[3]${NC} > DETENER BadVPN"
-echo -e " ${WH}[0]${NC} > VOLVER"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e " ${W}[1]${N} ➤ INSTALAR / REINICIAR BADVPN"
+echo -e " ${W}[2]${N} ➤ DETENER BADVPN"
+echo -e " ${W}[0]${N} ➤ VOLVER"
+
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 read -p " ► Opcion : " op
 
 case $op in
 
 1)
-add_port
-;;
-
-2)
 install_badvpn
-echo -e "${GR}✔ BadVPN iniciado${NC}"
 sleep 2
 ;;
 
-3)
+2)
 stop_badvpn
-echo -e "${RD}✔ BadVPN detenido${NC}"
 sleep 2
 ;;
 
@@ -119,7 +126,7 @@ break
 ;;
 
 *)
-echo -e "${RD}Opcion invalida${NC}"
+echo -e "${R}Opcion invalida${N}"
 sleep 1
 ;;
 

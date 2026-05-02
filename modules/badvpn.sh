@@ -1,56 +1,47 @@
 #!/bin/bash
 
-G='\033[38;5;46m'
-R='\033[38;5;196m'
-Y='\033[38;5;226m'
+# 🎨 COLORES PRO
+G='\033[38;5;82m'
+R='\033[38;5;203m'
+Y='\033[38;5;220m'
+C='\033[38;5;45m'
 W='\033[1;37m'
 D='\033[38;5;240m'
 N='\033[0m'
 
 SERVICE="kira-badvpn"
 BIN="/usr/local/bin/badvpn-udpgw"
+PORT_FILE="/etc/kira/badvpn_ports"
 
+mkdir -p /etc/kira
+
+# ===== ESTADO =====
 status_badvpn() {
-    pgrep -f badvpn-udpgw >/dev/null && echo -e "${G}[ON]${N}" || echo -e "${R}[OFF]${N}"
+    pgrep -f badvpn-udpgw >/dev/null && echo -e "${G}● ACTIVO${N}" || echo -e "${R}● DETENIDO${N}"
 }
 
-ports_active() {
-    ss -tuln | grep -E '7100|7200|7300' | awk '{print $5}' | cut -d: -f2 | xargs
+# ===== LEER PUERTOS =====
+get_ports() {
+    [ -f "$PORT_FILE" ] && cat "$PORT_FILE" || echo "7100 7200 7300"
 }
 
-# ===== INSTALAR DESDE SOURCE =====
-install_badvpn() {
+# ===== GENERAR SERVICIO =====
+generate_service() {
 
-echo -e "${Y}Instalando BadVPN (compilando)...${N}"
+PORTS=$(get_ports)
 
-apt update -y
-apt install -y build-essential cmake git
+CMD=""
+for p in $PORTS; do
+    CMD+="--listen-addr 127.0.0.1:$p "
+done
 
-cd /root
-rm -rf badvpn
-git clone https://github.com/ambrop72/badvpn.git
-
-cd badvpn
-mkdir build
-cd build
-
-cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1
-make install
-
-# verificar binario
-if [ ! -f "$BIN" ]; then
-    echo -e "${R}✖ Error compilando BadVPN${N}"
-    return
-fi
-
-# crear servicio
-cat > /etc/systemd/system/kira-badvpn.service <<EOF
+cat > /etc/systemd/system/${SERVICE}.service <<EOF
 [Unit]
-Description=KIRA BadVPN UDPGW
+Description=KIRA BadVPN PRO
 After=network.target
 
 [Service]
-ExecStart=$BIN --listen-addr 127.0.0.1:7100 --listen-addr 127.0.0.1:7200 --listen-addr 127.0.0.1:7300 --max-clients 1000
+ExecStart=$BIN $CMD --max-clients 1000
 Restart=always
 
 [Install]
@@ -58,21 +49,86 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable kira-badvpn
-systemctl restart kira-badvpn
+systemctl restart $SERVICE
+}
+
+# ===== INSTALAR =====
+install_badvpn() {
+
+echo -e "${Y}⚙️ Instalando BadVPN (modo PRO)...${N}"
+
+apt update -y
+apt install -y build-essential cmake git >/dev/null 2>&1
+
+cd /root
+rm -rf badvpn
+git clone https://github.com/ambrop72/badvpn.git >/dev/null 2>&1
+
+cd badvpn
+mkdir build && cd build
+
+cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null
+make install >/dev/null 2>&1
+
+if [ ! -f "$BIN" ]; then
+    echo -e "${R}✖ Error al compilar BadVPN${N}"
+    return
+fi
+
+# puertos por defecto
+echo "7100 7200 7300" > $PORT_FILE
+
+generate_service
+
+systemctl enable $SERVICE >/dev/null 2>&1
 
 sleep 2
 
-if pgrep -f badvpn-udpgw >/dev/null; then
-    echo -e "${G}✔ BadVPN ACTIVO${N}"
-else
-    echo -e "${R}✖ Error al iniciar${N}"
-    systemctl status kira-badvpn --no-pager
-fi
+echo -e "${G}✔ BadVPN instalado correctamente${N}"
 }
 
+# ===== AGREGAR PUERTO =====
+add_port() {
+read -p "➤ Nuevo puerto: " NEWPORT
+
+if ss -tuln | grep -q ":$NEWPORT "; then
+    echo -e "${R}✖ Puerto ocupado${N}"
+    return
+fi
+
+PORTS=$(get_ports)
+
+if echo "$PORTS" | grep -w "$NEWPORT" >/dev/null; then
+    echo -e "${Y}⚠️ Ya existe ese puerto${N}"
+    return
+fi
+
+echo "$PORTS $NEWPORT" > $PORT_FILE
+
+generate_service
+
+echo -e "${G}✔ Puerto agregado${N}"
+}
+
+# ===== ELIMINAR PUERTO =====
+del_port() {
+PORTS=$(get_ports)
+
+echo -e "${Y}Puertos actuales:${N} ${W}$PORTS${N}"
+read -p "➤ Puerto a eliminar: " DEL
+
+NEW=$(echo $PORTS | sed "s/\b$DEL\b//g")
+
+echo "$NEW" > $PORT_FILE
+
+generate_service
+
+echo -e "${R}✔ Puerto eliminado${N}"
+}
+
+# ===== DETENER =====
 stop_badvpn() {
-systemctl stop kira-badvpn
+systemctl stop $SERVICE
 echo -e "${R}✔ BadVPN detenido${N}"
 }
 
@@ -81,28 +137,31 @@ while true; do
 clear
 
 STATE=$(status_badvpn)
-PORTS=$(ports_active)
-[ -z "$PORTS" ] && PORTS="--"
+PORTS=$(get_ports)
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${W}      BADVPN UDP KIRA (COMPILADO)${N}"
+echo -e " ${W}🚀 BADVPN UDP PRO - KIRA${N}"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " Estado  : $STATE"
-echo -e " Puertos : ${W}$PORTS${N}"
+echo -e " ${C}Estado:${N} $STATE"
+echo -e " ${C}Puertos:${N} ${W}$PORTS${N}"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e "${W} Puertos:${N}"
-echo -e " ${G}7100${N} ➜ Juegos"
-echo -e " ${G}7200${N} ➜ HTTP Injector"
-echo -e " ${G}7300${N} ➜ DNS/UDP"
+# INFO PRO
+echo -e "${W}📡 Uso recomendado:${N}"
+echo -e " ${G}7100${N} ➜ 🎮 Juegos (FreeFire, PUBG)"
+echo -e " ${G}7200${N} ➜ 📱 HTTP Injector / KPN"
+echo -e " ${G}7300${N} ➜ 🌐 DNS / tráfico general"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " ${W}[1]${N} Instalar (compilar)"
-echo -e " ${W}[2]${N} Detener"
-echo -e " ${W}[0]${N} Volver"
+echo -e " ${W}[1]${N} ⚙️ Instalar / Reinstalar"
+echo -e " ${W}[2]${N} ➕ Añadir puerto"
+echo -e " ${W}[3]${N} ➖ Eliminar puerto"
+echo -e " ${W}[4]${N} 🔄 Reiniciar"
+echo -e " ${W}[5]${N} ⛔ Detener"
+echo -e " ${W}[0]${N} 🔙 Volver"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
@@ -116,6 +175,22 @@ read -p "Enter..."
 ;;
 
 2)
+add_port
+sleep 2
+;;
+
+3)
+del_port
+sleep 2
+;;
+
+4)
+generate_service
+echo -e "${G}✔ Reiniciado${N}"
+sleep 2
+;;
+
+5)
 stop_badvpn
 sleep 2
 ;;

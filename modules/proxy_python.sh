@@ -3,8 +3,8 @@
 # ===== COLORES PRO =====
 R='\033[1;91m'   # rojo fuerte
 G='\033[1;92m'   # verde fuerte
-Y='\033[1;93m'   # amarillo fuerte
-M='\033[1;95m'   # morado
+Y='\033[1;93m'
+M='\033[1;95m'
 C='\033[1;96m'
 W='\033[1;97m'
 D='\033[38;5;240m'
@@ -27,28 +27,21 @@ BANNER=$(cat $BANNER_FILE 2>/dev/null)
 [ -z "$MODE" ] && MODE="none"
 [ -z "$BANNER" ] && BANNER="KIRA"
 
-# ===== LIMPIAR PUERTOS (SIN DUPLICADOS) =====
+# ===== LIMPIAR PUERTOS =====
 valid_ports() {
     CLEAN=""
     for p in $PORTS; do
-        if [[ "$p" =~ ^[0-9]+$ ]]; then
-            CLEAN="$CLEAN $p"
-        fi
+        [[ "$p" =~ ^[0-9]+$ ]] && CLEAN="$CLEAN $p"
     done
-
     PORTS=$(echo $CLEAN | tr ' ' '\n' | sort -u | xargs)
 }
 
-# ===== STATUS =====
+# ===== STATUS LIMPIO =====
 mode_status() {
-    if systemctl is-active --quiet proxy-python; then
-        if [ "$MODE" = "$1" ]; then
-            echo -e "${G}${M}[✔ ON]${N}"
-        else
-            echo -e "${D}${M}[• OFF]${N}"
-        fi
+    if systemctl is-active --quiet proxy-python && [ "$MODE" = "$1" ]; then
+        echo -e "${G}[ON]${N}"
     else
-        echo -e "${R}${M}[✖ OFF]${N}"
+        echo -e "${R}[OFF]${N}"
     fi
 }
 
@@ -57,7 +50,7 @@ install_proxy() {
 
 valid_ports
 
-# eliminar puertos ocupados SOLO al iniciar servicio
+# eliminar puertos ocupados
 FINAL_PORTS=""
 for p in $PORTS; do
     if ! ss -tuln | grep -q ":$p "; then
@@ -155,36 +148,49 @@ echo -e " 🏷️ ${C}Banner${N}  : ${W}$BANNER${N}"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " ${M}[1]${N} 🟢 SIMPLE        $(mode_status simple)"
-echo -e " ${M}[2]${N} 🛡️ SEGURO        $(mode_status secure)"
-echo -e " ${M}[3]${N} 🚀 WS (Injector) $(mode_status ws)"
-echo -e " ${M}[4]${N} 🧪 DEBUG (Logs en vivo)"
+echo -e " ${M}[1]${N} SIMPLE        $(mode_status simple)"
+echo -e " ${M}[2]${N} SEGURO        $(mode_status secure)"
+echo -e " ${M}[3]${N} WS 🔥         $(mode_status ws)"
+echo -e " ${M}[4]${N} DEBUG"
 
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${M}[5]${N} ✏️ Cambiar Banner"
-echo -e " ${M}[6]${N} ➕ Agregar Puerto"
-echo -e " ${M}[7]${N} ❌ Resetear Todo"
-echo -e " ${M}[8]${N} ⚡ AUTO CONFIG"
+echo -e " ${M}[5]${N} Cambiar Banner"
+echo -e " ${M}[6]${N} Agregar Puerto"
+echo -e " ${M}[7]${N} Resetear Todo"
+echo -e " ${M}[8]${N} AUTO CONFIG"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e " ${R}[0] SALIR${N}"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 echo -e "${D}💡 Usa WS + puerto 80 para mejor compatibilidad${N}"
-echo -e "${D}💡 Puedes usar 8080 / 8888 como alternativos${N}"
+echo -e "${D}💡 Alternativos: 8080 / 8888${N}"
 
 read -p "➤ Opcion: " op
 
 case $op in
 
-1) echo "simple" > $MODE_FILE ;;
-2) echo "secure" > $MODE_FILE ;;
-3) echo "ws" > $MODE_FILE ;;
+1)
+echo "simple" > $MODE_FILE
+MODE="simple"
+install_proxy
+;;
+
+2)
+echo "secure" > $MODE_FILE
+MODE="secure"
+install_proxy
+;;
+
+3)
+echo "ws" > $MODE_FILE
+MODE="ws"
+install_proxy
+;;
 
 4)
 screen -dmS kira-proxy python3 /usr/local/bin/proxy.py
 echo -e "${C}✔ DEBUG activo${N}"
 sleep 2
-continue
 ;;
 
 5)
@@ -202,7 +208,7 @@ if ! [[ "$NEWPORT" =~ ^[0-9]+$ ]]; then
 fi
 
 if grep -qw "$NEWPORT" $PORT_FILE 2>/dev/null; then
-    echo -e "${Y}⚠ Ya existe ese puerto${N}"
+    echo -e "${Y}⚠ Ya existe${N}"
     sleep 2
     continue
 fi
@@ -224,12 +230,10 @@ systemctl stop proxy-python
 pkill -f proxy.py
 echo -e "${R}✔ Reset completo${N}"
 sleep 2
-continue
 ;;
 
 8)
 auto_mode
-continue
 ;;
 
 0) break ;;
@@ -244,7 +248,5 @@ esac
 [ ! -f "$CONFIG" ] && read -p "Dominio: " DOMAIN && echo "$DOMAIN" > $CONFIG
 
 PORTS=$(cat $PORT_FILE | xargs)
-
-install_proxy
 
 done

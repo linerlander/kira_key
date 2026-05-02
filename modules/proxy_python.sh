@@ -50,6 +50,10 @@ install_proxy() {
 
 valid_ports
 
+# 🔥 SI NO HAY PUERTOS → DEFAULT
+[ -z "$PORTS" ] && PORTS="80"
+
+# eliminar puertos ocupados
 FINAL_PORTS=""
 for p in $PORTS; do
     if ! ss -tuln | grep -q ":$p "; then
@@ -59,10 +63,13 @@ done
 
 PORTS=$(echo $FINAL_PORTS | xargs)
 
+# 🔥 FIX CRÍTICO → FORMATO PYTHON
+PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
+
 cat > /usr/local/bin/proxy.py <<EOF
 import socket, threading
 
-PORTS = [${PORTS// /,}]
+PORTS = [$PY_PORTS]
 MODE = "$MODE"
 BANNER = "$BANNER"
 
@@ -87,6 +94,7 @@ def handle(client):
 
         first_line = request.split(b"\\n")[0]
 
+        # HTTPS (CONNECT)
         if b"CONNECT" in first_line:
             host_port = first_line.split()[1]
             host, port = host_port.split(b":")
@@ -97,6 +105,7 @@ def handle(client):
 
             client.send(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
 
+        # HTTP NORMAL
         else:
             url = first_line.split()[1]
 
@@ -116,6 +125,7 @@ def handle(client):
 
             remote.sendall(request)
 
+        # modo seguro
         if MODE == "secure":
             if b"Host:" not in request:
                 client.close()

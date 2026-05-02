@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ===== COLORES PRO =====
-R='\033[1;91m'     # rojo fuerte
-G='\033[1;92m'
-Y='\033[1;93m'
-M='\033[1;95m'     # morado
+R='\033[1;91m'   # rojo fuerte
+G='\033[1;92m'   # verde fuerte
+Y='\033[1;93m'   # amarillo fuerte
+M='\033[1;95m'   # morado
 C='\033[1;96m'
 W='\033[1;97m'
 D='\033[38;5;240m'
@@ -27,30 +27,45 @@ BANNER=$(cat $BANNER_FILE 2>/dev/null)
 [ -z "$MODE" ] && MODE="none"
 [ -z "$BANNER" ] && BANNER="KIRA"
 
-# ===== STATUS =====
-mode_status() {
-    if systemctl is-active --quiet proxy-python; then
-        [ "$MODE" = "$1" ] && echo -e "${G}${M}[ON]${N}" || echo -e "${Y}${M}[OFF]${N}"
-    else
-        echo -e "${R}${M}[OFF]${N}"
-    fi
-}
-
-# ===== VALIDAR PUERTOS =====
+# ===== LIMPIAR PUERTOS (SIN DUPLICADOS) =====
 valid_ports() {
     CLEAN=""
     for p in $PORTS; do
-        if [[ "$p" =~ ^[0-9]+$ ]] && ! ss -tuln | grep -q ":$p "; then
+        if [[ "$p" =~ ^[0-9]+$ ]]; then
             CLEAN="$CLEAN $p"
         fi
     done
-    PORTS=$(echo $CLEAN | xargs)
+
+    PORTS=$(echo $CLEAN | tr ' ' '\n' | sort -u | xargs)
+}
+
+# ===== STATUS =====
+mode_status() {
+    if systemctl is-active --quiet proxy-python; then
+        if [ "$MODE" = "$1" ]; then
+            echo -e "${G}${M}[✔ ON]${N}"
+        else
+            echo -e "${D}${M}[• OFF]${N}"
+        fi
+    else
+        echo -e "${R}${M}[✖ OFF]${N}"
+    fi
 }
 
 # ===== INSTALAR PROXY =====
 install_proxy() {
 
 valid_ports
+
+# eliminar puertos ocupados SOLO al iniciar servicio
+FINAL_PORTS=""
+for p in $PORTS; do
+    if ! ss -tuln | grep -q ":$p "; then
+        FINAL_PORTS="$FINAL_PORTS $p"
+    fi
+done
+
+PORTS=$(echo $FINAL_PORTS | xargs)
 
 cat > /usr/local/bin/proxy.py <<EOF
 import socket, threading
@@ -115,14 +130,14 @@ systemctl restart proxy-python
 systemctl enable proxy-python
 }
 
-# ===== AUTO CONFIG 🔥 =====
+# ===== AUTO CONFIG =====
 auto_mode() {
 echo "ws" > $MODE_FILE
 echo "80 8080" > $PORT_FILE
 
 [ ! -f "$CONFIG" ] && read -p "🌐 Dominio: " DOMAIN && echo "$DOMAIN" > $CONFIG
 
-echo -e "${G}✔ Configuración automática aplicada${N}"
+echo -e "${G}✔ Configuración automática lista${N}"
 sleep 2
 }
 
@@ -130,31 +145,32 @@ sleep 2
 while true; do
 clear
 
-echo -e "${Y}--------------------------------------------------${N}"
-echo -e " ${W}⚜️ PROXY PYTHON KIRA ⚜️${N}"
-echo -e "${Y}--------------------------------------------------${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "  ${W}⚜️ PROXY PYTHON KIRA ⚜️${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " 🌐 Dominio : ${C}$DOMAIN${N}"
-echo -e " 📡 Puertos : ${C}${PORTS:---}${N}"
-echo -e " 🏷️ Banner  : ${C}$BANNER${N}"
+echo -e " 🌐 ${C}Dominio${N} : ${W}$DOMAIN${N}"
+echo -e " 📡 ${C}Puertos${N} : ${W}${PORTS:---}${N}"
+echo -e " 🏷️ ${C}Banner${N}  : ${W}$BANNER${N}"
 
-echo -e "${Y}--------------------------------------------------${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " ${M}[1]${N} SIMPLE        $(mode_status simple)"
-echo -e " ${M}[2]${N} SEGURO        $(mode_status secure)"
-echo -e " ${M}[3]${N} WS 🔥         $(mode_status ws)"
-echo -e " ${M}[4]${N} DEBUG (screen)"
+echo -e " ${M}[1]${N} 🟢 SIMPLE        $(mode_status simple)"
+echo -e " ${M}[2]${N} 🛡️ SEGURO        $(mode_status secure)"
+echo -e " ${M}[3]${N} 🚀 WS (Injector) $(mode_status ws)"
+echo -e " ${M}[4]${N} 🧪 DEBUG (Logs en vivo)"
 
-echo -e "${Y}--------------------------------------------------${N}"
-echo -e " ${M}[5]${N} Cambiar Banner"
-echo -e " ${M}[6]${N} Agregar Puerto"
-echo -e " ${M}[7]${N} Resetear Todo"
-echo -e " ${M}[8]${N} AUTO CONFIG 🔥"
-echo -e "${Y}--------------------------------------------------${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e " ${M}[5]${N} ✏️ Cambiar Banner"
+echo -e " ${M}[6]${N} ➕ Agregar Puerto"
+echo -e " ${M}[7]${N} ❌ Resetear Todo"
+echo -e " ${M}[8]${N} ⚡ AUTO CONFIG"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e " ${R}[0] SALIR${N}"
-echo -e "${Y}--------------------------------------------------${N}"
+echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 echo -e "${D}💡 Usa WS + puerto 80 para mejor compatibilidad${N}"
+echo -e "${D}💡 Puedes usar 8080 / 8888 como alternativos${N}"
 
 read -p "➤ Opcion: " op
 
@@ -177,13 +193,29 @@ echo "$BANNER" > $BANNER_FILE
 ;;
 
 6)
-read -p "Puerto: " NEWPORT
-if ss -tuln | grep -q ":$NEWPORT "; then
-    echo -e "${R}Puerto ocupado${N}"
+read -p "➤ Puerto: " NEWPORT
+
+if ! [[ "$NEWPORT" =~ ^[0-9]+$ ]]; then
+    echo -e "${R}✖ Puerto inválido${N}"
     sleep 2
     continue
 fi
+
+if grep -qw "$NEWPORT" $PORT_FILE 2>/dev/null; then
+    echo -e "${Y}⚠ Ya existe ese puerto${N}"
+    sleep 2
+    continue
+fi
+
+if ss -tuln | grep -q ":$NEWPORT "; then
+    echo -e "${R}✖ Puerto ocupado${N}"
+    sleep 2
+    continue
+fi
+
 echo "$NEWPORT" >> $PORT_FILE
+echo -e "${G}✔ Puerto agregado${N}"
+sleep 1
 ;;
 
 7)

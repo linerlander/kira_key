@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# ===== COLORES =====
-YL='\033[38;5;220m'
-GR='\033[38;5;118m'
-RD='\033[38;5;203m'
-CY='\033[38;5;51m'
-WH='\033[1;37m'
-GY='\033[38;5;245m'
-NC='\033[0m'
+# ===== COLORES PRO =====
+R='\033[1;91m'     # rojo fuerte
+G='\033[1;92m'
+Y='\033[1;93m'
+M='\033[1;95m'     # morado
+C='\033[1;96m'
+W='\033[1;97m'
+D='\033[38;5;240m'
+N='\033[0m'
 
 CONFIG="/etc/kira/domain"
 PORT_FILE="/etc/kira/proxy_ports"
@@ -16,33 +17,45 @@ BANNER_FILE="/etc/kira/proxy_banner"
 
 mkdir -p /etc/kira
 
-# ===== DATOS =====
 DOMAIN=$(cat $CONFIG 2>/dev/null)
 PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
 MODE=$(cat $MODE_FILE 2>/dev/null)
 BANNER=$(cat $BANNER_FILE 2>/dev/null)
 
 [ -z "$DOMAIN" ] && DOMAIN="--"
-[ -z "$PORTS" ] && PORTS="--"
+[ -z "$PORTS" ] && PORTS=""
 [ -z "$MODE" ] && MODE="none"
-[ -z "$BANNER" ] && BANNER="KIRA-PROXY"
+[ -z "$BANNER" ] && BANNER="KIRA"
 
 # ===== STATUS =====
 mode_status() {
     if systemctl is-active --quiet proxy-python; then
-        [ "$MODE" = "$1" ] && echo -e "${GR}[ON]${NC}" || echo -e "${GY}[OFF]${NC}"
+        [ "$MODE" = "$1" ] && echo -e "${G}${M}[ON]${N}" || echo -e "${Y}${M}[OFF]${N}"
     else
-        echo -e "${RD}[OFF]${NC}"
+        echo -e "${R}${M}[OFF]${N}"
     fi
+}
+
+# ===== VALIDAR PUERTOS =====
+valid_ports() {
+    CLEAN=""
+    for p in $PORTS; do
+        if [[ "$p" =~ ^[0-9]+$ ]] && ! ss -tuln | grep -q ":$p "; then
+            CLEAN="$CLEAN $p"
+        fi
+    done
+    PORTS=$(echo $CLEAN | xargs)
 }
 
 # ===== INSTALAR PROXY =====
 install_proxy() {
 
+valid_ports
+
 cat > /usr/local/bin/proxy.py <<EOF
 import socket, threading
 
-PORTS = [$PORTS]
+PORTS = [${PORTS// /,}]
 MODE = "$MODE"
 BANNER = "$BANNER"
 
@@ -56,8 +69,8 @@ def handle(c):
                 return
 
         if b"CONNECT" in data or b"GET" in data or b"Upgrade" in data:
-            response = f"HTTP/1.1 200 OK\\r\\nServer: {BANNER}\\r\\n\\r\\n"
-            c.send(response.encode())
+            res = f"HTTP/1.1 200 OK\\r\\nServer: {BANNER}\\r\\n\\r\\n"
+            c.send(res.encode())
 
         while True:
             c.recv(4096)
@@ -66,12 +79,15 @@ def handle(c):
     c.close()
 
 def start(port):
-    s = socket.socket()
-    s.bind(("0.0.0.0", port))
-    s.listen(200)
-    while True:
-        c, _ = s.accept()
-        threading.Thread(target=handle, args=(c,)).start()
+    try:
+        s = socket.socket()
+        s.bind(("0.0.0.0", port))
+        s.listen(200)
+        while True:
+            c, _ = s.accept()
+            threading.Thread(target=handle, args=(c,)).start()
+    except:
+        pass
 
 for p in PORTS:
     threading.Thread(target=start, args=(p,)).start()
@@ -99,51 +115,58 @@ systemctl restart proxy-python
 systemctl enable proxy-python
 }
 
-# ===== DEBUG MODE =====
-run_debug() {
-screen -dmS kira-proxy python3 /usr/local/bin/proxy.py
+# ===== AUTO CONFIG 🔥 =====
+auto_mode() {
+echo "ws" > $MODE_FILE
+echo "80 8080" > $PORT_FILE
+
+[ ! -f "$CONFIG" ] && read -p "🌐 Dominio: " DOMAIN && echo "$DOMAIN" > $CONFIG
+
+echo -e "${G}✔ Configuración automática aplicada${N}"
+sleep 2
 }
 
 # ===== MENU =====
 while true; do
 clear
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${WH}⚜️ PROXY PYTHON KIRA ⚜️${NC}"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${Y}--------------------------------------------------${N}"
+echo -e " ${W}⚜️ PROXY PYTHON KIRA ⚜️${N}"
+echo -e "${Y}--------------------------------------------------${N}"
 
-echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
-echo -e " 📡 Puertos : ${WH}$PORTS${NC}"
-echo -e " 🏷️ Banner  : ${WH}$BANNER${NC}"
+echo -e " 🌐 Dominio : ${C}$DOMAIN${N}"
+echo -e " 📡 Puertos : ${C}${PORTS:---}${N}"
+echo -e " 🏷️ Banner  : ${C}$BANNER${N}"
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${Y}--------------------------------------------------${N}"
 
-echo -e " ${WH}[1]${NC} > 🟢 SIMPLE (SYSTEM)   $(mode_status simple)"
-echo -e " ${WH}[2]${NC} > 🟢 SEGURO (SYSTEM)   $(mode_status secure)"
-echo -e " ${WH}[3]${NC} > 🔥 WS (SYSTEM)       $(mode_status ws)"
-echo -e " ${WH}[4]${NC} > 🧪 DEBUG (SCREEN)"
+echo -e " ${M}[1]${N} SIMPLE        $(mode_status simple)"
+echo -e " ${M}[2]${N} SEGURO        $(mode_status secure)"
+echo -e " ${M}[3]${N} WS 🔥         $(mode_status ws)"
+echo -e " ${M}[4]${N} DEBUG (screen)"
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e " ${WH}[5]${NC} > ✏️ Cambiar Banner"
-echo -e " ${WH}[6]${NC} > ➕ Agregar Puerto"
-echo -e " ${WH}[7]${NC} > ❌ Detener Todo"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${WH}[0]${NC} > Volver"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${Y}--------------------------------------------------${N}"
+echo -e " ${M}[5]${N} Cambiar Banner"
+echo -e " ${M}[6]${N} Agregar Puerto"
+echo -e " ${M}[7]${N} Resetear Todo"
+echo -e " ${M}[8]${N} AUTO CONFIG 🔥"
+echo -e "${Y}--------------------------------------------------${N}"
+echo -e " ${R}[0] SALIR${N}"
+echo -e "${Y}--------------------------------------------------${N}"
 
-echo -e "${GY}💡 SYSTEM = estable | DEBUG = pruebas en vivo${NC}"
+echo -e "${D}💡 Usa WS + puerto 80 para mejor compatibilidad${N}"
 
-read -p " ► Opcion : " op
+read -p "➤ Opcion: " op
 
 case $op in
 
-1) MODE="simple"; echo "simple" > $MODE_FILE ;;
-2) MODE="secure"; echo "secure" > $MODE_FILE ;;
-3) MODE="ws"; echo "ws" > $MODE_FILE ;;
+1) echo "simple" > $MODE_FILE ;;
+2) echo "secure" > $MODE_FILE ;;
+3) echo "ws" > $MODE_FILE ;;
 
 4)
-run_debug
-echo -e "${CY}✔ Proxy en modo DEBUG (screen)${NC}"
+screen -dmS kira-proxy python3 /usr/local/bin/proxy.py
+echo -e "${C}✔ DEBUG activo${N}"
 sleep 2
 continue
 ;;
@@ -154,9 +177,9 @@ echo "$BANNER" > $BANNER_FILE
 ;;
 
 6)
-read -p "Puerto nuevo: " NEWPORT
+read -p "Puerto: " NEWPORT
 if ss -tuln | grep -q ":$NEWPORT "; then
-    echo -e "${RD}Puerto ocupado${NC}"
+    echo -e "${R}Puerto ocupado${N}"
     sleep 2
     continue
 fi
@@ -167,24 +190,26 @@ echo "$NEWPORT" >> $PORT_FILE
 > $PORT_FILE
 systemctl stop proxy-python
 pkill -f proxy.py
-echo -e "${RD}✔ Todo detenido${NC}"
+echo -e "${R}✔ Reset completo${N}"
 sleep 2
+continue
+;;
+
+8)
+auto_mode
 continue
 ;;
 
 0) break ;;
 
 *)
-echo -e "${RD}Opcion invalida${NC}"
+echo -e "${R}Opcion invalida${N}"
 sleep 1
-continue
 ;;
 
 esac
 
-# ===== CONFIG BASICA =====
 [ ! -f "$CONFIG" ] && read -p "Dominio: " DOMAIN && echo "$DOMAIN" > $CONFIG
-[ ! -f "$PORT_FILE" ] && read -p "Puerto inicial: " PORT && echo "$PORT" > $PORT_FILE
 
 PORTS=$(cat $PORT_FILE | xargs)
 

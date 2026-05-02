@@ -8,9 +8,18 @@ C='\033[38;5;51m'
 W='\033[38;5;255m'
 N='\033[0m'
 
-# 🔥 STATUS CORRECTO (SIN echo -e)
+# ===== STATUS GENERICO =====
 status() {
-  if systemctl is-active --quiet $1; then
+  if systemctl is-active --quiet "$1"; then
+    printf "${G}[ON]${N}"
+  else
+    printf "${R}[OFF]${N}"
+  fi
+}
+
+# ===== STATUS BADVPN REAL =====
+status_badvpn() {
+  if pgrep -f badvpn-udpgw >/dev/null; then
     printf "${G}[ON]${N}"
   else
     printf "${R}[OFF]${N}"
@@ -24,7 +33,7 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " 🍄 ${W}INSTALACION DE PROTOCOLOS${Y} ( KIRA ) 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 PROTOCOLOS (100% ALINEADO + COLORES OK)
+# 🔥 PROTOCOLOS
 printf "${W}[01]${N} %-18s %-8b   ${W}[11]${N} %-22s %b\n" "OpenSSH" "$(status ssh)" "Psiphon Server" "${R}[OFF]${N}"
 printf "${W}[02]${N} %-18s %-8b   ${W}[12]${N} %-22s %b\n" "Dropbear" "$(status dropbear)" "TCP DNS" "${Y}[BETA]${N}"
 printf "${W}[03]${N} %-18s %-8b   ${W}[13]${N} %-22s %b\n" "OpenVPN" "${R}[OFF]${N}" "Webmin" "${R}[OFF]${N}"
@@ -41,8 +50,8 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " 🍄 ${W}HERRAMIENTAS Y SERVICIOS${N} 🍄"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-# 🔥 SERVICIOS
-printf "${W}[21]${N} %-20s ${R}[OFF]${N}   ${W}[22]${N} %-18s ${G}[ON]${N}\n" "Block Torrent" "BadVPN"
+# 🔥 SERVICIOS (BADVPN REAL)
+printf "${W}[21]${N} %-20s ${R}[OFF]${N}   ${W}[22]${N} %-18s %b\n" "Block Torrent" "BadVPN" "$(status_badvpn)"
 printf "${W}[23]${N} %-20s ${R}[OFF]${N}   ${W}[24]${N} %-18s ${R}[OFF]${N}\n" "TCP BBR" "Fail2Ban"
 printf "${W}[25]${N} %-20s ${G}[443]${N}   ${W}[26]${N} %-18s ${C}[RUN]${N}\n" "Archivo Online" "SpeedTest"
 printf "${W}[27]${N} %-20s ${C}[INFO]${N}  ${W}[28]${N} %-18s ${R}[OFF]${N}\n" "Detalles VPS" "Block Ads"
@@ -61,44 +70,44 @@ case $op in
 
 1|01)
   bash modules/ssh.sh
-  ;;
+;;
 
 2|02)
   apt install dropbear -y
   systemctl restart dropbear
-  ;;
+;;
 
 6|06)
   apt install squid -y
   systemctl restart squid
-  ;;
+;;
+
 7|07)
-bash modules/proxy_python.sh
+  bash modules/proxy_python.sh
 ;;
 
 17|17)
-bash modules/websocket.sh
+  bash modules/websocket.sh
 ;;
 
 22|22)
   bash modules/badvpn.sh
-  ;;
+;;
 
 31)
   systemctl restart ssh 2>/dev/null
   systemctl restart squid 2>/dev/null
   systemctl restart dropbear 2>/dev/null
-  ;;
+;;
 
 0)
   break
-  ;;
+;;
 
 *)
   echo -e "${R}Opcion invalida${N}"
   sleep 1
-  ;;
+;;
 
 esac
-
 done

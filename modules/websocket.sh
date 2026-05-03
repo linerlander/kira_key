@@ -19,9 +19,11 @@ mkdir -p /etc/kira
 command -v wget >/dev/null || apt install wget -y
 command -v tar >/dev/null || apt install tar -y
 command -v ss >/dev/null || apt install iproute2 -y
+command -v nc >/dev/null || apt install netcat -y
 
 # ===== ESTADO =====
 get_status() {
+
 WS_STATUS=$(systemctl is-active kira-ws 2>/dev/null)
 CLIENT_STATUS=$(systemctl is-active kira-ws-client 2>/dev/null)
 
@@ -32,7 +34,7 @@ DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WS =====
+# ===== INSTALAR WS SERVER =====
 install_ws() {
 
 echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
@@ -49,13 +51,24 @@ rm -f $TMP
 
 wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 
+if [ ! -f $TMP ]; then
+    echo -e "${RD}✖ Error descarga${NC}"
+    return
+fi
+
 tar -xzf $TMP -C /tmp
+
+if [ ! -f /tmp/wstunnel ]; then
+    echo -e "${RD}✖ No se encontró binario${NC}"
+    return
+fi
+
 mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
 echo -e "${GR}✔ Binario instalado${NC}"
 
-# ===== SERVER =====
+# ===== SERVICE SERVER =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket Server
@@ -79,18 +92,24 @@ sleep 2
 ss -tuln | grep ${WS_PORT} && echo -e "${GR}✔ WS activo${NC}" || echo -e "${RD}✖ WS error${NC}"
 }
 
-# ===== CLIENTE AUTOMATICO (LOCAL BACKEND) =====
+# ===== CLIENTE (AHORA HACIA SSH ✅) =====
 install_client() {
 
-echo -e "${CY}⚙️ Activando cliente automático...${NC}"
+echo -e "${CY}⚙️ Activando cliente automático (SSH tunnel)...${NC}"
+
+systemctl stop kira-ws-client 2>/dev/null
+rm -f /etc/systemd/system/kira-ws-client.service
+
+# LIBERAR PUERTO
+fuser -k ${LOCAL_PORT}/tcp 2>/dev/null
 
 cat > /etc/systemd/system/kira-ws-client.service <<EOF
 [Unit]
-Description=KIRA WS CLIENT
+Description=KIRA WS CLIENT (SSH Tunnel)
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:127.0.0.1:80 ws://127.0.0.1:${WS_PORT}
+ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:127.0.0.1:22 ws://127.0.0.1:${WS_PORT}
 Restart=always
 RestartSec=5
 
@@ -104,13 +123,19 @@ systemctl restart kira-ws-client
 
 sleep 2
 
-ss -tuln | grep ${LOCAL_PORT} && echo -e "${GR}✔ Cliente activo${NC}" || echo -e "${RD}✖ Cliente error${NC}"
+ss -tuln | grep ${LOCAL_PORT} && echo -e "${GR}✔ Cliente activo (SSH listo)${NC}" || echo -e "${RD}✖ Cliente error${NC}"
 }
 
 # ===== NGINX + SSL =====
 setup_ws_ssl() {
 
 read -p "🌐 Dominio: " DOMAIN
+
+if [[ ! "$DOMAIN" =~ \. ]]; then
+    echo -e "${RD}Dominio inválido${NC}"
+    return
+fi
+
 echo "$DOMAIN" > $CONFIG
 
 apt update -y
@@ -169,7 +194,7 @@ clear
 get_status
 
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${WH}   KIRA WS HTTP INJECTOR${NC}"
+echo -e "${WH}   KIRA WS + HTTP INJECTOR${NC}"
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
@@ -180,7 +205,7 @@ echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━
 
 echo -e " ${WH}[1]${NC} Instalar WS"
 echo -e " ${WH}[2]${NC} Configurar WS + SSL"
-echo -e " ${WH}[3]${NC} Activar Cliente automático"
+echo -e " ${WH}[3]${NC} Activar túnel SSH automático"
 echo -e " ${WH}[4]${NC} Reiniciar todo"
 echo -e " ${WH}[5]${NC} Detener todo"
 echo -e " ${WH}[0]${NC} Salir"

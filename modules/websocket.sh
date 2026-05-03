@@ -16,7 +16,6 @@ TMP="/tmp/wstunnel.tar.gz"
 mkdir -p /etc/kira
 
 # ===== DEPENDENCIAS =====
-command -v curl >/dev/null || apt install curl -y
 command -v wget >/dev/null || apt install wget -y
 command -v tar >/dev/null || apt install tar -y
 command -v ss >/dev/null || apt install iproute2 -y
@@ -39,40 +38,41 @@ install_ws() {
 
 echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 
-# limpiar
+# detener y limpiar
+systemctl stop kira-ws 2>/dev/null
 pkill -f wstunnel 2>/dev/null
 rm -f /usr/bin/wstunnel
 
-echo -e "${CY}Descargando binario real...${NC}"
-
+# descargar versión válida
+echo -e "${CY}Descargando binario...${NC}"
 wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 
 if [ ! -f $TMP ]; then
-    echo -e "${RD}✖ Error descargando${NC}"
+    echo -e "${RD}✖ Error descarga${NC}"
     return
 fi
 
 SIZE=$(stat -c%s $TMP 2>/dev/null)
-
 if [ "$SIZE" -lt 1000000 ]; then
     echo -e "${RD}✖ Archivo inválido ($SIZE bytes)${NC}"
     rm -f $TMP
     return
 fi
 
+# extraer
 echo -e "${CY}Extrayendo...${NC}"
-
 tar -xzf $TMP -C /tmp
 
 if [ ! -f /tmp/wstunnel ]; then
-    echo -e "${RD}✖ No se encontró el binario${NC}"
+    echo -e "${RD}✖ No se encontró binario${NC}"
     return
 fi
 
+# instalar
 mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
-# validar ejecución
+# validar
 /usr/bin/wstunnel --help >/dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo -e "${RD}✖ Binario inválido${NC}"
@@ -80,16 +80,16 @@ if [ $? -ne 0 ]; then
     return
 fi
 
-echo -e "${GR}✔ WebSocket instalado correctamente${NC}"
+echo -e "${GR}✔ WebSocket instalado${NC}"
 
-# ===== CREAR SERVICIO =====
+# ===== SYSTEMD CORRECTO (v10) =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel -s 0.0.0.0:${WS_PORT}
+ExecStart=/usr/bin/wstunnel server --listen ws://0.0.0.0:${WS_PORT}
 Restart=always
 RestartSec=3
 
@@ -106,7 +106,7 @@ sleep 2
 if systemctl is-active --quiet kira-ws; then
     echo -e "${GR}✔ WebSocket ACTIVO${NC}"
 else
-    echo -e "${RD}✖ Error iniciando${NC}"
+    echo -e "${RD}✖ Error al iniciar${NC}"
     journalctl -u kira-ws -n 10 --no-pager
 fi
 }
@@ -124,12 +124,12 @@ fi
 echo "$DOMAIN" > $CONFIG
 
 echo -e "${CY}Instalando NGINX + SSL...${NC}"
-
 apt update -y
 apt install nginx certbot python3-certbot-nginx -y
 
 rm -f /etc/nginx/conf.d/kira_ws.conf
 
+# HTTP
 cat > /etc/nginx/conf.d/kira_ws.conf <<EOF
 server {
     listen 80;
@@ -142,21 +142,15 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 86400;
     }
-
-    location /api {
-        proxy_pass http://127.0.0.1:${WS_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
-    }
 }
 EOF
 
 systemctl restart nginx
 
+# SSL
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
+# HTTPS
 cat >> /etc/nginx/conf.d/kira_ws.conf <<EOF
 
 server {
@@ -172,19 +166,12 @@ server {
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
-
-    location /api {
-        proxy_pass http://127.0.0.1:${WS_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
 }
 EOF
 
 systemctl restart nginx
 
-echo -e "${GR}✔ WS + SSL configurado${NC}"
+echo -e "${GR}✔ WS + SSL listo${NC}"
 }
 
 # ===== MENU =====
@@ -206,8 +193,8 @@ echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━
 
 echo -e " ${WH}[1]${NC} Instalar WebSocket"
 echo -e " ${WH}[2]${NC} Configurar WS + SSL"
-echo -e " ${WH}[3]${NC} Reiniciar servicios"
-echo -e " ${WH}[4]${NC} Detener WebSocket"
+echo -e " ${WH}[3]${NC} Reiniciar"
+echo -e " ${WH}[4]${NC} Detener"
 echo -e " ${WH}[0]${NC} Salir"
 
 read -p " ► Opcion: " op

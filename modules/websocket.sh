@@ -11,15 +11,15 @@ NC='\033[0m'
 
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
-BACKEND_PORT=80
+TMP="/tmp/wstunnel.tar.gz"
 
 mkdir -p /etc/kira
 
 # ===== DEPENDENCIAS =====
 command -v curl >/dev/null || apt install curl -y
 command -v wget >/dev/null || apt install wget -y
+command -v tar >/dev/null || apt install tar -y
 command -v ss >/dev/null || apt install iproute2 -y
-command -v lsof >/dev/null || apt install lsof -y
 
 # ===== ESTADO =====
 get_status() {
@@ -43,66 +43,53 @@ echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 pkill -f wstunnel 2>/dev/null
 rm -f /usr/bin/wstunnel
 
-ARCH=$(uname -m)
+echo -e "${CY}Descargando binario real...${NC}"
 
-if [[ "$ARCH" == "x86_64" ]]; then
-    FILE="wstunnel_linux_amd64"
-elif [[ "$ARCH" == "aarch64" ]]; then
-    FILE="wstunnel_linux_arm64"
-else
-    echo -e "${RD}✖ Arquitectura no soportada${NC}"
+wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+
+if [ ! -f $TMP ]; then
+    echo -e "${RD}✖ Error descargando${NC}"
     return
 fi
 
-echo -e "${CY}Descargando desde GitHub...${NC}"
-
-# DESCARGA REAL (FUENTE CORRECTA)
-wget -O /usr/bin/wstunnel \
-https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE
-
-# FALLBACK
-if [ ! -f /usr/bin/wstunnel ]; then
-    curl -L https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE -o /usr/bin/wstunnel
-fi
-
-# VALIDAR
-if [ ! -f /usr/bin/wstunnel ]; then
-    echo -e "${RD}✖ No se pudo descargar${NC}"
-    return
-fi
-
-SIZE=$(stat -c%s /usr/bin/wstunnel 2>/dev/null)
+SIZE=$(stat -c%s $TMP 2>/dev/null)
 
 if [ "$SIZE" -lt 1000000 ]; then
     echo -e "${RD}✖ Archivo inválido ($SIZE bytes)${NC}"
-    rm -f /usr/bin/wstunnel
+    rm -f $TMP
     return
 fi
 
+echo -e "${CY}Extrayendo...${NC}"
+
+tar -xzf $TMP -C /tmp
+
+if [ ! -f /tmp/wstunnel ]; then
+    echo -e "${RD}✖ No se encontró el binario${NC}"
+    return
+fi
+
+mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
 # validar ejecución
 /usr/bin/wstunnel --help >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo -e "${RD}✖ Binario no ejecutable${NC}"
+    echo -e "${RD}✖ Binario inválido${NC}"
     rm -f /usr/bin/wstunnel
     return
 fi
 
 echo -e "${GR}✔ WebSocket instalado correctamente${NC}"
 
-# liberar puerto
-PID=$(lsof -t -i:${WS_PORT})
-[ ! -z "$PID" ] && kill -9 $PID
-
-# ===== SYSTEMD =====
+# ===== CREAR SERVICIO =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel -s 127.0.0.1:${WS_PORT} --restrict-to 127.0.0.1:${BACKEND_PORT}
+ExecStart=/usr/bin/wstunnel -s 0.0.0.0:${WS_PORT}
 Restart=always
 RestartSec=3
 
@@ -119,7 +106,7 @@ sleep 2
 if systemctl is-active --quiet kira-ws; then
     echo -e "${GR}✔ WebSocket ACTIVO${NC}"
 else
-    echo -e "${RD}✖ Error al iniciar${NC}"
+    echo -e "${RD}✖ Error iniciando${NC}"
     journalctl -u kira-ws -n 10 --no-pager
 fi
 }
@@ -135,6 +122,8 @@ if [[ ! "$DOMAIN" =~ \. ]]; then
 fi
 
 echo "$DOMAIN" > $CONFIG
+
+echo -e "${CY}Instalando NGINX + SSL...${NC}"
 
 apt update -y
 apt install nginx certbot python3-certbot-nginx -y
@@ -217,8 +206,8 @@ echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━
 
 echo -e " ${WH}[1]${NC} Instalar WebSocket"
 echo -e " ${WH}[2]${NC} Configurar WS + SSL"
-echo -e " ${WH}[3]${NC} Reiniciar"
-echo -e " ${WH}[4]${NC} Detener"
+echo -e " ${WH}[3]${NC} Reiniciar servicios"
+echo -e " ${WH}[4]${NC} Detener WebSocket"
 echo -e " ${WH}[0]${NC} Salir"
 
 read -p " ► Opcion: " op

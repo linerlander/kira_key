@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ===== COLORES PRO =====
+# ===== COLORES =====
 R='\033[1;31m'
 G='\033[1;32m'
 Y='\033[1;33m'
@@ -20,7 +20,7 @@ clear
 echo -e "${C}"
 echo "╔══════════════════════════════════════╗"
 echo "║      🚀 KIRA WS + INJECTOR PRO       ║"
-echo "║      WebSocket + SSL + SOCKS5        ║"
+echo "║         FIXED & STABLE BUILD         ║"
 echo "╚══════════════════════════════════════╝"
 echo -e "${N}"
 }
@@ -32,13 +32,19 @@ echo -e "${B}📦 Instalando dependencias...${N}"
 apt update -y
 apt install -y wget tar nginx certbot python3-certbot-nginx
 
-echo -e "${B}⬇️ Instalando wstunnel...${N}"
+echo -e "${B}⬇️ Instalando wstunnel limpio...${N}"
+rm -f /usr/bin/wstunnel
 wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 tar -xzf /tmp/ws.tar.gz -C /tmp
 mv /tmp/wstunnel /usr/bin/
 chmod +x /usr/bin/wstunnel
 
-# ===== WS SERVER =====
+# ===== LIMPIEZA TOTAL =====
+systemctl stop kira-ws 2>/dev/null
+killall wstunnel 2>/dev/null
+fuser -k ${WS_PORT}/tcp 2>/dev/null
+
+# ===== SERVER =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WS SERVER
@@ -66,12 +72,11 @@ setup_domain() {
 read -p "🌐 Dominio: " DOMAIN
 echo "$DOMAIN" > $CONFIG
 
-echo -e "${B}⚙️ Configurando nginx...${N}"
+echo -e "${B}⚙️ Configurando nginx limpio...${N}"
 
-rm -f /etc/nginx/conf.d/kira.conf
-rm -f /etc/nginx/conf.d/kira_ssl.conf
+rm -f /etc/nginx/conf.d/*.conf
 
-# ===== HTTP CONFIG (CON MAP CORRECTO) =====
+# ===== CONFIG GLOBAL =====
 cat > /etc/nginx/conf.d/kira.conf <<EOF
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
@@ -100,28 +105,6 @@ systemctl restart nginx
 echo -e "${B}🔐 Generando SSL...${N}"
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# ===== HTTPS CONFIG =====
-cat > /etc/nginx/conf.d/kira_ssl.conf <<EOF
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:${WS_PORT};
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$host;
-
-        proxy_read_timeout 86400;
-    }
-}
-EOF
-
 systemctl restart nginx
 
 echo -e "${G}✔ Dominio + SSL listos${N}"
@@ -139,7 +122,7 @@ fi
 
 echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
 
-# LIMPIEZA TOTAL
+# ===== LIMPIEZA =====
 systemctl stop kira-client 2>/dev/null
 killall wstunnel 2>/dev/null
 fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
@@ -151,7 +134,7 @@ Description=KIRA CLIENT SOCKS5
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel client -L socks5://127.0.0.1:${SOCKS_PORT} wss://${DOMAIN}
+ExecStart=/usr/bin/wstunnel client -L socks5://127.0.0.1:${SOCKS_PORT} wss://${DOMAIN}/
 Restart=always
 RestartSec=5
 
@@ -163,7 +146,7 @@ systemctl daemon-reload
 systemctl enable kira-client
 systemctl restart kira-client
 
-sleep 2
+sleep 3
 
 ss -tuln | grep ${SOCKS_PORT} && \
 echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}" || \

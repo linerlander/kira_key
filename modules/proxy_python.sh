@@ -25,22 +25,89 @@ install_proxy() {
 
 echo -e "${Y}➤ Iniciando Proxy...${N}"
 
-# detener servicio limpio
 systemctl stop proxy-python 2>/dev/null
 
-# limpiar puertos (únicos)
 PORTS=$(echo $PORTS | tr ' ' '\n' | sort -u | xargs)
 [ -z "$PORTS" ] && PORTS="80"
 
 PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
 
-# ===== CREAR PYTHON =====
+# ===== PYTHON CONNECT REAL =====
 cat > /usr/local/bin/proxy.py <<EOF
 import socket
 import threading
+import select
 import time
 
 PORTS = [$PY_PORTS]
+BUFFER = 4096
+
+def tunnel(client, remote):
+    try:
+        while True:
+            r, _, _ = select.select([client, remote], [], [])
+            if client in r:
+                data = client.recv(BUFFER)
+                if not data:
+                    break
+                remote.sendall(data)
+            if remote in r:
+                data = remote.recv(BUFFER)
+                if not data:
+                    break
+                client.sendall(data)
+    except:
+        pass
+    finally:
+        client.close()
+        remote.close()
+
+def handle_client(conn):
+    try:
+        data = conn.recv(BUFFER)
+        if not data:
+            conn.close()
+            return
+
+        first_line = data.split(b'\n')[0]
+
+        # ===== CONNECT =====
+        if b"CONNECT" in first_line:
+            target = first_line.split()[1]
+            host, port = target.split(b":")
+            port = int(port)
+
+            remote = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            remote.connect((host.decode(), port))
+
+            conn.send(b"HTTP/1.1 200 Connection Established\\r\\n\\r\\n")
+            tunnel(conn, remote)
+            return
+
+        # ===== HTTP NORMAL =====
+        else:
+            lines = data.split(b"\\r\\n")
+            host = None
+
+            for line in lines:
+                if line.lower().startswith(b"host:"):
+                    host = line.split(b":")[1].strip()
+                    break
+
+            if not host:
+                conn.close()
+                return
+
+            remote = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            remote.connect((host.decode(), 80))
+
+            remote.sendall(data)
+            tunnel(conn, remote)
+
+    except:
+        pass
+    finally:
+        conn.close()
 
 def start_server(port):
     try:
@@ -49,33 +116,25 @@ def start_server(port):
         s.bind(("0.0.0.0", port))
         s.listen(200)
 
-        print(f"[OK] Puerto activo: {port}")
+        print(f"[OK] Proxy activo en puerto {port}")
 
         while True:
-            conn, addr = s.accept()
-            try:
-                conn.send(b"HTTP/1.1 200 OK\\r\\n\\r\\n")
-            except:
-                pass
-            conn.close()
+            conn, _ = s.accept()
+            threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
 
     except Exception as e:
         print(f"[ERROR] {port}: {e}")
 
-# lanzar hilos
 for p in PORTS:
-    t = threading.Thread(target=start_server, args=(p,))
-    t.daemon = False
-    t.start()
+    threading.Thread(target=start_server, args=(p,), daemon=False).start()
 
-# mantener proceso vivo
 while True:
     time.sleep(60)
 EOF
 
 chmod +x /usr/local/bin/proxy.py
 
-# ===== CREAR SYSTEMD =====
+# ===== SYSTEMD =====
 cat > /etc/systemd/system/proxy-python.service <<EOF
 [Unit]
 Description=KIRA Proxy Python
@@ -93,16 +152,12 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-# recargar systemd
 systemctl daemon-reload
-
-# iniciar servicio
 systemctl start proxy-python
 systemctl enable proxy-python
 
 sleep 1
 
-# validar estado
 if systemctl is-active --quiet proxy-python; then
     echo -e "${G}✔ Proxy ACTIVO${N}"
 else
@@ -110,7 +165,7 @@ else
 fi
 }
 
-# ===== RESET TOTAL =====
+# ===== RESET =====
 reset_all() {
 
 echo -e "${Y}➤ Eliminando todo...${N}"

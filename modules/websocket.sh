@@ -19,60 +19,33 @@ banner() {
 clear
 echo -e "${C}"
 echo "╔══════════════════════════════════════╗"
-echo "║      🚀 KIRA WS FINAL PRO           ║"
-echo "║      SIN /chat - 100% FUNCIONAL     ║"
+echo "║      🚀 KIRA WS + INJECTOR PRO       ║"
+echo "║      WebSocket + SSL + SOCKS5        ║"
 echo "╚══════════════════════════════════════╝"
 echo -e "${N}"
 }
 
-# ===== LIMPIEZA =====
-cleanup_all() {
-echo -e "${Y}🧹 Limpiando todo...${N}"
-
-systemctl stop kira-ws 2>/dev/null
-systemctl stop kira-client 2>/dev/null
-
-systemctl disable kira-ws 2>/dev/null
-systemctl disable kira-client 2>/dev/null
-
-rm -f /etc/systemd/system/kira-ws.service
-rm -f /etc/systemd/system/kira-client.service
-
-pkill -f wstunnel 2>/dev/null
-
-fuser -k ${WS_PORT}/tcp 2>/dev/null
-fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
-
-rm -f /etc/nginx/conf.d/kira*
-
-systemctl daemon-reload
-
-echo -e "${G}✔ Limpieza completa${N}"
-}
-
-# ===== INSTALAR =====
+# ================================
 install_all() {
-
-cleanup_all
 
 echo -e "${B}📦 Instalando dependencias...${N}"
 apt update -y
 apt install -y wget tar nginx certbot python3-certbot-nginx
 
 echo -e "${B}⬇️ Instalando wstunnel...${N}"
-wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+wget -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 tar -xzf /tmp/ws.tar.gz -C /tmp
 mv /tmp/wstunnel /usr/bin/
 chmod +x /usr/bin/wstunnel
 
-# ===== SERVER =====
+# ===== WS SERVER CORREGIDO =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WS SERVER
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
+ExecStart=/usr/bin/wstunnel server --restrict-to 127.0.0.1:22 ws://0.0.0.0:${WS_PORT}
 Restart=always
 RestartSec=3
 
@@ -84,16 +57,10 @@ systemctl daemon-reload
 systemctl enable kira-ws
 systemctl restart kira-ws
 
-sleep 2
-
-if ss -tuln | grep -q ${WS_PORT}; then
-    echo -e "${G}✔ WS server activo${N}"
-else
-    echo -e "${R}✖ WS error${N}"
-fi
+echo -e "${G}✔ WS server activo${N}"
 }
 
-# ===== DOMINIO =====
+# ================================
 setup_domain() {
 
 read -p "🌐 Dominio: " DOMAIN
@@ -101,7 +68,6 @@ echo "$DOMAIN" > $CONFIG
 
 echo -e "${B}⚙️ Configurando nginx...${N}"
 
-# HTTP
 cat > /etc/nginx/conf.d/kira.conf <<EOF
 server {
     listen 80;
@@ -112,7 +78,7 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection "Upgrade";
 
         proxy_set_header Host \$host;
 
@@ -126,7 +92,7 @@ systemctl restart nginx
 echo -e "${B}🔐 Generando SSL...${N}"
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# HTTPS
+# ===== HTTPS =====
 cat > /etc/nginx/conf.d/kira_ssl.conf <<EOF
 server {
     listen 443 ssl;
@@ -140,7 +106,7 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection "Upgrade";
 
         proxy_set_header Host \$host;
 
@@ -151,10 +117,10 @@ EOF
 
 systemctl restart nginx
 
-echo -e "${G}✔ Dominio + SSL OK${N}"
+echo -e "${G}✔ Dominio + SSL listos${N}"
 }
 
-# ===== CLIENT SOCKS5 =====
+# ================================
 install_client() {
 
 DOMAIN=$(cat $CONFIG)
@@ -166,13 +132,12 @@ fi
 
 echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
 
+# MATAR PROCESOS ANTERIORES
 systemctl stop kira-client 2>/dev/null
-systemctl disable kira-client 2>/dev/null
-rm -f /etc/systemd/system/kira-client.service
-
-pkill -f "wstunnel client" 2>/dev/null
+killall wstunnel 2>/dev/null
 fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
 
+# ===== CLIENT =====
 cat > /etc/systemd/system/kira-client.service <<EOF
 [Unit]
 Description=KIRA CLIENT SOCKS5
@@ -191,24 +156,24 @@ systemctl daemon-reload
 systemctl enable kira-client
 systemctl restart kira-client
 
-sleep 3
+sleep 2
 
-if ss -tuln | grep -q ${SOCKS_PORT}; then
-    echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}"
-else
-    echo -e "${R}✖ SOCKS5 error${N}"
-fi
+ss -tuln | grep ${SOCKS_PORT} && \
+echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}" || \
+echo -e "${R}✖ Error SOCKS5${N}"
 }
 
-# ===== STATUS =====
+# ================================
 status_all() {
+
 echo -e "${Y}===== ESTADO =====${N}"
-systemctl is-active kira-ws
-systemctl is-active kira-client
+echo -e "WS SERVER: $(systemctl is-active kira-ws)"
+echo -e "CLIENTE : $(systemctl is-active kira-client)"
+echo -e ""
 ss -tuln | grep -E "8888|1080"
 }
 
-# ===== MENU =====
+# ================================
 while true; do
 banner
 

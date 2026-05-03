@@ -28,9 +28,6 @@ CLIENT_STATUS=$(systemctl is-active kira-ws-client 2>/dev/null)
 [ "$WS_STATUS" = "active" ] && WS_COLOR="${GR}[ON]${NC}" || WS_COLOR="${RD}[OFF]${NC}"
 [ "$CLIENT_STATUS" = "active" ] && CL_COLOR="${GR}[ON]${NC}" || CL_COLOR="${RD}[OFF]${NC}"
 
-ss -tuln | grep -q ":443 " && SSL_STATUS="${GR}[ON]${NC}" || SSL_STATUS="${RD}[OFF]${NC}"
-ss -tuln | grep -q ":80 " && P80="${GR}[ON]${NC}" || P80="${RD}[OFF]${NC}"
-
 DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
@@ -50,16 +47,15 @@ fuser -k ${WS_PORT}/tcp 2>/dev/null
 rm -f /usr/bin/wstunnel
 rm -f $TMP
 
-echo -e "${CY}Descargando binario...${NC}"
 wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 
 tar -xzf $TMP -C /tmp
 mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
-echo -e "${GR}✔ Binario listo${NC}"
+echo -e "${GR}✔ Binario instalado${NC}"
 
-# ===== SERVIDOR WS =====
+# ===== SERVER =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket Server
@@ -80,25 +76,13 @@ systemctl restart kira-ws
 
 sleep 2
 
-if systemctl is-active --quiet kira-ws; then
-    echo -e "${GR}✔ WS activo en puerto ${WS_PORT}${NC}"
-else
-    echo -e "${RD}✖ Error WS${NC}"
-    journalctl -u kira-ws -n 10 --no-pager
-fi
+ss -tuln | grep ${WS_PORT} && echo -e "${GR}✔ WS activo${NC}" || echo -e "${RD}✖ WS error${NC}"
 }
 
-# ===== CLIENTE AUTOMÁTICO =====
+# ===== CLIENTE AUTOMATICO (LOCAL BACKEND) =====
 install_client() {
 
-DOMAIN=$(cat $CONFIG)
-
-if [ -z "$DOMAIN" ]; then
-    echo -e "${RD}Primero configura dominio (opción 2)${NC}"
-    return
-fi
-
-echo -e "${CY}⚙️ Configurando cliente automático...${NC}"
+echo -e "${CY}⚙️ Activando cliente automático...${NC}"
 
 cat > /etc/systemd/system/kira-ws-client.service <<EOF
 [Unit]
@@ -106,7 +90,7 @@ Description=KIRA WS CLIENT
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:google.com:443 wss://${DOMAIN}/chat
+ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:127.0.0.1:80 ws://127.0.0.1:${WS_PORT}
 Restart=always
 RestartSec=5
 
@@ -120,19 +104,13 @@ systemctl restart kira-ws-client
 
 sleep 2
 
-if systemctl is-active --quiet kira-ws-client; then
-    echo -e "${GR}✔ Cliente activo en puerto ${LOCAL_PORT}${NC}"
-else
-    echo -e "${RD}✖ Error cliente${NC}"
-    journalctl -u kira-ws-client -n 10 --no-pager
-fi
+ss -tuln | grep ${LOCAL_PORT} && echo -e "${GR}✔ Cliente activo${NC}" || echo -e "${RD}✖ Cliente error${NC}"
 }
 
 # ===== NGINX + SSL =====
 setup_ws_ssl() {
 
 read -p "🌐 Dominio: " DOMAIN
-
 echo "$DOMAIN" > $CONFIG
 
 apt update -y
@@ -140,6 +118,7 @@ apt install nginx certbot python3-certbot-nginx -y
 
 rm -f /etc/nginx/conf.d/kira_ws.conf
 
+# HTTP
 cat > /etc/nginx/conf.d/kira_ws.conf <<EOF
 server {
     listen 80;
@@ -157,8 +136,10 @@ EOF
 
 systemctl restart nginx
 
+# SSL
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
+# HTTPS
 cat >> /etc/nginx/conf.d/kira_ws.conf <<EOF
 
 server {
@@ -188,18 +169,17 @@ clear
 get_status
 
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${WH}   KIRA WS PRO AUTO${NC}"
+echo -e "${WH}   KIRA WS HTTP INJECTOR${NC}"
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
 echo -e " WS SERVER  : $WS_COLOR"
 echo -e " WS CLIENT  : $CL_COLOR"
-echo -e " SSL 443    : $SSL_STATUS"
 
 echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e " ${WH}[1]${NC} Instalar WS"
-echo -e " ${WH}[2]${NC} Configurar Dominio + SSL"
+echo -e " ${WH}[2]${NC} Configurar WS + SSL"
 echo -e " ${WH}[3]${NC} Activar Cliente automático"
 echo -e " ${WH}[4]${NC} Reiniciar todo"
 echo -e " ${WH}[5]${NC} Detener todo"

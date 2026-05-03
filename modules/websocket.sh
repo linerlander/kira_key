@@ -10,8 +10,8 @@ NC='\033[0m'
 
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
+LOCAL_PORT=9999
 TMP="/tmp/wstunnel.tar.gz"
-TMP_DIR="/tmp/wstunnel_extract"
 
 mkdir -p /etc/kira
 
@@ -22,9 +22,11 @@ command -v ss >/dev/null || apt install iproute2 -y
 
 # ===== ESTADO =====
 get_status() {
-
 WS_STATUS=$(systemctl is-active kira-ws 2>/dev/null)
+CLIENT_STATUS=$(systemctl is-active kira-ws-client 2>/dev/null)
+
 [ "$WS_STATUS" = "active" ] && WS_COLOR="${GR}[ON]${NC}" || WS_COLOR="${RD}[OFF]${NC}"
+[ "$CLIENT_STATUS" = "active" ] && CL_COLOR="${GR}[ON]${NC}" || CL_COLOR="${RD}[OFF]${NC}"
 
 ss -tuln | grep -q ":443 " && SSL_STATUS="${GR}[ON]${NC}" || SSL_STATUS="${RD}[OFF]${NC}"
 ss -tuln | grep -q ":80 " && P80="${GR}[ON]${NC}" || P80="${RD}[OFF]${NC}"
@@ -38,9 +40,7 @@ install_ws() {
 
 echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 
-# LIMPIEZA
 systemctl stop kira-ws 2>/dev/null
-systemctl disable kira-ws 2>/dev/null
 rm -f /etc/systemd/system/kira-ws.service
 systemctl daemon-reload
 
@@ -48,51 +48,21 @@ pkill -f wstunnel 2>/dev/null
 fuser -k ${WS_PORT}/tcp 2>/dev/null
 
 rm -f /usr/bin/wstunnel
-rm -rf $TMP_DIR
 rm -f $TMP
 
-# DESCARGA
-echo -e "${CY}Descargando binario oficial...${NC}"
-wget -q --show-progress -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+echo -e "${CY}Descargando binario...${NC}"
+wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 
-if [ ! -f $TMP ]; then
-    echo -e "${RD}✖ Error descarga${NC}"
-    return
-fi
-
-SIZE=$(stat -c%s $TMP)
-if [ "$SIZE" -lt 1000000 ]; then
-    echo -e "${RD}✖ Archivo inválido ($SIZE bytes)${NC}"
-    return
-fi
-
-# EXTRAER
-mkdir -p $TMP_DIR
-tar -xzf $TMP -C $TMP_DIR
-
-BIN=$(find $TMP_DIR -type f -name wstunnel | head -n 1)
-
-if [ ! -f "$BIN" ]; then
-    echo -e "${RD}✖ No se encontró binario${NC}"
-    return
-fi
-
-mv "$BIN" /usr/bin/wstunnel
+tar -xzf $TMP -C /tmp
+mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
-# VALIDAR
-/usr/bin/wstunnel --help >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo -e "${RD}✖ Binario inválido${NC}"
-    return
-fi
+echo -e "${GR}✔ Binario listo${NC}"
 
-echo -e "${GR}✔ Binario instalado${NC}"
-
-# SERVICE CORRECTO
+# ===== SERVIDOR WS =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
-Description=KIRA WebSocket
+Description=KIRA WebSocket Server
 After=network.target
 
 [Service]
@@ -104,43 +74,72 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reexec
 systemctl daemon-reload
 systemctl enable kira-ws
-
 systemctl restart kira-ws
+
 sleep 2
 
 if systemctl is-active --quiet kira-ws; then
-    echo -e "${GR}✔ WebSocket ACTIVO${NC}"
+    echo -e "${GR}✔ WS activo en puerto ${WS_PORT}${NC}"
 else
-    echo -e "${RD}✖ Error iniciando${NC}"
+    echo -e "${RD}✖ Error WS${NC}"
     journalctl -u kira-ws -n 10 --no-pager
+fi
+}
+
+# ===== CLIENTE AUTOMÁTICO =====
+install_client() {
+
+DOMAIN=$(cat $CONFIG)
+
+if [ -z "$DOMAIN" ]; then
+    echo -e "${RD}Primero configura dominio (opción 2)${NC}"
     return
 fi
 
-ss -tuln | grep ${WS_PORT} && echo -e "${GR}✔ Puerto ${WS_PORT} OK${NC}" || echo -e "${RD}✖ Puerto no abierto${NC}"
+echo -e "${CY}⚙️ Configurando cliente automático...${NC}"
+
+cat > /etc/systemd/system/kira-ws-client.service <<EOF
+[Unit]
+Description=KIRA WS CLIENT
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:google.com:443 wss://${DOMAIN}/chat
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable kira-ws-client
+systemctl restart kira-ws-client
+
+sleep 2
+
+if systemctl is-active --quiet kira-ws-client; then
+    echo -e "${GR}✔ Cliente activo en puerto ${LOCAL_PORT}${NC}"
+else
+    echo -e "${RD}✖ Error cliente${NC}"
+    journalctl -u kira-ws-client -n 10 --no-pager
+fi
 }
 
-# ===== CONFIG WS + SSL =====
+# ===== NGINX + SSL =====
 setup_ws_ssl() {
 
 read -p "🌐 Dominio: " DOMAIN
-
-if [[ ! "$DOMAIN" =~ \. ]]; then
-    echo -e "${RD}Dominio inválido${NC}"
-    return
-fi
 
 echo "$DOMAIN" > $CONFIG
 
 apt update -y
 apt install nginx certbot python3-certbot-nginx -y
 
-# LIMPIAR CONFIG PREVIA
 rm -f /etc/nginx/conf.d/kira_ws.conf
 
-# HTTP
 cat > /etc/nginx/conf.d/kira_ws.conf <<EOF
 server {
     listen 80;
@@ -158,10 +157,8 @@ EOF
 
 systemctl restart nginx
 
-# SSL
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# HTTPS
 cat >> /etc/nginx/conf.d/kira_ws.conf <<EOF
 
 server {
@@ -176,7 +173,6 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
     }
 }
 EOF
@@ -191,21 +187,22 @@ while true; do
 clear
 get_status
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "   ${WH}WEBSOCKET KIRA FINAL PRO${NC}"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${WH}   KIRA WS PRO AUTO${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
-echo -e " WS         : $WS_COLOR"
+echo -e " WS SERVER  : $WS_COLOR"
+echo -e " WS CLIENT  : $CL_COLOR"
 echo -e " SSL 443    : $SSL_STATUS"
-echo -e " PORT 80    : $P80"
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo -e " ${WH}[1]${NC} Instalar WebSocket"
-echo -e " ${WH}[2]${NC} Configurar WS + SSL"
-echo -e " ${WH}[3]${NC} Reiniciar servicios"
-echo -e " ${WH}[4]${NC} Detener WebSocket"
+echo -e " ${WH}[1]${NC} Instalar WS"
+echo -e " ${WH}[2]${NC} Configurar Dominio + SSL"
+echo -e " ${WH}[3]${NC} Activar Cliente automático"
+echo -e " ${WH}[4]${NC} Reiniciar todo"
+echo -e " ${WH}[5]${NC} Detener todo"
 echo -e " ${WH}[0]${NC} Salir"
 
 read -p " ► Opcion: " op
@@ -213,8 +210,9 @@ read -p " ► Opcion: " op
 case $op in
 1) install_ws ;;
 2) setup_ws_ssl ;;
-3) systemctl restart kira-ws && systemctl restart nginx ;;
-4) systemctl stop kira-ws ;;
+3) install_client ;;
+4) systemctl restart kira-ws && systemctl restart kira-ws-client && systemctl restart nginx ;;
+5) systemctl stop kira-ws && systemctl stop kira-ws-client ;;
 0) break ;;
 *) echo -e "${RD}Opcion invalida${NC}"; sleep 1 ;;
 esac

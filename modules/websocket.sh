@@ -38,7 +38,7 @@ tar -xzf /tmp/ws.tar.gz -C /tmp
 mv /tmp/wstunnel /usr/bin/
 chmod +x /usr/bin/wstunnel
 
-# ===== WS SERVER (CORRECTO) =====
+# ===== WS SERVER =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WS SERVER
@@ -68,12 +68,16 @@ echo "$DOMAIN" > $CONFIG
 
 echo -e "${B}⚙️ Configurando nginx...${N}"
 
-# LIMPIAR configs viejas
 rm -f /etc/nginx/conf.d/kira.conf
 rm -f /etc/nginx/conf.d/kira_ssl.conf
 
-# HTTP
+# ===== HTTP CONFIG (CON MAP CORRECTO) =====
 cat > /etc/nginx/conf.d/kira.conf <<EOF
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
 server {
     listen 80;
     server_name $DOMAIN;
@@ -83,7 +87,7 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
+        proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
 
         proxy_read_timeout 86400;
@@ -96,7 +100,7 @@ systemctl restart nginx
 echo -e "${B}🔐 Generando SSL...${N}"
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# HTTPS
+# ===== HTTPS CONFIG =====
 cat > /etc/nginx/conf.d/kira_ssl.conf <<EOF
 server {
     listen 443 ssl;
@@ -110,7 +114,7 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
+        proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
 
         proxy_read_timeout 86400;
@@ -135,12 +139,12 @@ fi
 
 echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
 
-# LIMPIEZA TOTAL (CLAVE)
+# LIMPIEZA TOTAL
 systemctl stop kira-client 2>/dev/null
 killall wstunnel 2>/dev/null
 fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
 
-# CLIENT
+# ===== CLIENT =====
 cat > /etc/systemd/system/kira-client.service <<EOF
 [Unit]
 Description=KIRA CLIENT SOCKS5

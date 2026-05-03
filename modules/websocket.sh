@@ -19,6 +19,7 @@ mkdir -p /etc/kira
 command -v curl >/dev/null || apt install curl -y
 command -v ss >/dev/null || apt install iproute2 -y
 command -v lsof >/dev/null || apt install lsof -y
+command -v wget >/dev/null || apt install wget -y
 
 # ===== ESTADO =====
 get_status() {
@@ -33,7 +34,7 @@ DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WEBSOCKET (FIX TOTAL) =====
+# ===== INSTALAR WEBSOCKET (FIX REAL) =====
 install_ws() {
 
 echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
@@ -54,18 +55,28 @@ else
     return
 fi
 
-echo -e "${CY}Descargando ($ARCH)...${NC}"
+echo -e "${CY}Descargando (ghproxy)...${NC}"
 
-# 🔥 MULTI DESCARGA (ANTI BLOQUEO)
-curl -L --connect-timeout 10 https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE -o /usr/bin/wstunnel || \
-curl -L https://ghproxy.com/https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE -o /usr/bin/wstunnel || \
-wget -O /usr/bin/wstunnel https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE
+# 🔥 DESCARGA PRINCIPAL (FUNCIONA EN TU VPS)
+wget -O /usr/bin/wstunnel \
+https://ghproxy.com/https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE
 
-# VALIDAR TAMAÑO
+# FALLBACK
+if [ ! -f /usr/bin/wstunnel ]; then
+    curl -L https://ghproxy.com/https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE -o /usr/bin/wstunnel
+fi
+
+# VALIDAR EXISTENCIA
+if [ ! -f /usr/bin/wstunnel ]; then
+    echo -e "${RD}✖ No se pudo descargar${NC}"
+    sleep 2
+    return
+fi
+
+# VALIDAR TAMAÑO REAL
 SIZE=$(stat -c%s /usr/bin/wstunnel 2>/dev/null)
-
 if [ "$SIZE" -lt 1000000 ]; then
-    echo -e "${RD}✖ Descarga corrupta ($SIZE bytes)${NC}"
+    echo -e "${RD}✖ Archivo corrupto ($SIZE bytes)${NC}"
     rm -f /usr/bin/wstunnel
     sleep 2
     return
@@ -76,19 +87,19 @@ chmod +x /usr/bin/wstunnel
 # VALIDAR EJECUCIÓN
 /usr/bin/wstunnel --help >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo -e "${RD}✖ Binario incompatible${NC}"
+    echo -e "${RD}✖ Binario inválido${NC}"
     rm -f /usr/bin/wstunnel
     sleep 2
     return
 fi
 
-echo -e "${GR}✔ Binario OK${NC}"
+echo -e "${GR}✔ Binario correcto${NC}"
 
 # LIBERAR PUERTO
 PID=$(lsof -t -i:${WS_PORT})
 [ ! -z "$PID" ] && kill -9 $PID
 
-# CREAR SERVICIO
+# ===== SERVICE =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket
@@ -112,7 +123,7 @@ sleep 2
 if systemctl is-active --quiet kira-ws; then
     echo -e "${GR}✔ WebSocket ACTIVO${NC}"
 else
-    echo -e "${RD}✖ ERROR al iniciar${NC}"
+    echo -e "${RD}✖ ERROR iniciando WS${NC}"
     journalctl -u kira-ws -n 10 --no-pager
 fi
 
@@ -175,7 +186,7 @@ EOF
 
 systemctl restart nginx
 
-echo -e "${YL}⚠️ Asegúrate que el dominio apunte al VPS${NC}"
+echo -e "${YL}⚠️ Apunta el dominio al VPS antes del SSL${NC}"
 sleep 3
 
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN

@@ -1,83 +1,31 @@
 #!/bin/bash
 
-# ===== COLORES =====
-YL='\033[38;5;220m'
-GR='\033[38;5;118m'
-RD='\033[38;5;203m'
-CY='\033[38;5;51m'
-WH='\033[1;37m'
-NC='\033[0m'
-
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
 LOCAL_PORT=9999
-TMP="/tmp/wstunnel.tar.gz"
 
 mkdir -p /etc/kira
 
-# ===== DEPENDENCIAS =====
-command -v wget >/dev/null || apt install wget -y
-command -v tar >/dev/null || apt install tar -y
-command -v ss >/dev/null || apt install iproute2 -y
-command -v nc >/dev/null || apt install netcat -y
-
-# ===== ESTADO =====
-get_status() {
-
-WS_STATUS=$(systemctl is-active kira-ws 2>/dev/null)
-CLIENT_STATUS=$(systemctl is-active kira-ws-client 2>/dev/null)
-
-[ "$WS_STATUS" = "active" ] && WS_COLOR="${GR}[ON]${NC}" || WS_COLOR="${RD}[OFF]${NC}"
-[ "$CLIENT_STATUS" = "active" ] && CL_COLOR="${GR}[ON]${NC}" || CL_COLOR="${RD}[OFF]${NC}"
-
-DOMAIN=$(cat $CONFIG 2>/dev/null)
-[ -z "$DOMAIN" ] && DOMAIN="--"
-}
-
-# ===== INSTALAR WS SERVER =====
 install_ws() {
 
-echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
+apt update -y
+apt install wget tar nginx certbot python3-certbot-nginx -y
 
-systemctl stop kira-ws 2>/dev/null
-rm -f /etc/systemd/system/kira-ws.service
-systemctl daemon-reload
-
-pkill -f wstunnel 2>/dev/null
-fuser -k ${WS_PORT}/tcp 2>/dev/null
-
-rm -f /usr/bin/wstunnel
-rm -f $TMP
-
-wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
-
-if [ ! -f $TMP ]; then
-    echo -e "${RD}✖ Error descarga${NC}"
-    return
-fi
-
-tar -xzf $TMP -C /tmp
-
-if [ ! -f /tmp/wstunnel ]; then
-    echo -e "${RD}✖ No se encontró binario${NC}"
-    return
-fi
-
+# ===== INSTALAR WSTUNNEL =====
+wget -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+tar -xzf /tmp/ws.tar.gz -C /tmp
 mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
-echo -e "${GR}✔ Binario instalado${NC}"
-
-# ===== SERVICE SERVER =====
+# ===== SERVER WS =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
-Description=KIRA WebSocket Server
+Description=KIRA WS SERVER
 After=network.target
 
 [Service]
 ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
 Restart=always
-RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
@@ -87,64 +35,16 @@ systemctl daemon-reload
 systemctl enable kira-ws
 systemctl restart kira-ws
 
-sleep 2
-
-ss -tuln | grep ${WS_PORT} && echo -e "${GR}✔ WS activo${NC}" || echo -e "${RD}✖ WS error${NC}"
+echo "WS SERVER OK"
 }
 
-# ===== CLIENTE (AHORA HACIA SSH ✅) =====
-install_client() {
+setup_ssl() {
 
-echo -e "${CY}⚙️ Activando cliente automático (SSH tunnel)...${NC}"
-
-systemctl stop kira-ws-client 2>/dev/null
-rm -f /etc/systemd/system/kira-ws-client.service
-
-# LIBERAR PUERTO
-fuser -k ${LOCAL_PORT}/tcp 2>/dev/null
-
-cat > /etc/systemd/system/kira-ws-client.service <<EOF
-[Unit]
-Description=KIRA WS CLIENT (SSH Tunnel)
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:127.0.0.1:22 ws://127.0.0.1:${WS_PORT}
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable kira-ws-client
-systemctl restart kira-ws-client
-
-sleep 2
-
-ss -tuln | grep ${LOCAL_PORT} && echo -e "${GR}✔ Cliente activo (SSH listo)${NC}" || echo -e "${RD}✖ Cliente error${NC}"
-}
-
-# ===== NGINX + SSL =====
-setup_ws_ssl() {
-
-read -p "🌐 Dominio: " DOMAIN
-
-if [[ ! "$DOMAIN" =~ \. ]]; then
-    echo -e "${RD}Dominio inválido${NC}"
-    return
-fi
-
+read -p "Dominio: " DOMAIN
 echo "$DOMAIN" > $CONFIG
 
-apt update -y
-apt install nginx certbot python3-certbot-nginx -y
-
-rm -f /etc/nginx/conf.d/kira_ws.conf
-
-# HTTP
-cat > /etc/nginx/conf.d/kira_ws.conf <<EOF
+# CONFIG NGINX LIMPIO
+cat > /etc/nginx/conf.d/kira.conf <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -153,8 +53,8 @@ server {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host \$host;
     }
 }
 EOF
@@ -164,8 +64,13 @@ systemctl restart nginx
 # SSL
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# HTTPS
-cat >> /etc/nginx/conf.d/kira_ws.conf <<EOF
+# HTTPS FINAL
+cat > /etc/nginx/conf.d/kira.conf <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
 
 server {
     listen 443 ssl;
@@ -178,48 +83,66 @@ server {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host \$host;
     }
 }
 EOF
 
 systemctl restart nginx
 
-echo -e "${GR}✔ WS + SSL listo${NC}"
+echo "SSL OK"
 }
 
-# ===== MENU =====
+install_client() {
+
+# MATAR SI EXISTE
+fuser -k ${LOCAL_PORT}/tcp 2>/dev/null
+
+cat > /etc/systemd/system/kira-client.service <<EOF
+[Unit]
+Description=KIRA CLIENT (SSH OVER WS)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/wstunnel client -L tcp://127.0.0.1:${LOCAL_PORT}:127.0.0.1:22 wss://$(cat $CONFIG)/chat
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable kira-client
+systemctl restart kira-client
+
+echo "CLIENTE SSH ACTIVO"
+}
+
+status_all() {
+echo "-----------------------"
+systemctl status kira-ws | grep Active
+systemctl status kira-client | grep Active
+ss -tuln | grep -E "8888|9999"
+echo "-----------------------"
+}
+
 while true; do
 clear
-get_status
-
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${WH}   KIRA WS + HTTP INJECTOR${NC}"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
-echo -e " WS SERVER  : $WS_COLOR"
-echo -e " WS CLIENT  : $CL_COLOR"
-
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-echo -e " ${WH}[1]${NC} Instalar WS"
-echo -e " ${WH}[2]${NC} Configurar WS + SSL"
-echo -e " ${WH}[3]${NC} Activar túnel SSH automático"
-echo -e " ${WH}[4]${NC} Reiniciar todo"
-echo -e " ${WH}[5]${NC} Detener todo"
-echo -e " ${WH}[0]${NC} Salir"
-
-read -p " ► Opcion: " op
+echo "KIRA WS PANEL"
+echo "1) Instalar WS"
+echo "2) Configurar SSL"
+echo "3) Activar cliente SSH (HTTP Injector)"
+echo "4) Estado"
+echo "0) Salir"
+read -p "Opcion: " op
 
 case $op in
 1) install_ws ;;
-2) setup_ws_ssl ;;
+2) setup_ssl ;;
 3) install_client ;;
-4) systemctl restart kira-ws && systemctl restart kira-ws-client && systemctl restart nginx ;;
-5) systemctl stop kira-ws && systemctl stop kira-ws-client ;;
-0) break ;;
-*) echo -e "${RD}Opcion invalida${NC}"; sleep 1 ;;
+4) status_all ;;
+0) exit ;;
 esac
-
 done

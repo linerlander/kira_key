@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# ===== COLORES PRO =====
+# ===== COLORES =====
 YL='\033[38;5;220m'
 GR='\033[38;5;118m'
 RD='\033[38;5;203m'
 CY='\033[38;5;51m'
 WH='\033[1;37m'
-GY='\033[38;5;245m'
 NC='\033[0m'
 
 CONFIG="/etc/kira/domain"
@@ -33,18 +32,25 @@ DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WEBSOCKET =====
+# ===== INSTALAR WS =====
 install_ws() {
 
 echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 
-# detener y limpiar
+# LIMPIEZA TOTAL
 systemctl stop kira-ws 2>/dev/null
-pkill -f wstunnel 2>/dev/null
-rm -f /usr/bin/wstunnel
+systemctl disable kira-ws 2>/dev/null
+rm -f /etc/systemd/system/kira-ws.service
+systemctl daemon-reload
 
-# descargar versión válida
-echo -e "${CY}Descargando binario...${NC}"
+pkill -f wstunnel 2>/dev/null
+fuser -k ${WS_PORT}/tcp 2>/dev/null
+
+rm -f /usr/bin/wstunnel
+rm -f $TMP
+
+# DESCARGA REAL
+echo -e "${CY}Descargando binario oficial...${NC}"
 wget -O $TMP https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 
 if [ ! -f $TMP ]; then
@@ -52,14 +58,13 @@ if [ ! -f $TMP ]; then
     return
 fi
 
-SIZE=$(stat -c%s $TMP 2>/dev/null)
+SIZE=$(stat -c%s $TMP)
 if [ "$SIZE" -lt 1000000 ]; then
     echo -e "${RD}✖ Archivo inválido ($SIZE bytes)${NC}"
-    rm -f $TMP
     return
 fi
 
-# extraer
+# EXTRAER
 echo -e "${CY}Extrayendo...${NC}"
 tar -xzf $TMP -C /tmp
 
@@ -68,28 +73,26 @@ if [ ! -f /tmp/wstunnel ]; then
     return
 fi
 
-# instalar
 mv /tmp/wstunnel /usr/bin/wstunnel
 chmod +x /usr/bin/wstunnel
 
-# validar
+# VALIDAR BINARIO
 /usr/bin/wstunnel --help >/dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo -e "${RD}✖ Binario inválido${NC}"
-    rm -f /usr/bin/wstunnel
     return
 fi
 
-echo -e "${GR}✔ WebSocket instalado${NC}"
+echo -e "${GR}✔ Binario instalado${NC}"
 
-# ===== SYSTEMD CORRECTO (v10) =====
+# ===== SERVICE CORRECTO (SIN --listen) =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel server --listen ws://0.0.0.0:${WS_PORT}
+ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
 Restart=always
 RestartSec=3
 
@@ -97,33 +100,40 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
+# RECARGAR SYSTEMD
+systemctl daemon-reexec
 systemctl daemon-reload
-systemctl enable kira-ws >/dev/null 2>&1
-systemctl restart kira-ws
+systemctl enable kira-ws
 
+# INICIAR
+systemctl restart kira-ws
 sleep 2
 
+# VALIDAR
 if systemctl is-active --quiet kira-ws; then
     echo -e "${GR}✔ WebSocket ACTIVO${NC}"
 else
-    echo -e "${RD}✖ Error al iniciar${NC}"
+    echo -e "${RD}✖ Error iniciando${NC}"
     journalctl -u kira-ws -n 10 --no-pager
+    return
 fi
+
+# VERIFICAR PUERTO
+ss -tuln | grep ${WS_PORT} && echo -e "${GR}✔ Puerto ${WS_PORT} escuchando${NC}" || echo -e "${RD}✖ Puerto no abierto${NC}"
 }
 
-# ===== CONFIG NGINX + SSL =====
+# ===== CONFIG SSL =====
 setup_ws_ssl() {
 
 read -p "🌐 Dominio: " DOMAIN
 
 if [[ ! "$DOMAIN" =~ \. ]]; then
-    echo -e "${RD}✖ Dominio inválido${NC}"
+    echo -e "${RD}Dominio inválido${NC}"
     return
 fi
 
 echo "$DOMAIN" > $CONFIG
 
-echo -e "${CY}Instalando NGINX + SSL...${NC}"
 apt update -y
 apt install nginx certbot python3-certbot-nginx -y
 
@@ -180,16 +190,16 @@ clear
 
 get_status
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "   ${WH}WEBSOCKET KIRA (FINAL)${NC}"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "   ${WH}WEBSOCKET KIRA FINAL${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
 echo -e " WS         : $WS_COLOR"
 echo -e " SSL 443    : $SSL_STATUS"
 echo -e " PORT 80    : $P80"
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e " ${WH}[1]${NC} Instalar WebSocket"
 echo -e " ${WH}[2]${NC} Configurar WS + SSL"
@@ -200,14 +210,12 @@ echo -e " ${WH}[0]${NC} Salir"
 read -p " ► Opcion: " op
 
 case $op in
-
 1) install_ws ;;
 2) setup_ws_ssl ;;
 3) systemctl restart kira-ws && systemctl restart nginx ;;
 4) systemctl stop kira-ws ;;
 0) break ;;
-
 *) echo -e "${RD}Opcion invalida${NC}"; sleep 1 ;;
-
 esac
+
 done

@@ -15,6 +15,11 @@ BACKEND_PORT=80
 
 mkdir -p /etc/kira
 
+# ===== DEPENDENCIAS =====
+command -v curl >/dev/null || apt install curl -y
+command -v ss >/dev/null || apt install iproute2 -y
+command -v lsof >/dev/null || apt install lsof -y
+
 # ===== ESTADO =====
 get_status() {
 
@@ -28,16 +33,15 @@ DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WS (CORREGIDO) =====
+# ===== INSTALAR WEBSOCKET (FIX TOTAL) =====
 install_ws() {
 
 echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 
-# LIMPIEZA
+# LIMPIAR
 pkill -f wstunnel 2>/dev/null
 rm -f /usr/bin/wstunnel
 
-# DETECTAR CPU
 ARCH=$(uname -m)
 
 if [[ "$ARCH" == "x86_64" ]]; then
@@ -50,23 +54,29 @@ else
     return
 fi
 
-# DESCARGA
-curl -L --connect-timeout 10 \
-https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE \
--o /usr/bin/wstunnel
+echo -e "${CY}Descargando ($ARCH)...${NC}"
 
-# VALIDACIÓN
-if [ ! -f /usr/bin/wstunnel ]; then
-    echo -e "${RD}✖ Error descargando${NC}"
+# 🔥 MULTI DESCARGA (ANTI BLOQUEO)
+curl -L --connect-timeout 10 https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE -o /usr/bin/wstunnel || \
+curl -L https://ghproxy.com/https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE -o /usr/bin/wstunnel || \
+wget -O /usr/bin/wstunnel https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE
+
+# VALIDAR TAMAÑO
+SIZE=$(stat -c%s /usr/bin/wstunnel 2>/dev/null)
+
+if [ "$SIZE" -lt 1000000 ]; then
+    echo -e "${RD}✖ Descarga corrupta ($SIZE bytes)${NC}"
+    rm -f /usr/bin/wstunnel
     sleep 2
     return
 fi
 
 chmod +x /usr/bin/wstunnel
 
+# VALIDAR EJECUCIÓN
 /usr/bin/wstunnel --help >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo -e "${RD}✖ Binario inválido${NC}"
+    echo -e "${RD}✖ Binario incompatible${NC}"
     rm -f /usr/bin/wstunnel
     sleep 2
     return
@@ -75,7 +85,7 @@ fi
 echo -e "${GR}✔ Binario OK${NC}"
 
 # LIBERAR PUERTO
-PID=$(lsof -t -i:8888)
+PID=$(lsof -t -i:${WS_PORT})
 [ ! -z "$PID" ] && kill -9 $PID
 
 # CREAR SERVICIO

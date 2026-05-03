@@ -33,19 +33,19 @@ apt update -y
 apt install -y wget tar nginx certbot python3-certbot-nginx
 
 echo -e "${B}⬇️ Instalando wstunnel...${N}"
-wget -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 tar -xzf /tmp/ws.tar.gz -C /tmp
 mv /tmp/wstunnel /usr/bin/
 chmod +x /usr/bin/wstunnel
 
-# ===== WS SERVER CORREGIDO =====
+# ===== WS SERVER (CORRECTO) =====
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WS SERVER
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel server --restrict-to 127.0.0.1:22 ws://0.0.0.0:${WS_PORT}
+ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
 Restart=always
 RestartSec=3
 
@@ -68,6 +68,11 @@ echo "$DOMAIN" > $CONFIG
 
 echo -e "${B}⚙️ Configurando nginx...${N}"
 
+# LIMPIAR configs viejas
+rm -f /etc/nginx/conf.d/kira.conf
+rm -f /etc/nginx/conf.d/kira_ssl.conf
+
+# HTTP
 cat > /etc/nginx/conf.d/kira.conf <<EOF
 server {
     listen 80;
@@ -79,7 +84,6 @@ server {
 
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "Upgrade";
-
         proxy_set_header Host \$host;
 
         proxy_read_timeout 86400;
@@ -92,7 +96,7 @@ systemctl restart nginx
 echo -e "${B}🔐 Generando SSL...${N}"
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
-# ===== HTTPS =====
+# HTTPS
 cat > /etc/nginx/conf.d/kira_ssl.conf <<EOF
 server {
     listen 443 ssl;
@@ -107,7 +111,6 @@ server {
 
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "Upgrade";
-
         proxy_set_header Host \$host;
 
         proxy_read_timeout 86400;
@@ -132,12 +135,12 @@ fi
 
 echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
 
-# MATAR PROCESOS ANTERIORES
+# LIMPIEZA TOTAL (CLAVE)
 systemctl stop kira-client 2>/dev/null
 killall wstunnel 2>/dev/null
 fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
 
-# ===== CLIENT =====
+# CLIENT
 cat > /etc/systemd/system/kira-client.service <<EOF
 [Unit]
 Description=KIRA CLIENT SOCKS5
@@ -167,9 +170,10 @@ echo -e "${R}✖ Error SOCKS5${N}"
 status_all() {
 
 echo -e "${Y}===== ESTADO =====${N}"
-echo -e "WS SERVER: $(systemctl is-active kira-ws)"
-echo -e "CLIENTE : $(systemctl is-active kira-client)"
-echo -e ""
+echo -e "WS SERVER : $(systemctl is-active kira-ws)"
+echo -e "CLIENTE   : $(systemctl is-active kira-client)"
+echo ""
+
 ss -tuln | grep -E "8888|1080"
 }
 

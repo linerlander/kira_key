@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# ===== COLORES PRO =====
 YL='\033[38;5;220m'
 GR='\033[38;5;118m'
 RD='\033[38;5;203m'
@@ -10,7 +11,9 @@ NC='\033[0m'
 
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
-BACKEND_PORT=80   # 👈 puerto del proxy (puedes cambiarlo si quieres)
+BACKEND_PORT=80
+
+mkdir -p /etc/kira
 
 # ===== ESTADO =====
 get_status() {
@@ -25,22 +28,57 @@ DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 }
 
-# ===== INSTALAR WS =====
+# ===== INSTALAR WS (CORREGIDO) =====
 install_ws() {
 
-echo -e "${CY}Instalando WebSocket...${NC}"
+echo -e "${CY}⬇️ Instalando WebSocket...${NC}"
 
+# LIMPIEZA
+pkill -f wstunnel 2>/dev/null
 rm -f /usr/bin/wstunnel
 
-curl -L https://github.com/erebe/wstunnel/releases/download/v7.2/wstunnel_linux_amd64 -o /usr/bin/wstunnel
+# DETECTAR CPU
+ARCH=$(uname -m)
+
+if [[ "$ARCH" == "x86_64" ]]; then
+    FILE="wstunnel_linux_amd64"
+elif [[ "$ARCH" == "aarch64" ]]; then
+    FILE="wstunnel_linux_arm64"
+else
+    echo -e "${RD}✖ Arquitectura no soportada: $ARCH${NC}"
+    sleep 2
+    return
+fi
+
+# DESCARGA
+curl -L --connect-timeout 10 \
+https://github.com/erebe/wstunnel/releases/download/v7.2/$FILE \
+-o /usr/bin/wstunnel
+
+# VALIDACIÓN
+if [ ! -f /usr/bin/wstunnel ]; then
+    echo -e "${RD}✖ Error descargando${NC}"
+    sleep 2
+    return
+fi
 
 chmod +x /usr/bin/wstunnel
 
-/usr/bin/wstunnel --help >/dev/null 2>&1 || {
-    echo -e "${RD}Error en wstunnel${NC}"
+/usr/bin/wstunnel --help >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo -e "${RD}✖ Binario inválido${NC}"
+    rm -f /usr/bin/wstunnel
+    sleep 2
     return
-}
+fi
 
+echo -e "${GR}✔ Binario OK${NC}"
+
+# LIBERAR PUERTO
+PID=$(lsof -t -i:8888)
+[ ! -z "$PID" ] && kill -9 $PID
+
+# CREAR SERVICIO
 cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WebSocket
@@ -49,32 +87,44 @@ After=network.target
 [Service]
 ExecStart=/usr/bin/wstunnel -s 127.0.0.1:${WS_PORT} --restrict-to 127.0.0.1:${BACKEND_PORT}
 Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable kira-ws
+systemctl enable kira-ws >/dev/null 2>&1
 systemctl restart kira-ws
 
-echo -e "${GR}✔ WS activo${NC}"
+sleep 2
+
+if systemctl is-active --quiet kira-ws; then
+    echo -e "${GR}✔ WebSocket ACTIVO${NC}"
+else
+    echo -e "${RD}✖ ERROR al iniciar${NC}"
+    journalctl -u kira-ws -n 10 --no-pager
+fi
+
 sleep 2
 }
 
-# ===== NGINX + CAMUFLAJE =====
+# ===== NGINX + SSL + CAMUFLAJE =====
 setup_ws_ssl() {
 
-read -p "Dominio: " DOMAIN
+read -p "🌐 Dominio: " DOMAIN
 
 if [[ ! "$DOMAIN" =~ \. ]]; then
-    echo -e "${RD}Dominio inválido${NC}"
+    echo -e "${RD}✖ Dominio inválido${NC}"
     sleep 2
     return
 fi
 
 echo "$DOMAIN" > $CONFIG
 
+echo -e "${CY}⚙️ Instalando NGINX + SSL...${NC}"
+
+apt update -y
 apt install nginx certbot python3-certbot-nginx -y
 
 rm -f /etc/nginx/conf.d/kira_ws.conf
@@ -84,7 +134,6 @@ server {
     listen 80;
     server_name $DOMAIN;
 
-    # CAMUFLAJE (rutas reales)
     location /chat {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
@@ -115,6 +164,9 @@ server {
 EOF
 
 systemctl restart nginx
+
+echo -e "${YL}⚠️ Asegúrate que el dominio apunte al VPS${NC}"
+sleep 3
 
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
@@ -156,7 +208,7 @@ EOF
 systemctl restart nginx
 
 echo -e "${GR}✔ WS + SSL + CAMUFLAJE LISTO${NC}"
-sleep 2
+sleep 3
 }
 
 # ===== MENU =====
@@ -165,30 +217,54 @@ clear
 
 get_status
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e " ${WH}WEBSOCKET KIRA PRO${NC}"
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "   ${WH}WEBSOCKET KIRA (PRO)${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo -e " 🌐 Dominio : $DOMAIN"
+echo -e " 🌐 Dominio : ${WH}$DOMAIN${NC}"
 echo -e " WS         : $WS_COLOR"
 echo -e " SSL 443    : $SSL_STATUS"
+echo -e " PORT 80    : $P80"
 
-echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo -e " [1] Instalar WebSocket"
-echo -e " [2] Configurar WS + SSL"
-echo -e " [3] Reiniciar"
-echo -e " [4] Detener"
-echo -e " [0] Salir"
+echo -e " ${WH}[1]${NC} ➤ Instalar WebSocket"
+echo -e " ${WH}[2]${NC} ➤ Configurar WS + SSL (80/443)"
+echo -e " ${WH}[3]${NC} ➤ Reiniciar servicios"
+echo -e " ${WH}[4]${NC} ➤ Detener WebSocket"
+echo -e " ${WH}[0]${NC} ➤ Volver"
 
-read -p "Opcion: " op
+echo -e "${YL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+read -p " ► Opcion: " op
 
 case $op in
-1) install_ws ;;
-2) setup_ws_ssl ;;
-3) systemctl restart kira-ws && systemctl restart nginx ;;
-4) systemctl stop kira-ws ;;
-0) break ;;
-esac
 
+1)
+install_ws
+;;
+
+2)
+setup_ws_ssl
+;;
+
+3)
+systemctl restart kira-ws
+systemctl restart nginx
+;;
+
+4)
+systemctl stop kira-ws
+;;
+
+0)
+break
+;;
+
+*)
+echo -e "${RD}Opcion invalida${NC}"
+sleep 1
+;;
+
+esac
 done

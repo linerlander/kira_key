@@ -19,15 +19,15 @@ banner() {
 clear
 echo -e "${C}"
 echo "╔══════════════════════════════════════╗"
-echo "║      🚀 KIRA WS + INJECTOR PRO       ║"
-echo "║      WebSocket + SSL + SOCKS5        ║"
+echo "║      🚀 KIRA WS FINAL PRO           ║"
+echo "║      SIN /chat - 100% FUNCIONAL     ║"
 echo "╚══════════════════════════════════════╝"
 echo -e "${N}"
 }
 
-# ===== LIMPIEZA TOTAL =====
+# ===== LIMPIEZA =====
 cleanup_all() {
-echo -e "${Y}🧹 Limpiando procesos...${N}"
+echo -e "${Y}🧹 Limpiando todo...${N}"
 
 systemctl stop kira-ws 2>/dev/null
 systemctl stop kira-client 2>/dev/null
@@ -43,12 +43,14 @@ pkill -f wstunnel 2>/dev/null
 fuser -k ${WS_PORT}/tcp 2>/dev/null
 fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
 
+rm -f /etc/nginx/conf.d/kira*
+
 systemctl daemon-reload
 
 echo -e "${G}✔ Limpieza completa${N}"
 }
 
-# ===== INSTALAR TODO =====
+# ===== INSTALAR =====
 install_all() {
 
 cleanup_all
@@ -84,12 +86,14 @@ systemctl restart kira-ws
 
 sleep 2
 
-ss -tuln | grep ${WS_PORT} >/dev/null && \
-echo -e "${G}✔ WS server activo${N}" || \
-echo -e "${R}✖ WS fallo${N}"
+if ss -tuln | grep -q ${WS_PORT}; then
+    echo -e "${G}✔ WS server activo${N}"
+else
+    echo -e "${R}✖ WS error${N}"
+fi
 }
 
-# ===== DOMINIO + SSL =====
+# ===== DOMINIO =====
 setup_domain() {
 
 read -p "🌐 Dominio: " DOMAIN
@@ -97,14 +101,13 @@ echo "$DOMAIN" > $CONFIG
 
 echo -e "${B}⚙️ Configurando nginx...${N}"
 
-rm -f /etc/nginx/conf.d/kira*
-
+# HTTP
 cat > /etc/nginx/conf.d/kira.conf <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
 
-    location /chat {
+    location / {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
 
@@ -123,6 +126,7 @@ systemctl restart nginx
 echo -e "${B}🔐 Generando SSL...${N}"
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
+# HTTPS
 cat > /etc/nginx/conf.d/kira_ssl.conf <<EOF
 server {
     listen 443 ssl;
@@ -131,7 +135,7 @@ server {
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
-    location /chat {
+    location / {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
 
@@ -147,7 +151,7 @@ EOF
 
 systemctl restart nginx
 
-echo -e "${G}✔ Dominio + SSL listos${N}"
+echo -e "${G}✔ Dominio + SSL OK${N}"
 }
 
 # ===== CLIENT SOCKS5 =====
@@ -162,7 +166,6 @@ fi
 
 echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
 
-# LIMPIAR SOLO SOCKS
 systemctl stop kira-client 2>/dev/null
 systemctl disable kira-client 2>/dev/null
 rm -f /etc/systemd/system/kira-client.service
@@ -170,14 +173,13 @@ rm -f /etc/systemd/system/kira-client.service
 pkill -f "wstunnel client" 2>/dev/null
 fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
 
-# SERVICE
 cat > /etc/systemd/system/kira-client.service <<EOF
 [Unit]
 Description=KIRA CLIENT SOCKS5
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel client -L socks5://127.0.0.1:${SOCKS_PORT} wss://${DOMAIN}/chat
+ExecStart=/usr/bin/wstunnel client -L socks5://127.0.0.1:${SOCKS_PORT} wss://${DOMAIN}
 Restart=always
 RestartSec=5
 
@@ -194,7 +196,7 @@ sleep 3
 if ss -tuln | grep -q ${SOCKS_PORT}; then
     echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}"
 else
-    echo -e "${R}✖ SOCKS5 fallo${N}"
+    echo -e "${R}✖ SOCKS5 error${N}"
 fi
 }
 

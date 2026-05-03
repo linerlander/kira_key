@@ -25,14 +25,40 @@ echo "╚═══════════════════════�
 echo -e "${N}"
 }
 
+# ===== LIMPIEZA TOTAL =====
+cleanup_all() {
+echo -e "${Y}🧹 Limpiando procesos...${N}"
+
+systemctl stop kira-ws 2>/dev/null
+systemctl stop kira-client 2>/dev/null
+
+systemctl disable kira-ws 2>/dev/null
+systemctl disable kira-client 2>/dev/null
+
+rm -f /etc/systemd/system/kira-ws.service
+rm -f /etc/systemd/system/kira-client.service
+
+pkill -f wstunnel 2>/dev/null
+
+fuser -k ${WS_PORT}/tcp 2>/dev/null
+fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
+
+systemctl daemon-reload
+
+echo -e "${G}✔ Limpieza completa${N}"
+}
+
+# ===== INSTALAR TODO =====
 install_all() {
+
+cleanup_all
 
 echo -e "${B}📦 Instalando dependencias...${N}"
 apt update -y
 apt install -y wget tar nginx certbot python3-certbot-nginx
 
 echo -e "${B}⬇️ Instalando wstunnel...${N}"
-wget -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
 tar -xzf /tmp/ws.tar.gz -C /tmp
 mv /tmp/wstunnel /usr/bin/
 chmod +x /usr/bin/wstunnel
@@ -56,15 +82,22 @@ systemctl daemon-reload
 systemctl enable kira-ws
 systemctl restart kira-ws
 
-echo -e "${G}✔ WS server activo${N}"
+sleep 2
+
+ss -tuln | grep ${WS_PORT} >/dev/null && \
+echo -e "${G}✔ WS server activo${N}" || \
+echo -e "${R}✖ WS fallo${N}"
 }
 
+# ===== DOMINIO + SSL =====
 setup_domain() {
 
 read -p "🌐 Dominio: " DOMAIN
 echo "$DOMAIN" > $CONFIG
 
 echo -e "${B}⚙️ Configurando nginx...${N}"
+
+rm -f /etc/nginx/conf.d/kira*
 
 cat > /etc/nginx/conf.d/kira.conf <<EOF
 server {
@@ -76,7 +109,7 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
+        proxy_set_header Connection "upgrade";
 
         proxy_set_header Host \$host;
 
@@ -103,7 +136,7 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
+        proxy_set_header Connection "upgrade";
 
         proxy_set_header Host \$host;
 
@@ -117,6 +150,7 @@ systemctl restart nginx
 echo -e "${G}✔ Dominio + SSL listos${N}"
 }
 
+# ===== CLIENT SOCKS5 =====
 install_client() {
 
 DOMAIN=$(cat $CONFIG)
@@ -126,18 +160,24 @@ echo -e "${R}Configura dominio primero${N}"
 return
 fi
 
-echo -e "${B}🔗 Activando SOCKS5...${N}"
+echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
 
+# LIMPIAR SOLO SOCKS
+systemctl stop kira-client 2>/dev/null
+systemctl disable kira-client 2>/dev/null
+rm -f /etc/systemd/system/kira-client.service
+
+pkill -f "wstunnel client" 2>/dev/null
+fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
+
+# SERVICE
 cat > /etc/systemd/system/kira-client.service <<EOF
 [Unit]
 Description=KIRA CLIENT SOCKS5
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel client \
--L socks5://127.0.0.1:${SOCKS_PORT} \
-wss://${DOMAIN}/chat
-
+ExecStart=/usr/bin/wstunnel client -L socks5://127.0.0.1:${SOCKS_PORT} wss://${DOMAIN}/chat
 Restart=always
 RestartSec=5
 
@@ -149,21 +189,24 @@ systemctl daemon-reload
 systemctl enable kira-client
 systemctl restart kira-client
 
-sleep 2
+sleep 3
 
-ss -tuln | grep ${SOCKS_PORT} && \
-echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}" || \
-echo -e "${R}✖ Error SOCKS5${N}"
+if ss -tuln | grep -q ${SOCKS_PORT}; then
+    echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}"
+else
+    echo -e "${R}✖ SOCKS5 fallo${N}"
+fi
 }
 
+# ===== STATUS =====
 status_all() {
-
 echo -e "${Y}===== ESTADO =====${N}"
 systemctl is-active kira-ws
 systemctl is-active kira-client
 ss -tuln | grep -E "8888|1080"
 }
 
+# ===== MENU =====
 while true; do
 banner
 

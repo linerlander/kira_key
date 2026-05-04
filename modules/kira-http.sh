@@ -10,6 +10,7 @@ W='\033[1;37m'
 N='\033[0m'
 
 CONFIG="/etc/kira/domain"
+PY_PORT=8080
 
 mkdir -p /etc/kira
 
@@ -30,28 +31,31 @@ echo -e "${B}📦 Instalando dependencias...${N}"
 apt update -y
 apt install -y python3 nginx certbot python3-certbot-nginx
 
-# limpiar
+# limpieza total
 systemctl stop nginx 2>/dev/null
 killall python3 2>/dev/null
 fuser -k 80/tcp 2>/dev/null
+fuser -k 443/tcp 2>/dev/null
 
-echo -e "${G}✔ Sistema listo${N}"
+rm -f /run/nginx.pid
+
+echo -e "${G}✔ Sistema limpio${N}"
 }
 
 # ================================
 start_python() {
 
-echo -e "${B}🔥 Iniciando servidor Python (puerto 80)...${N}"
+echo -e "${B}🔥 Iniciando Python en puerto ${PY_PORT}...${N}"
 
 killall python3 2>/dev/null
-fuser -k 80/tcp 2>/dev/null
+fuser -k ${PY_PORT}/tcp 2>/dev/null
 
-nohup python3 -m http.server 80 > /dev/null 2>&1 &
+nohup python3 -m http.server ${PY_PORT} > /dev/null 2>&1 &
 
 sleep 2
 
-ss -tuln | grep :80 && \
-echo -e "${G}✔ Python activo en puerto 80${N}" || \
+ss -tuln | grep :${PY_PORT} && \
+echo -e "${G}✔ Python activo en ${PY_PORT}${N}" || \
 echo -e "${R}✖ Error Python${N}"
 }
 
@@ -72,14 +76,20 @@ server {
     server_name $DOMAIN;
 
     location / {
-        proxy_pass http://127.0.0.1:80;
+        proxy_pass http://127.0.0.1:${PY_PORT};
+        proxy_set_header Host \$host;
     }
 }
 EOF
 
-systemctl restart nginx
+# probar config antes de reiniciar
+nginx -t || { echo -e "${R}Error en nginx config${N}"; return; }
+
+systemctl start nginx
+systemctl enable nginx
 
 echo -e "${B}🔐 Generando SSL...${N}"
+
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
 
 systemctl restart nginx
@@ -91,11 +101,12 @@ echo -e "${G}✔ Dominio + SSL listos${N}"
 status_all() {
 
 echo -e "${Y}===== ESTADO =====${N}"
-echo -e "PYTHON  : $(ss -tuln | grep :80 >/dev/null && echo ACTIVO || echo OFF)"
-echo -e "NGINX   : $(systemctl is-active nginx)"
-echo ""
 
-ss -tuln | grep -E "80|443"
+echo -e "PYTHON : $(ss -tuln | grep :${PY_PORT} >/dev/null && echo ACTIVO || echo OFF)"
+echo -e "NGINX  : $(systemctl is-active nginx)"
+
+echo ""
+ss -tuln | grep -E "80|443|${PY_PORT}"
 }
 
 # ================================

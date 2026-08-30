@@ -42,10 +42,13 @@ echo "$USERNAME:$PASSWORD" | chpasswd 2>/dev/null
 
 mkdir -p /etc/kira/pass /etc/kira/expire /etc/kira/limits
 echo "$PASSWORD" > "/etc/kira/pass/$USERNAME"
-echo "$(date +%s) ${DAYS}d" > "/etc/kira/expire/$USERNAME"
 echo "$LIMIT" > "/etc/kira/limits/$USERNAME"
 
+# Calcular fecha exacta y guardarla en archivo de control
 EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+echo "$EXP_DATE" > "/etc/kira/expire/$USERNAME"
+
+# Aplicar chage con la fecha exacta en formato YYYY-MM-DD
 chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
 
 echo -e "\033[1;32m✔ Usuario $USERNAME creado exitosamente con clave '$PASSWORD' por $DAYS días (Expira: $EXP_DATE).\033[0m"
@@ -74,11 +77,11 @@ for u in $USERS_LIST; do
         PASS_VAL="Encriptado / Creado fuera de Kira"
     fi
     
-    EXP_RAW=$(chage -l "$u" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
-    if [[ "$EXP_RAW" == *"never"* ]] || [ -z "$EXP_RAW" ]; then
-        EXP_FMT="NUNCA / SIN EXPIRACION"
+    # Leer directamente del archivo de expiración seguro
+    if [ -f "/etc/kira/expire/$u" ]; then
+        EXP_FMT=$(cat "/etc/kira/expire/$u")
     else
-        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "$EXP_RAW")
+        EXP_FMT="NUNCA / SIN EXPIRACION"
     fi
 
     [ -f "/etc/kira/limits/$u" ] && LIM_VAL=$(cat "/etc/kira/limits/$u") || LIM_VAL="1"
@@ -218,8 +221,8 @@ while true; do
                                 LIMIT="${PARAM4:-1}"
 
                                 /usr/local/bin/crearuser "$USERNAME" "$PASSWORD" "$DAYS" "$LIMIT" > /dev/null 2>&1
+                                EXP_DATE=$(cat "/etc/kira/expire/$USERNAME" 2>/dev/null || date -d "+$DAYS days" +%Y-%m-%d)
 
-                                EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
                                 MSG="✅ <b>USUARIO CREADO CON ÉXITO</b>
 
 👤 <b>Usuario:</b> <code>$USERNAME</code>
@@ -243,8 +246,8 @@ while true; do
                             [ -z "$SSH_PORT" ] && SSH_PORT="22"
 
                             /usr/local/bin/crearuser "$DEMO_USER" "$DEMO_PASS" "$DAYS" "1" > /dev/null 2>&1
+                            EXP_DATE=$(cat "/etc/kira/expire/$DEMO_USER" 2>/dev/null || date -d "+$DAYS days" +%Y-%m-%d)
 
-                            EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
                             MSG="✨━━━━━━━━━━━━━━━━━━━━━✨
 🎁 <b>GENERAR CUENTA DEMO</b>
 ✨━━━━━━━━━━━━━━━━━━━━━✨
@@ -273,11 +276,10 @@ while true; do
                                         PASS_VAL="Encriptado"
                                     fi
                                     
-                                    EXP_RAW=$(chage -l "$u" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
-                                    if [[ "$EXP_RAW" == *"never"* ]] || [ -z "$EXP_RAW" ]; then
-                                        EXP_FMT="NUNCA"
+                                    if [ -f "/etc/kira/expire/$u" ]; then
+                                        EXP_FMT=$(cat "/etc/kira/expire/$u")
                                     else
-                                        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "$EXP_RAW")
+                                        EXP_FMT="NUNCA"
                                     fi
 
                                     [ -f "/etc/kira/limits/$u" ] && LIM_VAL=$(cat "/etc/kira/limits/$u") || LIM_VAL="1"
@@ -303,6 +305,7 @@ LIMITE : <code>$LIM_VAL</code>
                                 DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
                                 if id "$USERNAME" &>/dev/null && [ -n "$DAYS" ]; then
                                     EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+                                    echo "$EXP_DATE" > "/etc/kira/expire/$USERNAME"
                                     chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "🔄 Usuario <b>$USERNAME</b> renovado a <b>$DAYS días</b> (F. Expiración: <code>$EXP_DATE</code>)."
                                 else
@@ -318,8 +321,13 @@ LIMITE : <code>$LIM_VAL</code>
                                 USERNAME="$PARAM1"
                                 ADD_DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
                                 if id "$USERNAME" &>/dev/null && [ -n "$ADD_DAYS" ]; then
-                                    CURR_EXP=$(chage -l "$USERNAME" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
-                                    NEW_EXP=$(date -d "$CURR_EXP + $ADD_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+$ADD_DAYS days" +%Y-%m-%d)
+                                    if [ -f "/etc/kira/expire/$USERNAME" ]; then
+                                        CURR_EXP=$(cat "/etc/kira/expire/$USERNAME")
+                                        NEW_EXP=$(date -d "$CURR_EXP + $ADD_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+$ADD_DAYS days" +%Y-%m-%d)
+                                    else
+                                        NEW_EXP=$(date -d "+$ADD_DAYS days" +%Y-%m-%d)
+                                    fi
+                                    echo "$NEW_EXP" > "/etc/kira/expire/$USERNAME"
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "➕ <b>+$ADD_DAYS Días añadidos a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
@@ -335,8 +343,13 @@ LIMITE : <code>$LIM_VAL</code>
                                 USERNAME="$PARAM1"
                                 SUB_DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
                                 if id "$USERNAME" &>/dev/null && [ -n "$SUB_DAYS" ]; then
-                                    CURR_EXP=$(chage -l "$USERNAME" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
-                                    NEW_EXP=$(date -d "$CURR_EXP - $SUB_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+1 days" +%Y-%m-%d)
+                                    if [ -f "/etc/kira/expire/$USERNAME" ]; then
+                                        CURR_EXP=$(cat "/etc/kira/expire/$USERNAME")
+                                        NEW_EXP=$(date -d "$CURR_EXP - $SUB_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+1 days" +%Y-%m-%d)
+                                    else
+                                        NEW_EXP=$(date -d "+1 days" +%Y-%m-%d)
+                                    fi
+                                    echo "$NEW_EXP" > "/etc/kira/expire/$USERNAME"
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else

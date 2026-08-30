@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Evita que cualquier error o señal cierre el menú principal por completo
+trap '' INT TERM
+
 # ========= COLORES =========
 W='\033[1;37m'
 D='\033[38;5;245m'
@@ -50,46 +53,47 @@ read -p " ► Opción: " op
 case $op in
 
 1|01)
-bash modules/user_add.sh
-;;
+    if [ -f "modules/user_add.sh" ]; then bash modules/user_add.sh; else echo -e "${R}Falta el archivo modules/user_add.sh${N}"; sleep 1.5; fi
+    ;;
 
 2|02)
-bash modules/user_clear.sh
-;;
+    if [ -f "modules/user_clear.sh" ]; then bash modules/user_clear.sh; else echo -e "${R}Falta el archivo modules/user_clear.sh${N}"; sleep 1.5; fi
+    ;;
 
 3|03)
-bash modules/user_edit.sh
-;;
+    if [ -f "modules/user_edit.sh" ]; then bash modules/user_edit.sh; else echo -e "${R}Falta el archivo modules/user_edit.sh${N}"; sleep 1.5; fi
+    ;;
 
 4|04)
-bash modules/user_list.sh
-;;
+    if [ -f "modules/user_list.sh" ]; then bash modules/user_list.sh; else echo -e "${R}Falta el archivo modules/user_list.sh${N}"; sleep 1.5; fi
+    ;;
 
 5|05)
-bash modules/user_online.sh
-;;
+    if [ -f "modules/user_online.sh" ]; then bash modules/user_online.sh; else echo -e "${R}Falta el archivo modules/user_online.sh${N}"; sleep 1.5; fi
+    ;;
 
 6|06)
-bash modules/ssh_banner.sh
-;;
+    if [ -f "modules/ssh_banner.sh" ]; then bash modules/ssh_banner.sh; else echo -e "${R}Falta el archivo modules/ssh_banner.sh${N}"; sleep 1.5; fi
+    ;;
 
 11)
-bash modules/bot_telegram.sh
-;;
+    if [ -f "modules/bot_telegram.sh" ]; then bash modules/bot_telegram.sh; else echo -e "${R}Falta el archivo modules/bot_telegram.sh${N}"; sleep 1.5; fi
+    ;;
 
-7|07|8|08|9|09|10|11|12|13|14)
-echo -e "${Y}Modulo en desarrollo...${N}"
-sleep 2
-;;
+7|07|8|08|9|09|10|12|13|14)
+    echo -e "${Y}Módulo en desarrollo...${N}"
+    sleep 2
+    ;;
 
 0)
-break
-;;
+    clear
+    exit 0
+    ;;
 
 *)
-echo -e "${R}Opción inválida${N}"
-sleep 1
-;;
+    echo -e "${R}Opción inválida${N}"
+    sleep 1
+    ;;
 
 esac
 done

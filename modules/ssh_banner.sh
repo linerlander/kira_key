@@ -38,23 +38,23 @@ EOF
             cat << 'EOF' > "$BANNER_FILE"
 <br>
 <font color="#FF0000"><b>⚠️ REGLAS DEL SERVIDOR ⚠️</b></font><br>
-<font color="#FFFF00">---------------------------------</font><br>
+<font color="#FFFF00">---------------------------------------</font><br>
 <font color="#FFFFFF">❌ NO Multi-login no autorizado</font><br>
 <font color="#FFFFFF">❌ NO Actividades ilícitas</font><br>
 <font color="#FFFFFF">❌ NO Torrent ni Carding</font><br>
 <font color="#FF0055"><b>El incumplimiento causará BAN permanente.</b></font><br>
-<font color="#FFFF00">---------------------------------</font><br>
+<font color="#FFFF00">---------------------------------------</font><br>
 EOF
             ;;
         3)
             cat << 'EOF' > "$BANNER_FILE"
 <br>
-<font color="#00FFFF">╔════════════════════════════════╗</font><br>
+<font color="#00FFFF">╔═══════════════════════════╗</font><br>
 <font color="#FF00FF"><b>       ⚡ POWER NETWORK SSH ⚡     </b></font><br>
-<font color="#00FFFF">╠════════════════════════════════╣</font><br>
+<font color="#00FFFF">╠═══════════════════════════╣</font><br>
 <font color="#FFFFFF"> ✦ Estado: <font color="#00FF00">ONLINE</font></font><br>
 <font color="#FFFFFF"> ✦ Soporte: @loki_oficial</font><br>
-<font color="#00FFFF">╚════════════════════════════════╝</font><br>
+<font color="#00FFFF">╚═══════════════════════════╝</font><br>
 EOF
             ;;
     esac

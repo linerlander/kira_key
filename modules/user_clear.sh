@@ -63,7 +63,8 @@ while IFS=: read -r username _ uid _ _ _ _; do
                     h) seconds_add=$((num * 3600)) ;;
                     d) seconds_add=$((num * 86400)) ;;
                     *) seconds_add=0 ;;
-                es>
+                esac
+                
                 exp_sec=$((created_sec + seconds_add))
             fi
 

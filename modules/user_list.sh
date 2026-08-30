@@ -17,9 +17,9 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 📋   LISTA DE USUARIOS REGISTRADOS                  ${D}  ║${N}"
+echo -e "${D}║${Y}                    📋  LISTA DE USUARIOS REGISTRADOS                  ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
+printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N}  ${D} ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 i=1
@@ -50,8 +50,14 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         if [ -f "/etc/kira/expire/$username" ]; then
             read -r created_sec duration < "/etc/kira/expire/$username"
             
+            # Limpiar ceros a la izquierda para forzar base 10 y evitar error octal
+            created_sec=$((10#${created_sec//[!0-9]/}))
+            [ -z "$created_sec" ] && created_sec=$now_sec
+
             num="${duration//[!0-9]/}"
             unit="${duration//[0-9]/}"
+            num=$((10#$num))
+            [ -z "$num" ] && num=0
 
             case "$unit" in
                 m) seconds_add=$((num * 60)) ;;
@@ -59,7 +65,6 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
                 d) seconds_add=$((num * 86400)) ;;
                 *) seconds_add=0 ;;
             esac
-
             exp_sec=$((created_sec + seconds_add))
             diff_sec=$((exp_sec - now_sec))
 
@@ -117,11 +122,11 @@ done 3< /etc/passwd
 total_users=$((i - 1))
 
 if [ $total_users -eq 0 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}    ║${N}"
+    echo -e "${D}║${N} ${R}                    No hay usuarios SSH registrados.                    ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}     ║${N}\n" "$total_users" "$activos" "$expirados"
+printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}    ║${N}\n" "$total_users" "$activos" "$expirados"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 
 echo ""

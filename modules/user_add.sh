@@ -17,6 +17,7 @@ echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━�
 
 printf " ${Y}[01]${N} %-36s ${D}%-12s${N} %s\n" "➤ GENERAR CUENTA DEMO" "(TEMPORAL)" "⚡"
 printf " ${Y}[02]${N} %-36s ${D}%-12s${N} %s\n" "➤ CREAR USUARIO NORMAL" "(OFICIAL)" "👤"
+
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e " ${R}[00]${N} ➤ ${W}[ REGRESAR ]${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
@@ -56,7 +57,7 @@ echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
-mkdir -p /etc/kira/{limits,expire}
+mkdir -p /etc/kira/limits /etc/kira/expire
 echo "$limit" > /etc/kira/limits/$user
 echo "$(date +%s) $tiempo" > /etc/kira/expire/$user
 
@@ -121,7 +122,7 @@ echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
-mkdir -p /etc/kira/{limits,expire}
+mkdir -p /etc/kira/limits /etc/kira/expire
 echo "$limit" > /etc/kira/limits/$user
 echo "$(date +%s) ${dias}d" > /etc/kira/expire/$user
 
@@ -154,7 +155,7 @@ read -p "Presiona Enter para continuar..."
 ;;
 
 0|00)
-break
+exit 0
 ;;
 
 *)
@@ -163,4 +164,4 @@ sleep 1
 ;;
 
 esac
-dones
+done

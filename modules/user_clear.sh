@@ -18,7 +18,7 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 while true; do
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 🗑️   PANEL DE ELIMINACIÓN DE USUARIOS                 ${D}║${N}"
+echo -e "${D}║${Y}                     🗑️   PANEL DE ELIMINACIÓN DE USUARIOS                 ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
@@ -26,7 +26,7 @@ echo -e "${D}╠═════════════════════�
 declare -A users_list
 i=1
 
-while IFS=: read -u 3 -r username _ uid _ _ _ _; do
+while IFS=: read -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
         # 1. Obtener Contraseña (Prioriza /etc/kira/pass/)
@@ -48,19 +48,25 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         now_sec=$(date +%s)
 
         if [ -f "/etc/kira/expire/$username" ]; then
-            read -r created_sec duration < "/etc/kira/expire/$username"
+            read -r created_sec duration < "/etc/kira/expire/$username" 2>/dev/null
             
-            num="${duration//[!0-9]/}"
-            unit="${duration//[0-9]/}"
+            # Si el archivo tiene formato de fecha simple (YYYY-MM-DD) en lugar de epoch + duración
+            if [[ "$created_sec" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+                exp_sec=$(date -d "$created_sec" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$created_sec" +%s 2>/dev/null)
+                [ -z "$exp_sec" ] && exp_sec=$now_sec
+            else
+                num="${duration//[!0-9]/}"
+                unit="${duration//[0-9]/}"
 
-            case "$unit" in
-                m) seconds_add=$((num * 60)) ;;
-                h) seconds_add=$((num * 3600)) ;;
-                d) seconds_add=$((num * 86400)) ;;
-                *) seconds_add=0 ;;
-            esac
+                case "$unit" in
+                    m) seconds_add=$((num * 60)) ;;
+                    h) seconds_add=$((num * 3600)) ;;
+                    d) seconds_add=$((num * 86400)) ;;
+                    *) seconds_add=0 ;;
+                es>
+                exp_sec=$((created_sec + seconds_add))
+            fi
 
-            exp_sec=$((created_sec + seconds_add))
             diff_sec=$((exp_sec - now_sec))
 
             if [ $diff_sec -le 0 ]; then
@@ -107,14 +113,14 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
 
         ((i++))
     fi
-done 3< /etc/passwd
+done < /etc/passwd
 
 if [ $i -eq 1 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
+    echo -e "${D}║${N} ${R}                    No hay usuarios SSH registrados.                   ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                        ${D}║${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                    ${D}║${N}"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona el ID del usuario a eliminar: " selection

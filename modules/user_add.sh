@@ -133,21 +133,25 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
 expira_format=$(date -d "$dias days" +"%d/%m/%Y")
 
+# ================= NORMAL (Resumen Alineado) =================
+directo="${IP}:${PORT}@${user}:${pass}"
+proxy="${IP}:80@${user}:${pass}"
+
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑         ${D}║${N}"
+echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑        ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
- printf "${D}║${N}${R}🖥️ Ip Server   :${N} %-31s  ${D}║${N}\n" "$IP"
- printf "${D}║${N}${R}👤 Usuario     :${N} %-31s  ${D}║${N}\n" "$user"
- printf "${D}║${N}${R}🔑 Contraseña  :${N} ${W}%-31s${N}  ${D}║${N}\n" "$pass"
- printf "${D}║${N}${R}📡 Puerto Ssh  :${N} %-31s  ${D}║${N}\n" "$PORT"
- printf "${D}║${N}${R}📊 Límite Ssh  :${N} %-31s  ${D}║${N}\n" "$limit dispo."
- printf "${D}║${N}${R}⏳ Validez     :${N} %-31s  ${D}║${N}\n" "$expira_format ($dias d)"
+printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
+printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
+printf "${D}║${N} ${R}🔑 Contraseña  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
+printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
+printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo."
+printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$expira_format ($dias d)"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${D}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}              ${D}║${N}"
-echo -e "${D}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}              ${D}║${N}"
+printf "${D}║${N} 🔗 Direc: ${Y}%-38s${N} ${D}║${N}\n" "$directo"
+printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log

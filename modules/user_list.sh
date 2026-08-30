@@ -17,12 +17,11 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 📋   LISTA DE USUARIOS REGISTRADOS                  ${D}  ║${N}"
+echo -e "${D}║${Y}                 📋   LISTA DE USUARIOS REGISTRADOS                  ${D} ║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
-declare -A users_list
 i=1
 activos=0
 expirados=0
@@ -30,16 +29,20 @@ expirados=0
 while IFS=: read -u 3 -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
-        # Obtener Contraseña
-        pass=$(grep -w "^$username" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
-        [ -z "$pass" ] && pass="---"
+        # 1. Obtener Contraseña (Prioriza /etc/kira/pass/ y luego users.log)
+        if [ -f "/etc/kira/pass/$username" ]; then
+            pass=$(cat "/etc/kira/pass/$username")
+        else
+            pass=$(grep -w "^$username" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
+            [ -z "$pass" ] && pass="---"
+        fi
 
-        # Obtener Límite
-        limit=$(cat /etc/kira/limits/$username 2>/dev/null)
+        # 2. Obtener Límite
+        limit=$(cat "/etc/kira/limits/$username" 2>/dev/null)
         [ -z "$limit" ] && limit="1"
         limit_txt="${limit} disp."
 
-        # CÁLCULO DE VALIDEZ
+        # 3. CÁLCULO DE VALIDEZ
         validez_txt=""
         validez_color=""
         now_sec=$(date +%s)
@@ -80,6 +83,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
                 ((activos++))
             fi
         else
+            # Fallback en caso de no tener registro en /etc/kira/expire
             exp_date=$(chage -l "$username" 2>/dev/null | grep "Account expires" | cut -d: -f2)
             if [[ "$exp_date" == *"never"* ]] || [ -z "$exp_date" ]; then
                 validez_txt="Ilimitado"
@@ -113,11 +117,11 @@ done 3< /etc/passwd
 total_users=$((i - 1))
 
 if [ $total_users -eq 0 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}     ║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}    ║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}     ║${N}\n" "$total_users" "$activos" "$expirados"
+printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}    ║${N}\n" "$total_users" "$activos" "$expirados"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 
 echo ""

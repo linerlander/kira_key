@@ -56,7 +56,6 @@ bash modules/user_add.sh
 2|02)
 bash modules/user_clear.sh
 ;;
-;;
 
 3|03)
 echo -e "${Y}En desarrollo...${N}"

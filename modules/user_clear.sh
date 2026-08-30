@@ -20,7 +20,7 @@ clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
 echo -e "${D}║${Y}                 🗑️   PANEL DE ELIMINACIÓN DE USUARIOS                 ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf  "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
+printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 declare -A users_list
@@ -29,16 +29,20 @@ i=1
 while IFS=: read -u 3 -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
-        # Obtener Contraseña
-        pass=$(grep -w "^$username" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
-        [ -z "$pass" ] && pass="---"
+        # 1. Obtener Contraseña (Prioriza /etc/kira/pass/)
+        if [ -f "/etc/kira/pass/$username" ]; then
+            pass=$(cat "/etc/kira/pass/$username")
+        else
+            pass=$(grep -w "^$username" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
+            [ -z "$pass" ] && pass="---"
+        fi
 
-        # Obtener Límite
+        # 2. Obtener Límite
         limit=$(cat /etc/kira/limits/$username 2>/dev/null)
         [ -z "$limit" ] && limit="1"
         limit_txt="${limit} disp."
 
-        # CÁLCULO DE VALIDEZ
+        # 3. CÁLCULO DE VALIDEZ
         validez_txt=""
         validez_color=""
         now_sec=$(date +%s)
@@ -98,7 +102,6 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         id_str="[$i]"
         [ $i -lt 10 ] && id_str="[0$i]"
 
-        # Formateo con anchos fijos estrictos (La columna de expiración reserva 15 caracteres)
         printf "${D}║${N} ${Y}%-4s${N} %-16s %-12s %-8s %-9s ${validez_color}%-15s${N} ${D}║${N}\n" \
                "$id_str" "$username" "$pass" "$PORT" "$limit_txt" "$validez_txt"
 
@@ -107,7 +110,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
 done 3< /etc/passwd
 
 if [ $i -eq 1 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}     ║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
@@ -123,13 +126,19 @@ fi
 if [[ -n "${users_list[$selection]}" ]]; then
     user_to_delete="${users_list[$selection]}"
     
+    # Detener procesos activos del usuario y borrar del sistema
+    pkill -u "$user_to_delete" 2>/dev/null
     userdel -f "$user_to_delete" 2>/dev/null
     rm -rf /home/"$user_to_delete" 2>/dev/null
-    rm -f /etc/kira/limits/"$user_to_delete" /etc/kira/expire/"$user_to_delete"
+    
+    # Limpieza completa de base de datos Kira
+    rm -f /etc/kira/pass/"$user_to_delete"
+    rm -f /etc/kira/limits/"$user_to_delete"
+    rm -f /etc/kira/expire/"$user_to_delete"
     sed -i "/^$user_to_delete /d" /etc/kira/users.log 2>/dev/null
 
     echo ""
-    echo -e " ${G}✔ Usuario '${W}$user_to_delete${G}' borrado exitosamente.${N}"
+    echo -e " ${G}✔ Usuario '${W}$user_to_delete${G}' borrado exitosamente de todo el sistema.${N}"
     sleep 2
 else
     echo ""

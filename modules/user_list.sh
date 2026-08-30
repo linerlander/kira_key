@@ -50,14 +50,14 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         if [ -f "/etc/kira/expire/$username" ]; then
             read -r created_sec duration < "/etc/kira/expire/$username"
             
-            # Limpiar ceros a la izquierda para forzar base 10 y evitar error octal
-            created_sec=$((10#${created_sec//[!0-9]/}))
+            # Limpiar ceros a la izquierda de forma segura eliminando el cero inicial para Bash
+            created_sec=$(echo "${created_sec//[!0-9]/}" | sed 's/^0*//')
             [ -z "$created_sec" ] && created_sec=$now_sec
 
             num="${duration//[!0-9]/}"
-            unit="${duration//[0-9]/}"
-            num=$((10#$num))
+            num=$(echo "$num" | sed 's/^0*//')
             [ -z "$num" ] && num=0
+            unit="${duration//[0-9]/}"
 
             case "$unit" in
                 m) seconds_add=$((num * 60)) ;;

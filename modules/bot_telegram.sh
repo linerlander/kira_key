@@ -31,6 +31,10 @@ create_bot_daemon() {
 BOT_DIR="/etc/kira/bot"
 source "$BOT_DIR/bot.conf"
 
+# Limpieza estricta de variables de entorno
+TOKEN=$(echo "$TOKEN" | tr -d '\r\n"')
+ADMIN_ID=$(echo "$ADMIN_ID" | tr -d '\r\n"')
+
 URL="https://api.telegram.org/bot$TOKEN"
 OFFSET=0
 
@@ -44,22 +48,24 @@ while true; do
     UPDATES=$(curl -s "$URL/getUpdates?offset=$OFFSET&timeout=10")
     
     if [[ "$UPDATES" =~ "\"ok\":true" ]]; then
-        # Extraer update_id usando jq o python3
         if command -v jq &>/dev/null; then
-            UPDATES_QTY=$(echo "$UPDATES" | jq '.result | length')
-            if [ "$UPDATES_QTY" -gt 0 ]; then
+            UPDATES_QTY=$(echo "$UPDATES" | jq '.result | length' 2>/dev/null)
+            if [ -n "$UPDATES_QTY" ] && [ "$UPDATES_QTY" -gt 0 ]; then
                 for (( i=0; i<$UPDATES_QTY; i++ )); do
                     UPDATE_ID=$(echo "$UPDATES" | jq ".result[$i].update_id")
                     OFFSET=$((UPDATE_ID + 1))
                     
-                    CHAT_ID=$(echo "$UPDATES" | jq ".result[$i].message.chat.id")
+                    CHAT_ID=$(echo "$UPDATES" | jq -r ".result[$i].message.chat.id")
                     TEXT=$(echo "$UPDATES" | jq -r ".result[$i].message.text")
                     
-                    # Ignorar si no hay texto
                     [ "$TEXT" == "null" ] && continue
 
-                    if [ "$CHAT_ID" != "$ADMIN_ID" ]; then
-                        send_message "$CHAT_ID" "⚠️ <b>Acceso Denegado.</b> Tu ID ($CHAT_ID) no está autorizado."
+                    # Comparación limpia sin caracteres extraños
+                    CHAT_ID_CLEAN=$(echo "$CHAT_ID" | tr -d '\r\n ')
+                    ADMIN_ID_CLEAN=$(echo "$ADMIN_ID" | tr -d '\r\n ')
+
+                    if [ "$CHAT_ID_CLEAN" != "$ADMIN_ID_CLEAN" ]; then
+                        send_message "$CHAT_ID" "⚠️ <b>Acceso Denegado.</b> Tu ID ($CHAT_ID_CLEAN) no está autorizado."
                         continue
                     fi
 
@@ -146,7 +152,6 @@ start_bot() {
         return
     fi
 
-    # Instalar jq si no está instalado
     command -v jq &>/dev/null || apt-get install jq -y &>/dev/null
 
     stop_bot
@@ -173,14 +178,14 @@ config_bot() {
     read -p " ► Ingresa el BOT TOKEN (de @BotFather): " token_input
     read -p " ► Ingresa tu TELEGRAM ID (de @userinfobot): " admin_input
 
-    # Limpiar posibles espacios
-    token_input=$(echo "$token_input" | xargs)
-    admin_input=$(echo "$admin_input" | xargs)
+    # Depuración automática de la entrada del usuario en el menú
+    token_clean=$(echo "$token_input" | tr -d '\r\n ')
+    admin_clean=$(echo "$admin_input" | tr -d '\r\n ')
 
-    if [ -n "$token_input" ] && [ -n "$admin_input" ]; then
-        echo "TOKEN=\"$token_input\"" > "$BOT_CONFIG"
-        echo "ADMIN_ID=\"$admin_input\"" >> "$BOT_CONFIG"
-        echo -e " ${G}✔ Datos guardados con éxito.${N}"
+    if [ -n "$token_clean" ] && [ -n "$admin_clean" ]; then
+        echo "TOKEN=\"$token_clean\"" > "$BOT_CONFIG"
+        echo "ADMIN_ID=\"$admin_clean\"" >> "$BOT_CONFIG"
+        echo -e " ${G}✔ Datos guardados y depurados con éxito.${N}"
     else
         echo -e " ${R}❌ Los datos ingresados no son válidos.${N}"
     fi

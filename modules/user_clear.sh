@@ -17,7 +17,7 @@ clear
 echo -e "${D}╔══════════════════════════════════════════════════════════════════╗${N}"
 echo -e "${D}║${Y}                 🗑️  PANEL DE ELIMINACIÓN DE USUARIOS            ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-3s %-12s %-10s %-8s %-8s %-14s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
+printf  "${D}║${N} ${C}%-3s %-12s %-10s %-8s %-8s %-14s${N} ${D}    ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠══════════════════════════════════════════════════════════════════╣${N}"
 
 # Array para almacenar los usuarios detectados
@@ -65,9 +65,9 @@ if [ $i -eq 1 ]; then
     echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
 fi
 
-echo -e "${D}╠════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                 ${D}║${N}"
-echo -e "${D}╚════════════════════════════════════════════════════════════════╝${N}"
+echo -e "${D}╠═══════════════════════════════════════════════════════════════╣${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                ${D}║${N}"
+echo -e "${D}╚═══════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona el ID del usuario a eliminar: " selection
 

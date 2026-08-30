@@ -102,24 +102,24 @@ while true; do
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
     echo -e "${C}║${W}               ⚡ MONITOR EN TIEMPO REAL ⚡          ${C}║${N}"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${W} Uptime: ${Y}${UPspace:-$UPTIME_SYS}${N}"
+    echo -e "${C}║${W} Uptime: ${Y}${UPspace:-$UPTIME_SYS}             ╣${N}"
     echo -e "${C}⟠─────────────────────────────────────────────────────⟠${N}"
     
     # Métricas con barras
     printf "${C}║${N} ${W}CPU:${N}  "
     bar $CPU "$CPU_COL"
-    echo -e "         ${C}║${N}"
+    echo -e "         ${C}       ║${N}"
 
     printf "${C}║${N} ${W}RAM:${N}  "
     bar $RAM_P "$RAM_COL"
-    echo -e " ${D}(${RAM_USED}M/${RAM_TOTAL}M)${N} ${C}║${N}"
+    echo -e " ${D}(${RAM_USED}M/${RAM_TOTAL}M)${N} ${C}       ║${N}"
 
     echo -e "${C}⟠─────────────────────────────────────────────────────⟠${N}"
     echo -e "${C}║${W} RED [${B}$IFACE${W}] ↓ ${G}${RX_RATE}${N}  |  ↑ ${G}${TX_RATE}        ${C}║${N}"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
     echo -e "${C}║${W} TOP 5 PROCESOS MÁS CONSUMIDORES                     ${C}║${N}"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${D} PID    PROCESO          %CPU    %MEM         ${C}║${N}"
+    echo -e "${C}║${D} PID    PROCESO          %CPU    %MEM         ${C}     ║${N}"
 
     # Top procesos limpios (5 líneas exactas)
     ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 6 | tail -n 5 | while read -r pid comm cpu_use mem_use; do
@@ -127,7 +127,7 @@ while true; do
     done
 
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${N} ${R}[0] SALIR DEL MONITOR                             ${C}║${N}"
+    echo -e "${C}║${N} ${R}[0] SALIR DEL MONITOR                               ${C}║${N}"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
 
     # Captura de tecla sin interrumpir el refresco fluido de 1 segundo

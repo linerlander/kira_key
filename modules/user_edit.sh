@@ -18,7 +18,7 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 while true; do
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 🔄   PANEL DE EDICIÓN Y RENOVACIÓN                    ${D}║${N}"
+echo -e "${D}║${Y}                 🔄   PANEL DE EDICIÓN Y RENOVACIÓN                    ${D}  ║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"

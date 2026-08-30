@@ -16,13 +16,16 @@ BOT_PID_FILE="$BOT_DIR/bot.pid"
 
 mkdir -p "$BOT_DIR" /etc/kira/pass /etc/kira/expire /etc/kira/limits
 
-# ========= SCRIPT PARA CREAR USUARIO DESDE TERMINAL DE VPS =========
+# ========= SCRIPT PARA CREAR USUARIO DESDE TERMINAL O BOT =========
 cat << 'EOF' > /usr/local/bin/crearuser
 #!/bin/bash
 USERNAME="$1"
 PASSWORD="$2"
-DAYS="$3"
+DAYS_INPUT="$3"
 LIMIT="${4:-1}"
+
+# Limpiar parámetro de días (eliminar letras como 'd')
+DAYS=$(echo "$DAYS_INPUT" | grep -oE '[0-9]+')
 
 if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ] || [ -z "$DAYS" ]; then
     echo -e "\033[1;31mUso: crearuser <usuario> <contraseña> <días> [límite]\033[0m"
@@ -45,11 +48,11 @@ echo "$LIMIT" > "/etc/kira/limits/$USERNAME"
 EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
 chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
 
-echo -e "\033[1;32m✔ Usuario $USERNAME creado exitosamente con clave '$PASSWORD' por $DAYS días.\033[0m"
+echo -e "\033[1;32m✔ Usuario $USERNAME creado exitosamente con clave '$PASSWORD' por $DAYS días (Expira: $EXP_DATE).\033[0m"
 EOF
 chmod +x /usr/local/bin/crearuser
 
-# ========= SCRIPT PARA LISTAR USUARIOS DESDE TERMINAL DE VPS =========
+# ========= SCRIPT PARA LISTAR USUARIOS DESDE TERMINAL =========
 cat << 'EOF' > /usr/local/bin/verusers
 #!/bin/bash
 USERS_LIST=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd)
@@ -71,11 +74,11 @@ for u in $USERS_LIST; do
         PASS_VAL="Encriptado / Creado fuera de Kira"
     fi
     
-    EXP_RAW=$(chage -l "$u" | grep "Account expires" | awk -F: '{print $2}')
-    if [[ "$EXP_RAW" == *"never"* ]]; then
-        EXP_FMT="CADUCADO / NUNCA"
+    EXP_RAW=$(chage -l "$u" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
+    if [[ "$EXP_RAW" == *"never"* ]] || [ -z "$EXP_RAW" ]; then
+        EXP_FMT="NUNCA / SIN EXPIRACION"
     else
-        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "CADUCADO")
+        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "$EXP_RAW")
     fi
 
     [ -f "/etc/kira/limits/$u" ] && LIM_VAL=$(cat "/etc/kira/limits/$u") || LIM_VAL="1"
@@ -162,13 +165,13 @@ while true; do
 
                     case "$CMD" in
                         /start|/menu)
-                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━✨
+                            MSG="✨━━━━━━━━━━━━━━━━━━━━━✨
 👑 <b>BIENVENIDO SUPER ADMIN PREMIUM</b>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 😃 <i>MENU DE ACCIONES RÁPIDAS</i> 😃
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 🌐 <b>IP Asignada:</b> <code>$VPS_IP</code>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 
 👥 <b>Usuarios</b>
  • /agregar → <i>Agregar usuario SSH</i>
@@ -192,35 +195,37 @@ while true; do
  • /creditos → <i>Autorizar créditos</i>
  • /admkill → <i>Quitar autorización</i>
 
-✨━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
 
                         /agregar|/crear)
                             if [ -z "$PARAM1" ] || [ -z "$PARAM2" ] || [ -z "$PARAM3" ]; then
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━✨
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━✨
 <b>FORMA DE USAR ESTA OPCIÓN</b>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 
 <i>DEBES ENVIAR EL COMANDO:</i>
 <code>/agregar Nombre_User Clave Tiempo Limite</code>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 <code>/agregar admin admin 30 1</code>
-✨━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━✨"
                                 send_message "$CHAT_ID_CLEAN" "$MSG"
                             else
                                 USERNAME="$PARAM1"
                                 PASSWORD="$PARAM2"
-                                DAYS="$PARAM3"
+                                DAYS=$(echo "$PARAM3" | grep -oE '[0-9]+')
                                 LIMIT="${PARAM4:-1}"
 
                                 /usr/local/bin/crearuser "$USERNAME" "$PASSWORD" "$DAYS" "$LIMIT" > /dev/null 2>&1
 
+                                EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
                                 MSG="✅ <b>USUARIO CREADO CON ÉXITO</b>
 
 👤 <b>Usuario:</b> <code>$USERNAME</code>
 🔑 <b>Contraseña:</b> <code>$PASSWORD</code>
 📅 <b>Días:</b> $DAYS días
+📆 <b>Expiración:</b> <code>$EXP_DATE</code>
 📱 <b>Límite:</b> $LIMIT dispositivo(s)
 🌐 <b>IP:</b> <code>$VPS_IP</code>"
                                 send_message "$CHAT_ID_CLEAN" "$MSG"
@@ -231,23 +236,26 @@ while true; do
                             RAND_ID=$((RANDOM % 899999 + 100000))
                             DEMO_USER="Kira-$RAND_ID"
                             DEMO_PASS="123456"
-                            TIME_VAL="${PARAM1:-1d}"
+                            DAYS=$(echo "${PARAM1:-1}" | grep -oE '[0-9]+')
+                            [ -z "$DAYS" ] && DAYS=1
 
                             SSH_PORT=$(grep -i "^Port " /etc/ssh/sshd_config | awk '{print $2}' | head -n 1)
                             [ -z "$SSH_PORT" ] && SSH_PORT="22"
 
-                            /usr/local/bin/crearuser "$DEMO_USER" "$DEMO_PASS" "1" "1" > /dev/null 2>&1
+                            /usr/local/bin/crearuser "$DEMO_USER" "$DEMO_PASS" "$DAYS" "1" > /dev/null 2>&1
 
-                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━✨
+                            EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+                            MSG="✨━━━━━━━━━━━━━━━━━━━━━✨
 🎁 <b>GENERAR CUENTA DEMO</b>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 ▶ <b>Usuario autogenerado:</b> <code>$DEMO_USER</code>
 🔑 <b>Contraseña:</b> <code>$DEMO_PASS</code>
 🔌 <b>Puerto SSH:</b> <code>$SSH_PORT</code>
-► <b>Tiempo de duración:</b> $TIME_VAL
+► <b>Duración:</b> $DAYS día(s)
+📆 <b>Expiración:</b> <code>$EXP_DATE</code>
 📱 <b>Límite:</b> 1 Dispositivo
 🌐 <b>IP VPS:</b> <code>$VPS_IP</code>
-✨━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
 
@@ -265,16 +273,16 @@ while true; do
                                         PASS_VAL="Encriptado"
                                     fi
                                     
-                                    EXP_RAW=$(chage -l "$u" | grep "Account expires" | awk -F: '{print $2}')
-                                    if [[ "$EXP_RAW" == *"never"* ]]; then
-                                        EXP_FMT="CADUCADO"
+                                    EXP_RAW=$(chage -l "$u" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
+                                    if [[ "$EXP_RAW" == *"never"* ]] || [ -z "$EXP_RAW" ]; then
+                                        EXP_FMT="NUNCA"
                                     else
-                                        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "CADUCADO")
+                                        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "$EXP_RAW")
                                     fi
 
                                     [ -f "/etc/kira/limits/$u" ] && LIM_VAL=$(cat "/etc/kira/limits/$u") || LIM_VAL="1"
 
-                                    MSG+="============================
+                                    MSG+="===========================
 USER ($count) : <b>$u</b>
 PASSWD : <code>$PASS_VAL</code>
 EXPIRA : <code>$EXP_FMT</code>
@@ -282,7 +290,7 @@ LIMITE : <code>$LIM_VAL</code>
 "
                                     count=$((count+1))
                                 done
-                                MSG+="============================"
+                                MSG+="==========================="
                                 send_message "$CHAT_ID_CLEAN" "$MSG"
                             fi
                             ;;
@@ -292,13 +300,13 @@ LIMITE : <code>$LIM_VAL</code>
                                 send_message "$CHAT_ID_CLEAN" "🔄 <b>Sintaxis:</b> <code>/renovar Usuario Días</code>"
                             else
                                 USERNAME="$PARAM1"
-                                DAYS="$PARAM2"
-                                if id "$USERNAME" &>/dev/null; then
+                                DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
+                                if id "$USERNAME" &>/dev/null && [ -n "$DAYS" ]; then
                                     EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
                                     chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "🔄 Usuario <b>$USERNAME</b> renovado a <b>$DAYS días</b> (F. Expiración: <code>$EXP_DATE</code>)."
                                 else
-                                    send_message "$CHAT_ID_CLEAN" "⚠️ El usuario <b>$USERNAME</b> no existe."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ El usuario <b>$USERNAME</b> no existe o los días son inválidos."
                                 fi
                             fi
                             ;;
@@ -308,14 +316,14 @@ LIMITE : <code>$LIM_VAL</code>
                                 send_message "$CHAT_ID_CLEAN" "➕ <b>Sintaxis:</b> <code>/renovarM Usuario Días_Añadir</code>"
                             else
                                 USERNAME="$PARAM1"
-                                ADD_DAYS="$PARAM2"
-                                if id "$USERNAME" &>/dev/null; then
-                                    CURR_EXP=$(chage -l "$USERNAME" | grep "Account expires" | awk -F: '{print $2}')
+                                ADD_DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
+                                if id "$USERNAME" &>/dev/null && [ -n "$ADD_DAYS" ]; then
+                                    CURR_EXP=$(chage -l "$USERNAME" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
                                     NEW_EXP=$(date -d "$CURR_EXP + $ADD_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+$ADD_DAYS days" +%Y-%m-%d)
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "➕ <b>+$ADD_DAYS Días añadidos a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
-                                    send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado o días inválidos."
                                 fi
                             fi
                             ;;
@@ -325,14 +333,14 @@ LIMITE : <code>$LIM_VAL</code>
                                 send_message "$CHAT_ID_CLEAN" "➖ <b>Sintaxis:</b> <code>/renovarQ Usuario Días_Restar</code>"
                             else
                                 USERNAME="$PARAM1"
-                                SUB_DAYS="$PARAM2"
-                                if id "$USERNAME" &>/dev/null; then
-                                    CURR_EXP=$(chage -l "$USERNAME" | grep "Account expires" | awk -F: '{print $2}')
+                                SUB_DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
+                                if id "$USERNAME" &>/dev/null && [ -n "$SUB_DAYS" ]; then
+                                    CURR_EXP=$(chage -l "$USERNAME" | grep -i "Account expires" | awk -F: '{print $2}' | xargs)
                                     NEW_EXP=$(date -d "$CURR_EXP - $SUB_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+1 days" +%Y-%m-%d)
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
-                                    send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado o días inválidos."
                                 fi
                             fi
                             ;;
@@ -383,15 +391,15 @@ LIMITE : <code>$LIM_VAL</code>
                             ONLINE_USERS=$(ps aux | grep sshd | grep -v root | grep -v grep | awk '{print $1}' | sort | uniq)
 
                             if [ -z "$ONLINE_USERS" ]; then
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━✨
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━✨
 👥 <b>USUARIOS CONECTADOS SSH</b>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 🟢 <b>No hay usuarios conectados actualmente.</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━━━━━✨"
                             else
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━✨
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━✨
 👥 <b>USUARIOS CONECTADOS SSH</b>
-✨━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━✨
 
 "
                                 for u in $ONLINE_USERS; do
@@ -412,7 +420,7 @@ LIMITE : <code>$LIM_VAL</code>
                                     TOTAL_CONN=$((TOTAL_CONN + COUNT))
                                 done
                                 MSG+="🌐 <b>Total Conexiones Activas:</b> <code>$TOTAL_CONN</code>
-✨━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━✨"
                             fi
                             send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
@@ -544,7 +552,7 @@ config_bot() {
     fi
 
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                  ⚙️  CONFIGURACIÓN INICIAL DEL BOT                     ${D}║${N}"
+    echo -e "${D}║${Y}                   ⚙️  CONFIGURACIÓN INICIAL DEL BOT                    ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
     read -p " ► Pegar BOT TOKEN: " token_input

@@ -67,7 +67,7 @@ STATUS=$(check_status)
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
 echo -e "${D}║${Y}                 🎭   GESTIÓN DE BANNER SSH                           ${D} ║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}ESTADO DEL BANNER:${N} %-52b ${D}           ║${N}\n" "$STATUS"
+printf "${D}║${N} ${W}ESTADO DEL BANNER:${N} %-52b  ${D}           ║${N}\n" "$STATUS"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${Y}[1]${N} VER BANNER ACTUAL                                                 ${D}║${N}"
 echo -e "${D}║${N} ${Y}[2]${N} CREAR / EDITAR BANNER (Código HTML / Manual)                      ${D}║${N}"

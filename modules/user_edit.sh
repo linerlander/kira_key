@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Evita que cualquier error o señal cierre la terminal por completo
-trap '' INT TERM
-
 # ========= COLORES =========
 W='\033[1;37m'
 D='\033[38;5;108m'
@@ -26,14 +23,12 @@ echo -e "${D}╠═════════════════════�
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N}  ${D} ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
-# Usamos arrays indexados estándar (compatible con cualquier Bash)
 usernames_arr=()
 i=1
 
 while IFS=: read -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
-        # 1. Obtener Contraseña
         if [ -f "/etc/kira/pass/$username" ]; then
             pass=$(cat "/etc/kira/pass/$username")
         else
@@ -41,12 +36,10 @@ while IFS=: read -r username _ uid _ _ _ _; do
             [ -z "$pass" ] && pass="---"
         fi
 
-        # 2. Obtener Límite
         limit=$(cat /etc/kira/limits/$username 2>/dev/null)
         [ -z "$limit" ] && limit="1"
         limit_txt="${limit} disp."
 
-        # 3. CÁLCULO DE VALIDEZ
         validez_txt=""
         validez_color=""
         now_sec=$(date +%s)
@@ -123,12 +116,10 @@ echo -e "${D}╚═════════════════════�
 echo ""
 read -p " ► Selecciona el ID del usuario a editar: " selection
 
-# Validar si eligió salir
 if [[ "$selection" == "0" || "$selection" == "00" || -z "$selection" ]]; then
-    break
+    return 2>/dev/null || exit 0
 fi
 
-# Validar selección numérica y existencia en el array
 if [[ "$selection" =~ ^[0-9]+$ ]] && [ -n "${usernames_arr[$selection]}" ]; then
     user_to_edit="${usernames_arr[$selection]}"
     
@@ -147,7 +138,6 @@ if [[ "$selection" =~ ^[0-9]+$ ]] && [ -n "${usernames_arr[$selection]}" ]; then
     echo -e " ${Y}EDITANDO USUARIO:${N} ${W}$user_to_edit${N}"
     echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
     
-    # EDITAR CONTRASEÑA
     read -p " ► Nueva Contraseña (Enter para mantener '$current_pass'): " new_pass
     if [ -n "$new_pass" ]; then
         echo "$user_to_edit:$new_pass" | chpasswd 2>/dev/null
@@ -162,7 +152,6 @@ if [[ "$selection" =~ ^[0-9]+$ ]] && [ -n "${usernames_arr[$selection]}" ]; then
         echo -e " ${G}✔ Contraseña actualizada.${N}"
     fi
 
-    # EDITAR LÍMITE
     read -p " ► Nuevo Límite SSH (Enter para mantener '$current_limit'): " new_limit
     if [ -n "$new_limit" ] && [[ "$new_limit" =~ ^[0-9]+$ ]]; then
         mkdir -p /etc/kira/limits
@@ -170,7 +159,6 @@ if [[ "$selection" =~ ^[0-9]+$ ]] && [ -n "${usernames_arr[$selection]}" ]; then
         echo -e " ${G}✔ Límite actualizado a $new_limit.${N}"
     fi
 
-    # RENOVAR VALIDEZ
     read -p " ► Días / Tiempo de validez a añadir (Ej: 30d / 2h / 30m - Enter para no cambiar): " new_time
     if [ -n "$new_time" ]; then
         mkdir -p /etc/kira/expire

@@ -89,13 +89,13 @@ while true; do
 
                     case "$CMD" in
                         /start|/menu)
-                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 👑 <b>BIENVENIDO SUPER ADMIN PREMIUM</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 😃 <i>MENU DE ACCIONES RÁPIDAS</i> 😃
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 🌐 <b>IP Asignada:</b> <code>$VPS_IP</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 
 👥 <b>Usuarios</b>
  • /agregar → <i>Agregar usuario SSH</i>
@@ -119,21 +119,21 @@ while true; do
  • /creditos → <i>Autorizar créditos</i>
  • /admkill → <i>Quitar autorización</i>
 
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID" "$MSG"
                             ;;
 
                         /agregar|/crear)
                             if [ -z "$PARAM1" ] || [ -z "$PARAM2" ] || [ -z "$PARAM3" ]; then
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 <b>FORMA DE USAR ESTA OPCIÓN</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 
 <i>DEBES ENVIAR EL COMANDO:</i>
 <code>/agregar Nombre_User Clave Tiempo Limite</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 <code>/agregar admin admin 30 1</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨"
                                 send_message "$CHAT_ID" "$MSG"
                             else
                                 USERNAME="$PARAM1"
@@ -167,11 +167,13 @@ while true; do
                             ;;
 
                         /demo)
-                            # Generación autogenerada de usuario demo con prefijo Kira-
                             RAND_ID=$((RANDOM % 899999 + 100000))
                             DEMO_USER="Kira-$RAND_ID"
                             DEMO_PASS="123456"
-                            TIME_VAL="${PARAM1:-1d}" # Ejemplo: 30m, 2h, 1d (por defecto 1d)
+                            TIME_VAL="${PARAM1:-1d}"
+
+                            SSH_PORT=$(grep -i "^Port " /etc/ssh/sshd_config | awk '{print $2}' | head -n 1)
+                            [ -z "$SSH_PORT" ] && SSH_PORT="22"
 
                             useradd -M -s /bin/false "$DEMO_USER" 2>/dev/null
                             echo "$DEMO_USER:$DEMO_PASS" | chpasswd 2>/dev/null
@@ -181,15 +183,16 @@ while true; do
                             EXP_DATE=$(date -d "+1 days" +%Y-%m-%d)
                             chage -E "$EXP_DATE" "$DEMO_USER" 2>/dev/null
 
-                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 🎁 <b>GENERAR CUENTA DEMO</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 ▶ <b>Usuario autogenerado:</b> <code>$DEMO_USER</code>
 🔑 <b>Contraseña:</b> <code>$DEMO_PASS</code>
+🔌 <b>Puerto SSH:</b> <code>$SSH_PORT</code>
 ► <b>Tiempo de duración:</b> $TIME_VAL
 📱 <b>Límite:</b> 1 Dispositivo
 🌐 <b>IP VPS:</b> <code>$VPS_IP</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID" "$MSG"
                             ;;
 
@@ -201,8 +204,11 @@ while true; do
                                 MSG=""
                                 count=1
                                 for u in $USERS_LIST; do
-                                    # Omitir usuarios demo del listado si se desea o mostrarlos limpios
-                                    [ -f "/etc/kira/pass/$u" ] && PASS_VAL=$(cat "/etc/kira/pass/$u") || PASS_VAL="****"
+                                    if [ -f "/etc/kira/pass/$u" ]; then
+                                        PASS_VAL=$(cat "/etc/kira/pass/$u")
+                                    else
+                                        PASS_VAL="Sin registro"
+                                    fi
                                     
                                     EXP_RAW=$(chage -l "$u" | grep "Account expires" | awk -F: '{print $2}')
                                     if [[ "$EXP_RAW" == *"never"* ]]; then
@@ -213,26 +219,26 @@ while true; do
 
                                     [ -f "/etc/kira/limits/$u" ] && LIM_VAL=$(cat "/etc/kira/limits/$u") || LIM_VAL="1"
 
-                                    MSG+="==================================
-<i>USER ($count) :</i> <b>$u</b>
-<i>PASSWD :</i> <code>$PASS_VAL</code>
-<i>EXPIRA :</i> <code>$EXP_FMT</code>
-<i>LIMITE :</i> <code>$LIM_VAL</code>
+                                    MSG+="==============================
+USER ($count) : <b>$u</b>
+PASSWD : <code>$PASS_VAL</code>
+EXPIRA : <code>$EXP_FMT</code>
+LIMITE : <code>$LIM_VAL</code>
 "
                                     count=$((count+1))
                                 done
-                                MSG+="=================================="
+                                MSG+="=============================="
                                 send_message "$CHAT_ID" "$MSG"
                             fi
                             ;;
 
                         /renovar)
                             if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 <b>FORMA DE USAR ESTA OPCIÓN</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 <code>/renovar Nombre_User Dias</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨"
                                 send_message "$CHAT_ID" "$MSG"
                             else
                                 USERNAME="$PARAM1"
@@ -275,7 +281,7 @@ while true; do
                                     NEW_EXP=$(date -d "$CURR_EXP - $SUB_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+1 days" +%Y-%m-%d)
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
-                                else
+                                me
                                     send_message "$CHAT_ID" "⚠️ Usuario no encontrado."
                                 fi
                             fi
@@ -323,22 +329,48 @@ while true; do
                             ;;
 
                         /conectados|/online)
-                            ONLINE_COUNT=$(ps aux | grep sshd | grep -v root | grep -v grep | wc -l)
-                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+                            CONNECTED_INFO=""
+                            TOTAL_CONN=0
+                            
+                            # Recopilar usuarios conectados mediante sshd y dropbear
+                            ONLINE_USERS=$(ps aux | grep sshd | grep -v root | grep -v grep | awk '{print $1}' | sort | uniq)
+
+                            if [ -z "$ONLINE_USERS" ]; then
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 👥 <b>USUARIOS CONECTADOS SSH</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-🟢 <b>Conexiones activas:</b> <code>$ONLINE_COUNT</code> disp.
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
+🟢 <b>No hay usuarios conectados actualmente.</b>
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+                            else
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
+👥 <b>USUARIOS CONECTADOS SSH</b>
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨\n"
+                                for u in $ONLINE_USERS; do
+                                    COUNT=$(ps aux | grep sshd | grep "$u" | grep -v grep | wc -l)
+                                    TIME_ONLINE=$(who | grep "$u" | awk '{print $4}' | head -n 1)
+                                    [ -z "$TIME_ONLINE" ] && TIME_ONLINE="Activo"
+
+                                    [ -f "/etc/kira/limits/$u" ] && MAX_LIM=$(cat "/etc/kira/limits/$u") || MAX_LIM="1"
+
+                                    MSG+="👤 <b>Usuario:</b> <code>$u</code>\n"
+                                    MSG+="📱 <b>Dispositivos activos:</b> $COUNT / $MAX_LIM\n"
+                                    MSG+="⏱ <b>Hora conexión:</b> $TIME_ONLINE\n"
+                                    MSG+="----------------------------------\n"
+                                    TOTAL_CONN=$((TOTAL_CONN + COUNT))
+                                done
+                                MSG+="🌐 <b>Total Conexiones Activas:</b> <code>$TOTAL_CONN</code>
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨"
+                            fi
                             send_message "$CHAT_ID" "$MSG"
                             ;;
 
                         /borrar|/eliminar)
                             if [ -z "$PARAM1" ]; then
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 <b>FORMA DE USAR ESTA OPCIÓN</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
 <code>/borrar Nombre_User</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨"
                                 send_message "$CHAT_ID" "$MSG"
                             else
                                 USERNAME="$PARAM1"

@@ -2,7 +2,7 @@
 
 # ========= COLORES =========
 W='\033[1;37m'
-D='\033[38;5;245m'
+D='\033[38;5;108m'
 Y='\033[38;5;220m'
 R='\033[38;5;196m'
 C='\033[38;5;51m'
@@ -69,13 +69,13 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡ ${D}║${N}"
+echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡        ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${C}🖥️ IP SERVER   :${N} %-31s ${D}║${N}\n" "$IP"
 printf "${D}║${N} ${C}👤 USUARIO     :${N} %-31s ${D}║${N}\n" "$user"
 printf "${D}║${N} ${C}🔑 CONTRASEÑA  :${N} %-31s ${D}║${N}\n" "$pass"
 printf "${D}║${N} ${C}📡 PUERTO SSH  :${N} %-31s ${D}║${N}\n" "$PORT"
-printf "${D}║${N} ${C}📊 LÍMITE SSH  :${N} %-31s ${D}║${N}\n" "$limit dispo."
+printf "${D}║${N} ${C}📊 LÍMITE SSH  :${N} %-31s ${D}║${N}\n" "$limit dispositivos"
 printf "${D}║${N} ${C}⏳ VALIDEZ     :${N} %-31s ${D}║${N}\n" "$tiempo"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"

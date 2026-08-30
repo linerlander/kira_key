@@ -66,7 +66,7 @@ bash modules/user_list.sh
 ;;
 
 5|05)
-bas modules/user_online.sh
+bash modules/user_online.sh
 ;;
 
 6|06)

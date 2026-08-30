@@ -117,7 +117,7 @@ echo ""
 read -p " ► Selecciona el ID del usuario a editar: " selection
 
 if [[ "$selection" == "0" || "$selection" == "00" || -z "$selection" ]]; then
-    return 2>/dev/null || exit 0
+    exit 0
 fi
 
 if [[ "$selection" =~ ^[0-9]+$ ]] && [ -n "${usernames_arr[$selection]}" ]; then

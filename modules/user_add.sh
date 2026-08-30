@@ -8,7 +8,7 @@ R='\033[38;5;196m'
 C='\033[38;5;51m'
 G='\033[38;5;82m'
 N='\033[0m'
-R= '\033[38;5;147m's
+R='\033[38;5;147m'
 
 while true; do
 clear
@@ -81,8 +81,8 @@ printf "${D}║${N} ${R}⏳ VALIDEZ     :${N} %-31s ${D}║${N}\n" "$tiempo"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${W}║${N}🔗 DIREC:${N} ${Y}${IP}:${PORT}@${user}:${pass}║${N}"
-echo -e "${W}║${N}🖥️ PROXY:${N} ${Y}${IP}:80@${user}:${pass}║${N}"
+echo -e "${W}║${N}🔗 DIREC:${N} ${Y}${IP}:${PORT}@${user}:${pass}  ${D}║${N}"
+echo -e "${W}║${N}🖥️ PROXY:${N} ${Y}${IP}:80@${user}:${pass}  ${D}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log

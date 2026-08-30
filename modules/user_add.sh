@@ -71,16 +71,16 @@ echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " ${Y}⚡ CUENTA DEMO GENERADA EXITOSAMENTE ⚡${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-printf " ${C}🌐 IP SERVER   :${N} ${W}%s\n" "$IP"
-printf " ${C}👤 USUARIO     :${N} ${W}%s\n" "$user"
-printf " ${C}🔑 CONTRASEÑA  :${N} ${W}%s\n" "$pass"
-printf " ${C}📡 PUERTO SSH  :${N} ${W}%s\n" "$PORT"
-printf " ${C}📊 LÍMITE SSH  :${N} ${W}%s dispositivo(s)\n" "$limit"
-printf " ${C}⏳ TIEMPO VALIDO:${N} ${W}%s\n" "$tiempo"
+printf " ${Y}⚡ IP SERVER   :${N} ${W}%s\n" "$IP"
+printf " ${Y}👤 USUARIO     :${N} ${W}%s\n" "$user"
+printf " ${Y}🔑 CONTRASEÑA  :${N} ${W}%s\n" "$pass"
+printf " ${Y}📡 PUERTO SSH  :${N} ${W}%s\n" "$PORT"
+printf " ${Y}📊 LÍMITE SSH  :${N} ${W}%s dispositivo(s)\n" "$limit"
+printf " ${Y}⏳ TIEMPO VALIDO:${N} ${W}%s\n" "$tiempo"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${C}🔗 CONEXIÓN DIRECTA:${N}\n ${W}${IP}:${PORT}@${user}:${pass}${N}"
-echo -e " ${C}🌐 PROXY PAYLOAD:${N}\n ${W}${IP}:80@${user}:${pass}${N}"
+echo -e " ${Y}🔗 CONEXIÓN DIRECTA:${N}\n ${W}${IP}:${PORT}@${user}:${pass}${N}"
+echo -e " ${Y}⚡ PROXY PAYLOAD:${N}\n ${W}${IP}:80@${user}:${pass}${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
@@ -136,16 +136,16 @@ echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e " ${Y}👤 CUENTA SSH GENERADA EXITOSAMENTE 👤${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-printf " ${C}🌐 IP SERVER   :${N} ${W}%s\n" "$IP"
-printf " ${C}👤 USUARIO     :${N} ${W}%s\n" "$user"
-printf " ${C}🔑 CONTRASEÑA  :${N} ${W}%s\n" "$pass"
-printf " ${C}📡 PUERTO SSH  :${N} ${W}%s\n" "$PORT"
-printf " ${C}📊 LÍMITE SSH  :${N} ${W}%s dispositivo(s)\n" "$limit"
-printf " ${C}⏳ EXPIRACIÓN  :${N} ${W}%s (%s días)\n" "$expira_format" "$dias"
+printf " ${Y}⚡ IP SERVER   :${N} ${W}%s\n" "$IP"
+printf " ${Y}👤 USUARIO     :${N} ${W}%s\n" "$user"
+printf " ${Y}🔑 CONTRASEÑA  :${N} ${W}%s\n" "$pass"
+printf " ${Y}📡 PUERTO SSH  :${N} ${W}%s\n" "$PORT"
+printf " ${Y}📊 LÍMITE SSH  :${N} ${W}%s dispositivo(s)\n" "$limit"
+printf " ${Y}⏳ EXPIRACIÓN  :${N} ${W}%s (%s días)\n" "$expira_format" "$dias"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${C}🔗 CONEXIÓN DIRECTA:${N}\n ${W}${IP}:${PORT}@${user}:${pass}${N}"
-echo -e " ${C}🌐 PROXY PAYLOAD:${N}\n ${W}${IP}:80@${user}:${pass}${N}"
+echo -e " ${Y}🔗 CONEXIÓN DIRECTA:${N}\n ${W}${IP}:${PORT}@${user}:${pass}${N}"
+echo -e " ${Y}⚡ PROXY PAYLOAD:${N}\n ${W}${IP}:80@${user}:${pass}${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log

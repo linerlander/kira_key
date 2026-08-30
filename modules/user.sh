@@ -54,12 +54,8 @@ bash modules/user_add.sh
 ;;
 
 2|02)
-read -p "Usuario: " u
-userdel -r "$u" 2>/dev/null
-rm -f /etc/kira/limits/$u
-rm -f /etc/kira/expire/$u
-echo -e "${Y}✔ Usuario eliminado${N}"
-sleep 2
+bash modules/user_clear.sh
+;;
 ;;
 
 3|03)

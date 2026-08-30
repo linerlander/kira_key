@@ -9,7 +9,6 @@ C='\033[38;5;51m'
 G='\033[38;5;82m'
 N='\033[0m'
 
-# Nuevos colores para el estado
 PINK='\033[38;5;218m' # Rosado bebé (Expirado)
 BLUE='\033[38;5;75m'  # Azul claro (Vigente)
 
@@ -18,11 +17,11 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 while true; do
 clear
-echo -e "${D}╔═══════════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                     🗑️  PANEL DE ELIMINACIÓN DE USUARIOS                 ${D}║${N}"
-echo -e "${D}╠═══════════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-3s %-12s %-10s %-8s %-8s %-20s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
-echo -e "${D}╠═══════════════════════════════════════════════════════════════════════════╣${N}"
+echo -e "${D}╔═════════════════════════════════════════════════════════════════════╗${N}"
+echo -e "${D}║${Y}               🗑️   PANEL DE ELIMINACIÓN DE USUARIOS                 ${D}║${N}"
+echo -e "${D}╠═════════════════════════════════════════════════════════════════════╣${N}"
+printf "${D}║${N} ${C}%-4s %-13s %-11s %-8s %-9s %-16s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
+echo -e "${D}╠═════════════════════════════════════════════════════════════════════╣${N}"
 
 declare -A users_list
 i=1
@@ -37,8 +36,9 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         # Obtener Límite
         limit=$(cat /etc/kira/limits/$username 2>/dev/null)
         [ -z "$limit" ] && limit="1"
+        limit_txt="${limit} disp."
 
-        # ========= CÁLCULO DE VALIDEZ MEJORADO =========
+        # CÁLCULO DE VALIDEZ MEJORADO
         validez=""
         now_sec=$(date +%s)
 
@@ -66,15 +66,14 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
                 mins=$(( (diff_sec % 3600) / 60 ))
 
                 if [ $dias -gt 0 ]; then
-                    validez="${BLUE}${dias}d ${horas}h restante${N}"
+                    validez="${BLUE}${dias}d ${horas}h${N}"
                 elif [ $horas -gt 0 ]; then
-                    validez="${BLUE}${horas}h ${mins}m restante${N}"
+                    validez="${BLUE}${horas}h ${mins}m${N}"
                 else
-                    validez="${BLUE}${mins}m restante${N}"
+                    validez="${BLUE}${mins}m${N}"
                 fi
             fi
         else
-            # Fallback para cuentas creadas manualmente en el SO
             exp_date=$(chage -l "$username" 2>/dev/null | grep "Account expires" | cut -d: -f2)
             if [[ "$exp_date" == *"never"* ]] || [ -z "$exp_date" ]; then
                 validez="${BLUE}Ilimitado${N}"
@@ -82,7 +81,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
                 exp_sec=$(date -d "$exp_date" +%s 2>/dev/null)
                 if [ -n "$exp_sec" ] && [ $exp_sec -ge $now_sec ]; then
                     diff_days=$(( (exp_sec - now_sec) / 86400 ))
-                    validez="${BLUE}${diff_days}d restante${N}"
+                    validez="${BLUE}${diff_days}d${N}"
                 else
                     validez="${PINK}Expirado${N}"
                 fi
@@ -90,8 +89,20 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         fi
 
         users_list[$i]="$username"
-        # Imprime con relleno exacto considerando los códigos de color en validez
-        printf "${D}║${N} ${Y}[%02d]${N} %-12s %-10s %-8s %-8s %-30b ${D}║${N}\n" "$i" "$username" "$pass" "$PORT" "$limit disp." "$validez"
+        id_str="[$i]"
+        [ $i -lt 10 ] && id_str="[0$i]"
+
+        # Formateo sin colores para calcular longitud exacta del borde
+        raw_validez=$(echo -e "$validez" | sed 's/\x1b\[[0-9;]*m//g')
+        printf -v row_text "%-4s %-13s %-11s %-8s %-9s %-16s" "$id_str" "$username" "$pass" "$PORT" "$limit_txt" "$raw_validez"
+        
+        # Impresión final alineada aplicando los colores reales
+        printf "${D}║${N} ${Y}%-4s${N} %-13s %-11s %-8s %-9s %b" "$id_str" "$username" "$pass" "$PORT" "$limit_txt" "$validez"
+        
+        # Relleno de espacios exactos antes del borde derecho ║
+        pad=$((67 - ${#row_text}))
+        printf "%${pad}s${D}║${N}\n" ""
+
         ((i++))
     fi
 done 3< /etc/passwd
@@ -100,9 +111,9 @@ if [ $i -eq 1 ]; then
     echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
 fi
 
-echo -e "${D}╠═══════════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                             ${D}║${N}"
-echo -e "${D}╚═══════════════════════════════════════════════════════════════════════════╝${N}"
+echo -e "${D}╠═════════════════════════════════════════════════════════════════════╣${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                       ${D}║${N}"
+echo -e "${D}╚═════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona el ID del usuario a eliminar: " selection
 

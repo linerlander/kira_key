@@ -73,6 +73,10 @@ bash modules/user_online.sh
 bash modules/ssh_banner.sh
 ;;
 
+11)
+bash modules/bot_telegram.sh
+;;
+
 7|07|8|08|9|09|10|11|12|13|14)
 echo -e "${Y}Modulo en desarrollo...${N}"
 sleep 2

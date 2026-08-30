@@ -121,7 +121,7 @@ if [ $i -eq 1 ]; then
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                    ${D}║${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                        ${D} ║${N}"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona el ID del usuario a eliminar: " selection

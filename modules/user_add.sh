@@ -135,19 +135,19 @@ expira_format=$(date -d "$dias days" +"%d/%m/%Y")
 
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑        ${D}║${N}"
+echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑         ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
- printf "${D}║${N}${C}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
- printf "${D}║${N}${C}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
- printf "${D}║${N}${C}🔑 Contraseña  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
- printf "${D}║${N}${C}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
- printf "${D}║${N}${C}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo."
- printf "${D}║${N}${C}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$expira_format ($dias d)"
+ printf "${D}║${N}${C}🖥️ Ip Server   :${N} %-31s  ${D}║${N}\n" "$IP"
+ printf "${D}║${N}${C}👤 Usuario     :${N} %-31s  ${D}║${N}\n" "$user"
+ printf "${D}║${N}${C}🔑 Contraseña  :${N} ${W}%-31s${N}  ${D}║${N}\n" "$pass"
+ printf "${D}║${N}${C}📡 Puerto Ssh  :${N} %-31s  ${D}║${N}\n" "$PORT"
+ printf "${D}║${N}${C}📊 Límite Ssh  :${N} %-31s  ${D}║${N}\n" "$limit dispo."
+ printf "${D}║${N}${C}⏳ Validez     :${N} %-31s  ${D}║${N}\n" "$expira_format ($dias d)"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${W}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass} ${D}║${N}"
-echo -e "${W}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass} ${D}║${N}"
+echo -e "${W}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}   ${D}║${N}"
+echo -e "${W}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}        ${D}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log

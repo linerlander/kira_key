@@ -126,7 +126,7 @@ if [ $total_users -eq 0 ]; then
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}    ║${N}\n" "$total_users" "$activos" "$expirados"
+printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}     ║${N}\n" "$total_users" "$activos" "$expirados"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 
 echo ""

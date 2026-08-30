@@ -14,9 +14,9 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 👥   USUARIOS SSH CONECTADOS                         ${D}║${N}"
+echo -e "${D}║${Y}                 👥   USUARIOS SSH CONECTADOS                          ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-4s %-16s %-12s %-10s %-10s %-11s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "CONEXIÓN" "ESTADO"
+printf "${D}║${N} ${C}%-4s %-16s %-12s %-10s %-10s %-11s${N}   ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "CONEXIÓN" "ESTADO"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 i=1
@@ -50,7 +50,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
             id_str="[$i]"
             [ $i -lt 10 ] && id_str="[0$i]"
 
-            printf "${D}║${N} ${Y}%-4s${N} %-16s %-12s %-10s %-10s ${estado_color}%-11s${N} ${D}║${N}\n" \
+            printf "${D}║${N} ${Y}%-4s${N} %-16s %-12s %-10s %-10s ${estado_color}%-11s${N}  ${D}║${N}\n" \
                    "$id_str" "$username" "$pass" "$PORT" "$conn_txt" "$estado_txt"
 
             ((i++))
@@ -66,7 +66,7 @@ if [ $total_users_online -eq 0 ]; then
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}USUARIOS ONLINE:${N} %-10s ${C}TOTAL CONEXIONES:${N} %-17s ${D}║${N}\n" "$total_users_online" "$total_online"
+printf "${D}║${N} ${W}USUARIOS ONLINE:${N} %-10s ${C}TOTAL CONEXIONES:${N} %-17s ${D}      ║${N}\n" "$total_users_online" "$total_online"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 
 echo ""

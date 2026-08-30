@@ -53,16 +53,27 @@ done
 read -p " ► Límite de conexiones (Default 1): " limit
 [ -z "$limit" ] && limit=1
 
-# CREACIÓN EN SISTEMA
+# CONVERTIR EL TIEMPO DEMO (m, h, d) A FORMATO COMPATIBLE PARA DATE
+cantidad=$(echo "$tiempo" | grep -oE '[0-9]+')
+unidad=$(echo "$tiempo" | grep -oE '[smhd]')
+
+case "$unidad" in
+    m) tipo_tiempo="$cantidad minutes" ;;
+    h) tipo_tiempo="$cantidad hours" ;;
+    d) tipo_tiempo="$cantidad days" ;;
+    *) tipo_tiempo="1 days" ;;
+esac
+
+# CREACIÓN EN SISTEMA Y FECHA EXACTA DE EXPIRACIÓN
+exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d\ %H:%M)
 useradd -M -s /bin/false "$user" 2>/dev/null
 echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
-chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
-# GUARDADO BASE DE DATOS KIRA
+# GUARDADO BASE DE DATOS KIRA (Compatible con Telegram)
 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
-echo "$(date +%s) $tiempo" > /etc/kira/expire/$user
+echo "$exp_date" > /etc/kira/expire/$user
 echo "$pass" > /etc/kira/pass/$user
 
 # OBTENER DATOS DE CONEXIÓN
@@ -79,7 +90,7 @@ printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
 printf "${D}║${N} ${R}🔑 Contraseña  :${N} %-31s ${D}║${N}\n" "$pass"
 printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
 printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo..."
-printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$tiempo"
+printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$tiempo (Expira: $exp_date)"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}      ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"

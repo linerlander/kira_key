@@ -66,7 +66,7 @@ if [ -z "$USERS_LIST" ]; then
 fi
 
 echo "=========================================="
-echo "      LISTA DE USUARIOS CREADOS           "
+echo "          LISTA DE USUARIOS CREADOS       "
 echo "=========================================="
 
 count=1
@@ -554,7 +554,7 @@ config_bot() {
     clear
     if [ -f "$BOT_CONFIG" ]; then
         echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-        echo -e "${D}║${R}                   ⚠️  YA EXISTE UN BOT CONFIGURADO                    ${D}║${N}"
+        echo -e "${D}║${R}                    ⚠️  YA EXISTE UN BOT CONFIGURADO                    ${D}║${N}"
         echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
         echo ""
         echo -e " ${Y}Solo se permite un (1) Bot activo por servidor VPS.${N}"
@@ -565,7 +565,7 @@ config_bot() {
     fi
 
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                   ⚙️  CONFIGURACIÓN INICIAL DEL BOT                    ${D}║${N}"
+    echo -e "${D}║${Y}                    ⚙️  CONFIGURACIÓN INICIAL DEL BOT                    ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
     read -p " ► Pegar BOT TOKEN: " token_input
@@ -589,7 +589,7 @@ config_bot() {
 add_admins() {
     clear
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                👥  AÑADIR ADMINISTRADORES AL BOT                     ${D}║${N}"
+    echo -e "${D}║${Y}                👥  AÑADIR ADMINISTRADORES AL BOT                      ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
 
@@ -627,7 +627,7 @@ add_admins() {
 show_bot_info() {
     clear
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                     ℹ️  INFORMACIÓN DEL BOT                           ${D}║${N}"
+    echo -e "${D}║${Y}                        ℹ️  INFORMACIÓN DEL BOT                         ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
 
@@ -648,7 +648,7 @@ show_bot_info() {
 
             echo -e " 🤖 ${W}Nombre Bot:${N} $BOT_NAME"
             echo -e " 🔗 ${W}Username:${N} @$BOT_USER"
-            echo -e " 🔑 ${W}Token:${N} ${TOKEN_CLEAN:0:10}...${TOKEN_CLEAN:-5}"
+            echo -e " 🔑 ${W}Token:${N} ${TOKEN_CLEAN:0:10}...${TOKEN_CLEAN: -5}"
             echo -e " 👑 ${W}Admins Permitidos:${N} $ADMIN_IDS"
             
             if [ -f "$BOT_PID_FILE" ]; then
@@ -672,18 +672,18 @@ clear
 STATUS=$(check_bot_status)
 
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 🤖   BOT DE TELEGRAM (GESTIÓN SSH)                     ${D}║${N}"
+echo -e "${D}║${Y}                   🤖   BOT DE TELEGRAM (GESTIÓN SSH)                  ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${W}ESTADO DEL BOT:${N} %-55b ${D}║${N}\n" "$STATUS"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${Y}[1]${N} CREAR / CONFIGURAR NUEVO BOT (Solo 1 Bot por VPS)                  ${D}║${N}"
+echo -e "${D}║${N} ${Y}[1]${N} CREAR / CONFIGURAR NUEVO BOT (Solo 1 Bot por VPS)                   ${D}║${N}"
 echo -e "${D}║${N} ${Y}[2]${N} AÑADIR NUEVOS ADMINS (Agregar IDs a la lista existente)             ${D}║${N}"
-echo -e "${D}║${N} ${Y}[3]${N} INICIAR BOT                                                        ${D}║${N}"
-echo -e "${D}║${N} ${Y}[4]${N} DETENER BOT                                                        ${D}║${N}"
-echo -e "${D}║${N} ${Y}[5]${N} MOSTRAR INFORMACIÓN DEL BOT                                        ${D}║${N}"
+echo -e "${D}║${N} ${Y}[3]${N} INICIAR BOT                                                         ${D}║${N}"
+echo -e "${D}║${N} ${Y}[4]${N} DETENER BOT                                                         ${D}║${N}"
+echo -e "${D}║${N} ${Y}[5]${N} MOSTRAR INFORMACIÓN DEL BOT                                         ${D}║${N}"
 echo -e "${D}║${N} ${R}[6] MATAR Y RESTABLECER BOT (Eliminar bot actual para crear uno nuevo)${N} ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                       ${D}║${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                     ${D}║${N}"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona una opción: " option

@@ -45,7 +45,7 @@ echo "$PASSWORD" > "/etc/kira/pass/$USERNAME"
 echo "$LIMIT" > "/etc/kira/limits/$USERNAME"
 
 # Calcular fecha exacta y guardarla en archivo de control
-EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d 2>/dev/null || date -v+${DAYS}d +%Y-%m-%d 2>/dev/null)
 echo "$EXP_DATE" > "/etc/kira/expire/$USERNAME"
 
 # Convertir a días desde la época Unix para compatibilidad total con chage -E
@@ -309,7 +309,7 @@ LIMITE : <code>$LIM_VAL</code>
                                 USERNAME="$PARAM1"
                                 DAYS=$(echo "$PARAM2" | grep -oE '[0-9]+')
                                 if id "$USERNAME" &>/dev/null && [ -n "$DAYS" ]; then
-                                    EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+                                    EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d 2>/dev/null || date -v+${DAYS}d +%Y-%m-%d 2>/dev/null)
                                     echo "$EXP_DATE" > "/etc/kira/expire/$USERNAME"
                                     EXPR_DAYS=$(( $(date -d "$EXP_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$EXP_DATE" +%s 2>/dev/null) / 86400 ))
                                     chage -E "$EXPR_DAYS" "$USERNAME" 2>/dev/null || chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
@@ -539,7 +539,7 @@ stop_bot() {
 kill_and_reset_bot() {
     clear
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${R}              ⚠️  MATAR BOT Y BORRAR CONFIGURACIÓN                     ${D}║${N}"
+    echo -e "${D}║${R}           ⚠️   MATAR BOT Y BORRAR CONFIGURACIÓN                     ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
     echo -e " ${W}Esta opción matará el proceso activo y eliminará la configuración actual.${N}"
@@ -562,7 +562,7 @@ config_bot() {
     clear
     if [ -f "$BOT_CONFIG" ]; then
         echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-        echo -e "${D}║${R}                    ⚠️  YA EXISTE UN BOT CONFIGURADO                    ${D}║${N}"
+        echo -e "${D}║${R}                     ⚠️   YA EXISTE UN BOT CONFIGURADO                 ${D}║${N}"
         echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
         echo ""
         echo -e " ${Y}Solo se permite un (1) Bot activo por servidor VPS.${N}"
@@ -573,7 +573,7 @@ config_bot() {
     fi
 
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                    ⚙️  CONFIGURACIÓN INICIAL DEL BOT                    ${D}║${N}"
+    echo -e "${D}║${Y}                    ⚙️   CONFIGURACIÓN INICIAL DEL BOT                  ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
     read -p " ► Pegar BOT TOKEN: " token_input
@@ -597,7 +597,7 @@ config_bot() {
 add_admins() {
     clear
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                👥  AÑADIR ADMINISTRADORES AL BOT                      ${D}║${N}"
+    echo -e "${D}║${Y}                 👥   AÑADIR ADMINISTRADORES AL BOT                  ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
 
@@ -635,7 +635,7 @@ add_admins() {
 show_bot_info() {
     clear
     echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-    echo -e "${D}║${Y}                        ℹ️  INFORMACIÓN DEL BOT                         ${D}║${N}"
+    echo -e "${D}║${Y}                         ℹ️   INFORMACIÓN DEL BOT                        ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
 
@@ -680,7 +680,7 @@ clear
 STATUS=$(check_bot_status)
 
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                   🤖   BOT DE TELEGRAM (GESTIÓN SSH)                  ${D}║${N}"
+echo -e "${D}║${Y}                    🤖   BOT DE TELEGRAM (GESTIÓN SSH)                 ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${W}ESTADO DEL BOT:${N} %-55b ${D}║${N}\n" "$STATUS"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
@@ -691,7 +691,7 @@ echo -e "${D}║${N} ${Y}[4]${N} DETENER BOT                                    
 echo -e "${D}║${N} ${Y}[5]${N} MOSTRAR INFORMACIÓN DEL BOT                                         ${D}║${N}"
 echo -e "${D}║${N} ${R}[6] MATAR Y RESTABLECER BOT (Eliminar bot actual para crear uno nuevo)${N} ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                     ${D}║${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                    ${D}║${N}"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona una opción: " option

@@ -64,11 +64,12 @@ case "$unidad" in
     *) tipo_tiempo="1 days" ;;
 esac
 
-# CREACIÓN EN SISTEMA Y FECHA EXACTA DE EXPIRACIÓN
-exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d\ %H:%M)
+# CREACIÓN EN SISTEMA Y FECHA EXACTA DE EXPIRACIÓN (Formato plano YYYY-MM-DD para evitar fallos en el bot)
+exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d)
 useradd -M -s /bin/false "$user" 2>/dev/null
 echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
+chage -E "$exp_date" "$user" 2>/dev/null
 
 # GUARDADO BASE DE DATOS KIRA (Compatible con Telegram)
 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
@@ -83,7 +84,7 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}         ⚡ KIRA PANEL - CUENTA DEMO ⚡           ${D}║${N}"
+echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
 printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"

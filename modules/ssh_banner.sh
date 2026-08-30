@@ -49,12 +49,12 @@ EOF
         3)
             cat << 'EOF' > "$BANNER_FILE"
 <br>
-<font color="#00FFFF">╔══════════════════════════════════╗</font><br>
+<font color="#00FFFF">╔════════════════════════════════╗</font><br>
 <font color="#FF00FF"><b>       ⚡ POWER NETWORK SSH ⚡     </b></font><br>
-<font color="#00FFFF">╠══════════════════════════════════╣</font><br>
+<font color="#00FFFF">╠════════════════════════════════╣</font><br>
 <font color="#FFFFFF"> ✦ Estado: <font color="#00FF00">ONLINE</font></font><br>
-<font color="#FFFFFF"> ✦ Soporte: @TuContactoTelegram</font><br>
-<font color="#00FFFF">╚══════════════════════════════════╝</font><br>
+<font color="#FFFFFF"> ✦ Soporte: @loki_oficial</font><br>
+<font color="#00FFFF">╚════════════════════════════════╝</font><br>
 EOF
             ;;
     esac

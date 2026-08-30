@@ -59,7 +59,7 @@ echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
-# GUARDADO BASE DE DATOS KIRA (Sincronizado con Telegram y Terminal)
+# GUARDADO BASE DE DATOS KIRA
 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
 echo "$(date +%s) $tiempo" > /etc/kira/expire/$user
@@ -72,7 +72,7 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
+echo -e "${D}║${Y}         ⚡ KIRA PANEL - CUENTA DEMO ⚡           ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
 printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
@@ -81,7 +81,7 @@ printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
 printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo..."
 printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$tiempo"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}      ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
 echo -e "${D}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}  ${D}║${N}"
 echo -e "${D}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}  ${D}║${N}"
@@ -119,23 +119,23 @@ if ! [[ "$dias" =~ ^[0-9]+$ ]]; then
     continue
 fi
 
-# CREACIÓN EN SISTEMA
+# CREACIÓN EN SISTEMA Y FECHA EXACTA YYYY-MM-DD
 exp_date=$(date -d "+$dias days" +%Y-%m-%d)
-useradd -M -s /bin/false -e "$exp_date" "$user" 2>/dev/null
+useradd -M -s /bin/false "$user" 2>/dev/null
 echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
-chage -I -1 -m 0 -M 99999 -E -1 "$user"
+chage -E "$exp_date" "$user" 2>/dev/null
 
-# GUARDADO BASE DE DATOS KIRA (Sincronizado con Telegram y Terminal)
+# GUARDADO BASE DE DATOS KIRA (Sincronizado correctamente para Telegram)
 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
-echo "$(date +%s) ${dias}d" > /etc/kira/expire/$user
+echo "$exp_date" > /etc/kira/expire/$user
 echo "$pass" > /etc/kira/pass/$user
 
 IP=$(curl -s ifconfig.me)
 PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
-expira_format=$(date -d "$dias days" +"%d/%m/%Y")
+expira_format=$(date -d "$exp_date" +"%d/%m/%Y" 2>/dev/null || echo "$exp_date")
 
 # ================= NORMAL (Resumen Alineado) =================
 directo="${IP}:${PORT}@${user}:${pass}"
@@ -152,7 +152,7 @@ printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
 printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo."
 printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$expira_format ($dias d)"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}      ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
 printf "${D}║${N} 🔗 Direc: ${Y}%-38s${N} ${D}║${N}\n" "$directo"
 printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"

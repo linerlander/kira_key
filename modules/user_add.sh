@@ -146,8 +146,8 @@ echo -e "${D}╠═════════════════════�
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${D}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}                ${D}║${N}"
-echo -e "${D}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}                ${D}║${N}"
+echo -e "${D}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}              ${D}║${N}"
+echo -e "${D}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}               ${D}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log

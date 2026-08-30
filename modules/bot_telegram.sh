@@ -29,21 +29,21 @@ create_bot_daemon() {
 #!/bin/bash
 
 BOT_DIR="/etc/kira/bot"
-source "$BOT_DIR/bot.conf"
+[ -f "$BOT_DIR/bot.conf" ] && source "$BOT_DIR/bot.conf"
 
-TOKEN=$(echo "$TOKEN" | tr -d '\r\n"')
+TOKEN=$(echo "$TOKEN" | tr -d '\r\n "')
 
 URL="https://api.telegram.org/bot$TOKEN"
 OFFSET=0
-VPS_IP=$(curl -s https://api.ipify.org || echo "VPS_IP")
+VPS_IP=$(curl -s --max-time 3 https://api.ipify.org || echo "VPS_IP")
 
 send_message() {
     local chat_id="$1"
     local text="$2"
     curl -s -X POST "$URL/sendMessage" \
         -d "chat_id=$chat_id" \
-        --data-encode "text=$text" \
-        -d "parse_mode=HTML" > /dev/null
+        -d "parse_mode=HTML" \
+        --data-urlencode "text=$text" > /dev/null
 }
 
 is_authorized() {
@@ -51,7 +51,7 @@ is_authorized() {
     source "$BOT_DIR/bot.conf"
     IFS=',' read -ra ADM_LIST <<< "$ADMIN_IDS"
     for id in "${ADM_LIST[@]}"; do
-        clean_id=$(echo "$id" | tr -d ' ')
+        clean_id=$(echo "$id" | tr -d ' "\r\n')
         if [ "$clean_id" == "$target_id" ]; then
             return 0
         fi
@@ -70,14 +70,14 @@ while true; do
                     UPDATE_ID=$(echo "$UPDATES" | jq ".result[$i].update_id")
                     OFFSET=$((UPDATE_ID + 1))
                     
-                    CHAT_ID=$(echo "$UPDATES" | jq -r ".result[$i].message.chat.id")
-                    TEXT=$(echo "$UPDATES" | jq -r ".result[$i].message.text")
+                    CHAT_ID=$(echo "$UPDATES" | jq -r ".result[$i].message.chat.id // empty")
+                    TEXT=$(echo "$UPDATES" | jq -r ".result[$i].message.text // empty")
                     
-                    [ "$TEXT" == "null" ] && continue
-                    CHAT_ID_CLEAN=$(echo "$CHAT_ID" | tr -d '\r\n ')
+                    [ -z "$TEXT" ] || [ "$TEXT" == "null" ] && continue
+                    CHAT_ID_CLEAN=$(echo "$CHAT_ID" | tr -d '\r\n "')
 
                     if ! is_authorized "$CHAT_ID_CLEAN"; then
-                        send_message "$CHAT_ID" "⚠️ <b>Acceso Denegado.</b> Tu ID (<code>$CHAT_ID_CLEAN</code>) no está autorizado."
+                        send_message "$CHAT_ID_CLEAN" "⚠️ <b>Acceso Denegado.</b> Tu ID (<code>$CHAT_ID_CLEAN</code>) no está autorizado."
                         continue
                     fi
 
@@ -120,7 +120,7 @@ while true; do
  • /admkill → <i>Quitar autorización</i>
 
 ✨━━━━━━━━━━━━━━━━━━━━━━✨"
-                            send_message "$CHAT_ID" "$MSG"
+                            send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
 
                         /agregar|/crear)
@@ -134,7 +134,7 @@ while true; do
 ✨━━━━━━━━━━━━━━━━━━━━━━✨
 <code>/agregar admin admin 30 1</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨"
-                                send_message "$CHAT_ID" "$MSG"
+                                send_message "$CHAT_ID_CLEAN" "$MSG"
                             else
                                 USERNAME="$PARAM1"
                                 PASSWORD="$PARAM2"
@@ -142,7 +142,7 @@ while true; do
                                 LIMIT="${PARAM4:-1}"
 
                                 if id "$USERNAME" &>/dev/null; then
-                                    send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> ya existe."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ El usuario <b>$USERNAME</b> ya existe."
                                 else
                                     useradd -M -s /bin/false "$USERNAME" 2>/dev/null
                                     echo "$USERNAME:$PASSWORD" | chpasswd 2>/dev/null
@@ -162,7 +162,7 @@ while true; do
 📅 <b>Días:</b> $DAYS días
 📱 <b>Límite:</b> $LIMIT dispositivo(s)
 🌐 <b>IP:</b> <code>$VPS_IP</code>"
-                                    send_message "$CHAT_ID" "$MSG"
+                                    send_message "$CHAT_ID_CLEAN" "$MSG"
                                 fi
                             fi
                             ;;
@@ -195,13 +195,13 @@ while true; do
 📱 <b>Límite:</b> 1 Dispositivo
 🌐 <b>IP VPS:</b> <code>$VPS_IP</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨"
-                            send_message "$CHAT_ID" "$MSG"
+                            send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
 
                         /usuarios)
                             USERS_LIST=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd)
                             if [ -z "$USERS_LIST" ]; then
-                                send_message "$CHAT_ID" "📋 <b>No hay usuarios SSH creados.</b>"
+                                send_message "$CHAT_ID_CLEAN" "📋 <b>No hay usuarios SSH creados.</b>"
                             else
                                 MSG=""
                                 count=1
@@ -231,7 +231,7 @@ LIMITE : <code>$LIM_VAL</code>
                                     count=$((count+1))
                                 done
                                 MSG+="============================"
-                                send_message "$CHAT_ID" "$MSG"
+                                send_message "$CHAT_ID_CLEAN" "$MSG"
                             fi
                             ;;
 
@@ -242,23 +242,23 @@ LIMITE : <code>$LIM_VAL</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨
 <code>/renovar Nombre_User Dias</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨"
-                                send_message "$CHAT_ID" "$MSG"
+                                send_message "$CHAT_ID_CLEAN" "$MSG"
                             else
                                 USERNAME="$PARAM1"
                                 DAYS="$PARAM2"
                                 if id "$USERNAME" &>/dev/null; then
                                     EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
                                     chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
-                                    send_message "$CHAT_ID" "🔄 Usuario <b>$USERNAME</b> renovado a <b>$DAYS días</b> (F. Expiración: <code>$EXP_DATE</code>)."
+                                    send_message "$CHAT_ID_CLEAN" "🔄 Usuario <b>$USERNAME</b> renovado a <b>$DAYS días</b> (F. Expiración: <code>$EXP_DATE</code>)."
                                 else
-                                    send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> no existe."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ El usuario <b>$USERNAME</b> no existe."
                                 fi
                             fi
                             ;;
 
                         /renovarM)
                             if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
-                                send_message "$CHAT_ID" "➕ <b>Sintaxis:</b> <code>/renovarM Usuario Días_Añadir</code>"
+                                send_message "$CHAT_ID_CLEAN" "➕ <b>Sintaxis:</b> <code>/renovarM Usuario Días_Añadir</code>"
                             else
                                 USERNAME="$PARAM1"
                                 ADD_DAYS="$PARAM2"
@@ -266,16 +266,16 @@ LIMITE : <code>$LIM_VAL</code>
                                     CURR_EXP=$(chage -l "$USERNAME" | grep "Account expires" | awk -F: '{print $2}')
                                     NEW_EXP=$(date -d "$CURR_EXP + $ADD_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+$ADD_DAYS days" +%Y-%m-%d)
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
-                                    send_message "$CHAT_ID" "➕ <b>+$ADD_DAYS Días añadidos a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
+                                    send_message "$CHAT_ID_CLEAN" "➕ <b>+$ADD_DAYS Días añadidos a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
-                                    send_message "$CHAT_ID" "⚠️ Usuario no encontrado."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado."
                                 fi
                             fi
                             ;;
 
                         /renovarQ)
                             if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
-                                send_message "$CHAT_ID" "➖ <b>Sintaxis:</b> <code>/renovarQ Usuario Días_Restar</code>"
+                                send_message "$CHAT_ID_CLEAN" "➖ <b>Sintaxis:</b> <code>/renovarQ Usuario Días_Restar</code>"
                             else
                                 USERNAME="$PARAM1"
                                 SUB_DAYS="$PARAM2"
@@ -283,58 +283,56 @@ LIMITE : <code>$LIM_VAL</code>
                                     CURR_EXP=$(chage -l "$USERNAME" | grep "Account expires" | awk -F: '{print $2}')
                                     NEW_EXP=$(date -d "$CURR_EXP - $SUB_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+1 days" +%Y-%m-%d)
                                     chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
-                                    send_message "$CHAT_ID" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
+                                    send_message "$CHAT_ID_CLEAN" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
-                                    send_message "$CHAT_ID" "⚠️ Usuario no encontrado."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado."
                                 fi
                             fi
                             ;;
 
                         /aggADM)
                             if [ -z "$PARAM1" ]; then
-                                send_message "$CHAT_ID" "🔐 <b>Sintaxis:</b> <code>/aggADM TELEGRAM_ID</code>"
+                                send_message "$CHAT_ID_CLEAN" "🔐 <b>Sintaxis:</b> <code>/aggADM TELEGRAM_ID</code>"
                             else
                                 NEW_ADM="$PARAM1"
                                 source "$BOT_CONFIG"
                                 if [[ "$ADMIN_IDS" == *"$NEW_ADM"* ]]; then
-                                    send_message "$CHAT_ID" "⚠️ El ID <code>$NEW_ADM</code> ya es Administrador."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ El ID <code>$NEW_ADM</code> ya es Administrador."
                                 else
                                     UPDATED_IDS="$ADMIN_IDS, $NEW_ADM"
                                     echo "TOKEN=\"$TOKEN\"" > "$BOT_CONFIG"
                                     echo "ADMIN_IDS=\"$UPDATED_IDS\"" >> "$BOT_CONFIG"
-                                    send_message "$CHAT_ID" "✅ <b>Nuevo Admin Autorizado:</b> <code>$NEW_ADM</code>"
+                                    send_message "$CHAT_ID_CLEAN" "✅ <b>Nuevo Admin Autorizado:</b> <code>$NEW_ADM</code>"
                                 fi
                             fi
                             ;;
 
                         /creditos)
                             if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
-                                send_message "$CHAT_ID" "💳 <b>Sintaxis:</b> <code>/creditos TELEGRAM_ID Cantidad_Días</code>"
+                                send_message "$CHAT_ID_CLEAN" "💳 <b>Sintaxis:</b> <code>/creditos TELEGRAM_ID Cantidad_Días</code>"
                             else
                                 TARGET_ADM="$PARAM1"
                                 CRED_VAL="$PARAM2"
                                 echo "$CRED_VAL" > "/etc/kira/bot/credits_$TARGET_ADM"
-                                send_message "$CHAT_ID" "💳 <b>Créditos/Días autorizados:</b> <code>$CRED_VAL</code> al Admin ID: <code>$TARGET_ADM</code>"
+                                send_message "$CHAT_ID_CLEAN" "💳 <b>Créditos/Días autorizados:</b> <code>$CRED_VAL</code> al Admin ID: <code>$TARGET_ADM</code>"
                             fi
                             ;;
 
                         /admkill)
                             if [ -z "$PARAM1" ]; then
-                                send_message "$CHAT_ID" "🚫 <b>Sintaxis:</b> <code>/admkill TELEGRAM_ID</code>"
+                                send_message "$CHAT_ID_CLEAN" "🚫 <b>Sintaxis:</b> <code>/admkill TELEGRAM_ID</code>"
                             else
                                 TARGET_ADM="$PARAM1"
                                 source "$BOT_CONFIG"
                                 NEW_LIST=$(echo "$ADMIN_IDS" | sed "s/$TARGET_ADM//g" | sed 's/,,/,/g' | sed 's/^,//g' | sed 's/,$//g')
                                 echo "TOKEN=\"$TOKEN\"" > "$BOT_CONFIG"
                                 echo "ADMIN_IDS=\"$NEW_LIST\"" >> "$BOT_CONFIG"
-                                send_message "$CHAT_ID" "🚫 <b>Autorización revocada exitosamente para el ID:</b> <code>$TARGET_ADM</code>"
+                                send_message "$CHAT_ID_CLEAN" "🚫 <b>Autorización revocada exitosamente para el ID:</b> <code>$TARGET_ADM</code>"
                             fi
                             ;;
 
                         /conectados|/online)
-                            CONNECTED_INFO=""
                             TOTAL_CONN=0
-                            
                             ONLINE_USERS=$(ps aux | grep sshd | grep -v root | grep -v grep | awk '{print $1}' | sort | uniq)
 
                             if [ -z "$ONLINE_USERS" ]; then
@@ -346,7 +344,9 @@ LIMITE : <code>$LIM_VAL</code>
                             else
                                 MSG="✨━━━━━━━━━━━━━━━━━━━━━━✨
 👥 <b>USUARIOS CONECTADOS SSH</b>
-✨━━━━━━━━━━━━━━━━━━━━━━✨\n"
+✨━━━━━━━━━━━━━━━━━━━━━━✨
+
+"
                                 for u in $ONLINE_USERS; do
                                     COUNT=$(ps aux | grep sshd | grep "$u" | grep -v grep | wc -l)
                                     TIME_ONLINE=$(who | grep "$u" | awk '{print $4}' | head -n 1)
@@ -354,16 +354,20 @@ LIMITE : <code>$LIM_VAL</code>
 
                                     [ -f "/etc/kira/limits/$u" ] && MAX_LIM=$(cat "/etc/kira/limits/$u") || MAX_LIM="1"
 
-                                    MSG+="👤 <b>Usuario:</b> <code>$u</code>\n"
-                                    MSG+="📱 <b>Dispositivos activos:</b> $COUNT / $MAX_LIM\n"
-                                    MSG+="⏱ <b>Hora conexión:</b> $TIME_ONLINE\n"
-                                    MSG+="--------------------------------\n"
+                                    MSG+="👤 <b>Usuario:</b> <code>$u</code>
+"
+                                    MSG+="📱 <b>Dispositivos activos:</b> $COUNT / $MAX_LIM
+"
+                                    MSG+="⏱ <b>Hora conexión:</b> $TIME_ONLINE
+"
+                                    MSG+="--------------------------------
+"
                                     TOTAL_CONN=$((TOTAL_CONN + COUNT))
                                 done
                                 MSG+="🌐 <b>Total Conexiones Activas:</b> <code>$TOTAL_CONN</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨"
                             fi
-                            send_message "$CHAT_ID" "$MSG"
+                            send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
 
                         /borrar|/eliminar)
@@ -373,15 +377,15 @@ LIMITE : <code>$LIM_VAL</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨
 <code>/borrar Nombre_User</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━✨"
-                                send_message "$CHAT_ID" "$MSG"
+                                send_message "$CHAT_ID_CLEAN" "$MSG"
                             else
                                 USERNAME="$PARAM1"
                                 if id "$USERNAME" &>/dev/null; then
                                     userdel -f "$USERNAME" 2>/dev/null
                                     rm -f "/etc/kira/expire/$USERNAME" "/etc/kira/limits/$USERNAME" "/etc/kira/pass/$USERNAME"
-                                    send_message "$CHAT_ID" "🗑️ El usuario <b>$USERNAME</b> fue eliminado correctamente."
+                                    send_message "$CHAT_ID_CLEAN" "🗑️ El usuario <b>$USERNAME</b> fue eliminado correctamente."
                                 else
-                                    send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> no existe."
+                                    send_message "$CHAT_ID_CLEAN" "⚠️ El usuario <b>$USERNAME</b> no existe."
                                 fi
                             fi
                             ;;
@@ -396,7 +400,7 @@ LIMITE : <code>$LIM_VAL</code>
 💾 <b>Uso RAM:</b> $RAM_USED
 ⚡ <b>Carga CPU:</b> $CPU_LOAD%
 ⏱ <b>Uptime:</b> $UPTIME"
-                            send_message "$CHAT_ID" "$MSG"
+                            send_message "$CHAT_ID_CLEAN" "$MSG"
                             ;;
 
                         /liberados)
@@ -409,15 +413,15 @@ LIMITE : <code>$LIM_VAL</code>
                                 fi
                             done
                             if [ -z "$LIBERADOS" ]; then
-                                send_message "$CHAT_ID" "🔓 <b>No hay usuarios liberados en este VPS.</b>"
+                                send_message "$CHAT_ID_CLEAN" "🔓 <b>No hay usuarios liberados en este VPS.</b>"
                             else
-                                send_message "$CHAT_ID" "🔓 <b>USUARIOS LIBERADOS:</b>\n$LIBERADOS"
+                                send_message "$CHAT_ID_CLEAN" "🔓 <b>USUARIOS LIBERADOS:</b>\n$LIBERADOS"
                             fi
                             ;;
 
                         /reiniciar)
                             systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null
-                            send_message "$CHAT_ID" "⚡ <b>Servicios SSH/WS reiniciados correctamente.</b>"
+                            send_message "$CHAT_ID_CLEAN" "⚡ <b>Servicios SSH/WS reiniciados correctamente.</b>"
                             ;;
                     esac
                 done

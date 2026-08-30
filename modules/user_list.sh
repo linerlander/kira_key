@@ -15,16 +15,17 @@ BLUE='\033[38;5;75m'  # Azul claro (Vigente)
 PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
 
-while true; do
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 🔄   PANEL DE EDICIÓN Y RENOVACIÓN                   ${D} ║${N}"
+echo -e "${D}║${Y}                 📋   LISTA DE USUARIOS REGISTRADOS                    ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
+printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 declare -A users_list
 i=1
+activos=0
+expirados=0
 
 while IFS=: read -u 3 -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
@@ -62,6 +63,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
             if [ $diff_sec -le 0 ]; then
                 validez_txt="Expirado"
                 validez_color="$PINK"
+                ((expirados++))
             else
                 dias=$((diff_sec / 86400))
                 horas=$(( (diff_sec % 86400) / 3600 ))
@@ -75,26 +77,29 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
                     validez_txt="${mins}m"
                 fi
                 validez_color="$BLUE"
+                ((activos++))
             fi
         else
             exp_date=$(chage -l "$username" 2>/dev/null | grep "Account expires" | cut -d: -f2)
             if [[ "$exp_date" == *"never"* ]] || [ -z "$exp_date" ]; then
                 validez_txt="Ilimitado"
                 validez_color="$BLUE"
+                ((activos++))
             else
                 exp_sec=$(date -d "$exp_date" +%s 2>/dev/null)
                 if [ -n "$exp_sec" ] && [ $exp_sec -ge $now_sec ]; then
                     diff_days=$(( (exp_sec - now_sec) / 86400 ))
                     validez_txt="${diff_days}d"
                     validez_color="$BLUE"
+                    ((activos++))
                 else
                     validez_txt="Expirado"
                     validez_color="$PINK"
+                    ((expirados++))
                 fi
             fi
         fi
 
-        users_list[$i]="$username"
         id_str="[$i]"
         [ $i -lt 10 ] && id_str="[0$i]"
 
@@ -105,84 +110,15 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
     fi
 done 3< /etc/passwd
 
-if [ $i -eq 1 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}    ║${N}"
+total_users=$((i - 1))
+
+if [ $total_users -eq 0 ]; then
+    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                       ${D} ║${N}"
+printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}║${N}\n" "$total_users" "$activos" "$expirados"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
+
 echo ""
-read -p " ► Selecciona el ID del usuario a editar: " selection
-
-if [[ "$selection" == "0" || "$selection" == "00" ]]; then
-    exit 0
-fi
-
-if [[ -n "${users_list[$selection]}" ]]; then
-    user_to_edit="${users_list[$selection]}"
-    
-    current_pass=$(grep -w "^$user_to_edit" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
-    current_limit=$(cat /etc/kira/limits/$user_to_edit 2>/dev/null)
-    [ -z "$current_limit" ] && current_limit=1
-
-    echo ""
-    echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-    echo -e " ${Y}EDITANDO USUARIO:${N} ${W}$user_to_edit${N}"
-    echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-    
-    # EDITAR CONTRASEÑA
-    read -p " ► Nueva Contraseña (Enter para mantener '$current_pass'): " new_pass
-    if [ -n "$new_pass" ]; then
-        echo "$user_to_edit:$new_pass" | chpasswd 2>/dev/null
-        # Actualizar en log
-        if grep -q "^$user_to_edit " /etc/kira/users.log 2>/dev/null; then
-            sed -i "s/^$user_to_edit [^ ]*/$user_to_edit $new_pass/" /etc/kira/users.log
-        else
-            echo "$user_to_edit $new_pass 30d $current_limit $(date)" >> /etc/kira/users.log
-        fi
-        echo -e " ${G}✔ Contraseña actualizada.${N}"
-    fi
-
-    # EDITAR LÍMITE
-    read -p " ► Nuevo Límite SSH (Enter para mantener '$current_limit'): " new_limit
-    if [ -n "$new_limit" ] && [[ "$new_limit" =~ ^[0-9]+$ ]]; then
-        echo "$new_limit" > /etc/kira/limits/$user_to_edit
-        echo -e " ${G}✔ Límite actualizado a $new_limit.${N}"
-    fi
-
-    # RENOVAR VALIDEZ
-    read -p " ► Días / Tiempo de validez a añadir (Ej: 30d / 2h / 30m - Enter para no cambiar): " new_time
-    if [ -n "$new_time" ]; then
-        if [[ "$new_time" =~ ^[0-9]+[smhd]$ ]]; then
-            echo "$(date +%s) $new_time" > /etc/kira/expire/$user_to_edit
-            
-            # Si es en días, extender también en el sistema operativo
-            if [[ "$new_time" =~ d$ ]]; then
-                days_num="${new_time//d/}"
-                exp_date=$(date -d "+$days_num days" +%Y-%m-%d)
-                chage -E "$exp_date" "$user_to_edit" 2>/dev/null
-            else
-                chage -E -1 "$user_to_edit" 2>/dev/null
-            fi
-            echo -e " ${G}✔ Validez renovada correctamente por $new_time.${N}"
-        elif [[ "$new_time" =~ ^[0-9]+$ ]]; then
-            echo "$(date +%s) ${new_time}d" > /etc/kira/expire/$user_to_edit
-            exp_date=$(date -d "+$new_time days" +%Y-%m-%d)
-            chage -E "$exp_date" "$user_to_edit" 2>/dev/null
-            echo -e " ${G}✔ Validez renovada correctamente por ${new_time} días.${N}"
-        else
-            echo -e " ${R}❌ Formato de tiempo inválido. No se aplicaron cambios de fecha.${N}"
-        fi
-    fi
-
-    echo ""
-    echo -e " ${G}✔ Cambios guardados en '$user_to_edit'.${N}"
-    sleep 2
-else
-    echo ""
-    echo -e " ${R}❌ Selección inválida.${N}"
-    sleep 1.5
-fi
-
-done
+read -p "Presiona Enter para continuar..."

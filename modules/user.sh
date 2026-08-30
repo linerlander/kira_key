@@ -62,8 +62,7 @@ bash modules/user_edit.sh
 ;;
 
 4|04)
-awk -F: '$3>=1000 {print $1}' /etc/passwd
-read -p "Enter..."
+bash modules/user_list.sh
 ;;
 
 5|05)

@@ -8,6 +8,7 @@ R='\033[38;5;196m'
 C='\033[38;5;51m'
 G='\033[38;5;82m'
 N='\033[0m'
+R= '\033[38;5;218m'
 
 while true; do
 clear
@@ -69,18 +70,18 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡        ${D}║${N}"
+echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}🖥️ IP SERVER   :${N} %-31s ${D}║${N}\n" "$IP"
-printf "${D}║${N} ${C}👤 USUARIO     :${N} %-31s ${D}║${N}\n" "$user"
-printf "${D}║${N} ${C}🔑 CONTRASEÑA  :${N} %-31s ${D}║${N}\n" "$pass"
-printf "${D}║${N} ${C}📡 PUERTO SSH  :${N} %-31s ${D}║${N}\n" "$PORT"
-printf "${D}║${N} ${C}📊 LÍMITE SSH  :${N} %-31s ${D}║${N}\n" "$limit dispositivos"
-printf "${D}║${N} ${C}⏳ VALIDEZ     :${N} %-31s ${D}║${N}\n" "$tiempo"
+printf "${D}║${N} ${R}🖥️ IP SERVER   :${N} %-31s ${D}║${N}\n" "$IP"
+printf "${D}║${N} ${R}👤 USUARIO     :${N} %-31s ${D}║${N}\n" "$user"
+printf "${D}║${N} ${R}🔑 CONTRASEÑA  :${N} %-31s ${D}║${N}\n" "$pass"
+printf "${D}║${N} ${R}📡 PUERTO SSH  :${N} %-31s ${D}║${N}\n" "$PORT"
+printf "${D}║${N} ${R}📊 LÍMITE SSH  :${N} %-31s ${D}║${N}\n" "$limit dispositivos"
+printf "${D}║${N} ${R}⏳ VALIDEZ     :${N} %-31s ${D}║${N}\n" "$tiempo"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${W}║${N}🔗 DIRECTO:${N} ${Y}${IP}:${PORT}@${user}:${pass}${N}"
+echo -e "${W}║${N}🔗 DIRECT:${N} ${Y}${IP}:${PORT}@${user}:${pass}${N}"
 echo -e "${W}║${N}🖥️ PROXY  :${N} ${Y}${IP}:80@${user}:${pass}${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 

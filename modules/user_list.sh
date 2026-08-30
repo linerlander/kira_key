@@ -17,7 +17,7 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 📋   LISTA DE USUARIOS REGISTRADOS                    ${D}║${N}"
+echo -e "${D}║${Y}                 📋   LISTA DE USUARIOS REGISTRADOS                    ${D}  ║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
@@ -113,11 +113,11 @@ done 3< /etc/passwd
 total_users=$((i - 1))
 
 if [ $total_users -eq 0 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}      ║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}║${N}\n" "$total_users" "$activos" "$expirados"
+printf "${D}║${N} ${W}TOTAL:${N} %-10s ${G}ACTIVOS:${N} %-10s ${PINK}EXPIRADOS:${N} %-15s ${D}     ║${N}\n" "$total_users" "$activos" "$expirados"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 
 echo ""

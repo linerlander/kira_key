@@ -106,7 +106,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
 done 3< /etc/passwd
 
 if [ $i -eq 1 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}    ║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}     ║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"

@@ -4,7 +4,7 @@
 W='\033[1;37m'
 D='\033[38;5;108m'
 Y='\033[38;5;220m'
-p='\033[38;5;196m'
+P='\033[38;5;196m'
 C='\033[38;5;51m'
 G='\033[38;5;82m'
 N='\033[0m'
@@ -21,7 +21,7 @@ printf " ${Y}[01]${N} %-36s ${D}%-12s${N} %s\n" "➤ GENERAR CUENTA DEMO" "(TEMP
 printf " ${Y}[02]${N} %-36s ${D}%-12s${N} %s\n" "➤ CREAR USUARIO NORMAL" "(OFICIAL)" "👤"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${P}[00]${P} ➤ ${W}[ REGRESAR ]${N}"
+echo -e " ${P}[00]${N} ➤ ${W}[ REGRESAR ]${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 read -p " ► Opción: " op
@@ -145,9 +145,9 @@ echo -e "${D}╠═════════════════════�
  printf "${D}║${N}${R}⏳ Validez     :${N} %-31s  ${D}║${N}\n" "$expira_format ($dias d)"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
-echo -e "${D}║${N}                                                           ${D}║${N}"
-echo -e "${W}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}           ${D}║${N}"
-echo -e "${W}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}                ${D}║${N}"
+echo -e "${D}║${N}                                                  ${D}║${N}"
+echo -e "${W}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}  ${D}║${N}"
+echo -e "${W}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}  ${D}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log

@@ -24,7 +24,6 @@ check_bot_status() {
     fi
 }
 
-# Función que genera el ejecutable del bot
 create_bot_daemon() {
     cat << 'EOF' > "$BOT_SCRIPT"
 #!/bin/bash
@@ -38,94 +37,103 @@ OFFSET=0
 send_message() {
     local chat_id="$1"
     local text="$2"
-    curl -s -X POST "$URL/sendMessage" -d "chat_id=$chat_id" -d "text=$text" -d "parse_mode=HTML" > /dev/null
+    curl -s -X POST "$URL/sendMessage" -d "chat_id=$chat_id" --data-urlencode "text=$text" -d "parse_mode=HTML" > /dev/null
 }
 
 while true; do
     UPDATES=$(curl -s "$URL/getUpdates?offset=$OFFSET&timeout=10")
     
-    # Procesar actualizaciones
-    echo "$UPDATES" | grep -q '"ok":true' || { sleep 3; continue; }
+    if [[ "$UPDATES" =~ "\"ok\":true" ]]; then
+        # Extraer update_id usando jq o python3
+        if command -v jq &>/dev/null; then
+            UPDATES_QTY=$(echo "$UPDATES" | jq '.result | length')
+            if [ "$UPDATES_QTY" -gt 0 ]; then
+                for (( i=0; i<$UPDATES_QTY; i++ )); do
+                    UPDATE_ID=$(echo "$UPDATES" | jq ".result[$i].update_id")
+                    OFFSET=$((UPDATE_ID + 1))
+                    
+                    CHAT_ID=$(echo "$UPDATES" | jq ".result[$i].message.chat.id")
+                    TEXT=$(echo "$UPDATES" | jq -r ".result[$i].message.text")
+                    
+                    # Ignorar si no hay texto
+                    [ "$TEXT" == "null" ] && continue
 
-    # Extraer el ID de actualización más alto
-    UPDATE_IDS=$(echo "$UPDATES" | grep -o '"update_id":[0-9]*' | cut -d: -f2)
-    
-    for update_id in $UPDATE_IDS; do
-        OFFSET=$((update_id + 1))
-        
-        # Extraer datos del mensaje
-        CHAT_ID=$(echo "$UPDATES" | grep -A 10 "$update_id" | grep -o '"chat":{"id":[0-9]*' | head -n1 | cut -d: -f3)
-        TEXT=$(echo "$UPDATES" | grep -A 10 "$update_id" | grep -o '"text":"[^"]*' | head -n1 | cut -d'"' -f4)
-        
-        # Verificar que el mensaje venga del ADMIN
-        if [ "$CHAT_ID" != "$ADMIN_ID" ]; then
-            send_message "$CHAT_ID" "⚠️ <b>Acceso Denegado.</b> No estás autorizado para usar este bot."
-            continue
-        fi
-
-        CMD=$(echo "$TEXT" | awk '{print $1}')
-        PARAM1=$(echo "$TEXT" | awk '{print $2}')
-        PARAM2=$(echo "$TEXT" | awk '{print $3}')
-        PARAM3=$(echo "$TEXT" | awk '{print $4}')
-        PARAM4=$(echo "$TEXT" | awk '{print $5}')
-
-        case "$CMD" in
-            /start|/menu)
-                MSG="🤖 <b>PANEL KIRA BOT DE TELEGRAM</b>%0A%0A"
-                MSG+="<b>Comandos disponibles:</b>%0A"
-                MSG+="📊 /status - Estado del Servidor%0A"
-                MSG+="👥 /online - Usuarios SSH conectados%0A"
-                MSG+="➕ /crear [user] [pass] [dias] [limite] - Crear SSH%0A"
-                send_message "$CHAT_ID" "$MSG"
-                ;;
-            /status)
-                RAM_USED=$(free -h | awk '/Mem:/ {print $3 "/" $2}')
-                UPTIME=$(uptime -p)
-                MSG="📊 <b>ESTADO DEL VPS</b>%0A%0A"
-                MSG+="💾 <b>RAM:</b> $RAM_USED%0A"
-                MSG+="⏱ <b>Uptime:</b> $UPTIME"
-                send_message "$CHAT_ID" "$MSG"
-                ;;
-            /online)
-                ONLINE_COUNT=$(ps aux | grep sshd | grep -v root | grep -v grep | wc -l)
-                MSG="👥 <b>USUARIOS CONECTADOS</b>%0A%0A"
-                MSG+="🟢 <b>Conexiones activas:</b> $ONLINE_COUNT"
-                send_message "$CHAT_ID" "$MSG"
-                ;;
-            /crear)
-                if [ -z "$PARAM1" ] || [ -z "$PARAM2" ] || [ -z "$PARAM3" ]; then
-                    send_message "$CHAT_ID" "❌ <b>Uso correcto:</b>%0A<code>/crear [usuario] [pass] [dias] [limite]</code>"
-                else
-                    USERNAME="$PARAM1"
-                    PASSWORD="$PARAM2"
-                    DAYS="$PARAM3"
-                    LIMIT="${PARAM4:-1}"
-
-                    if id "$USERNAME" &>/dev/null; then
-                        send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> ya existe."
-                    else
-                        useradd -M -s /bin/false "$USERNAME" 2>/dev/null
-                        echo "$USERNAME:$PASSWORD" | chpasswd 2>/dev/null
-                        
-                        echo "$(date +%s) ${DAYS}d" > "/etc/kira/expire/$USERNAME"
-                        echo "$LIMIT" > "/etc/kira/limits/$USERNAME"
-                        echo "$USERNAME $PASSWORD ${DAYS}d $LIMIT $(date)" >> /etc/kira/users.log
-
-                        EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
-                        chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
-
-                        MSG="✅ <b>USUARIO CREADO CON ÉXITO</b>%0A%0A"
-                        MSG+="👤 <b>Usuario:</b> <code>$USERNAME</code>%0A"
-                        MSG+="🔑 <b>Contraseña:</b> <code>$PASSWORD</code>%0A"
-                        MSG+="📅 <b>Días:</b> $DAYS días%0A"
-                        MSG+="📱 <b>Límite:</b> $LIMIT disps."
-                        send_message "$CHAT_ID" "$MSG"
+                    if [ "$CHAT_ID" != "$ADMIN_ID" ]; then
+                        send_message "$CHAT_ID" "⚠️ <b>Acceso Denegado.</b> Tu ID ($CHAT_ID) no está autorizado."
+                        continue
                     fi
-                fi
-                ;;
-        esac
-    done
-    sleep 2
+
+                    CMD=$(echo "$TEXT" | awk '{print $1}')
+                    PARAM1=$(echo "$TEXT" | awk '{print $2}')
+                    PARAM2=$(echo "$TEXT" | awk '{print $3}')
+                    PARAM3=$(echo "$TEXT" | awk '{print $4}')
+                    PARAM4=$(echo "$TEXT" | awk '{print $5}')
+
+                    case "$CMD" in
+                        /start|/menu)
+                            MSG="🤖 <b>PANEL KIRA BOT DE TELEGRAM</b>
+
+<b>Comandos disponibles:</b>
+📊 /status - Estado del VPS
+👥 /online - Usuarios SSH conectados
+➕ /crear [user] [pass] [dias] [limite] - Crear SSH"
+                            send_message "$CHAT_ID" "$MSG"
+                            ;;
+                        /status)
+                            RAM_USED=$(free -h | awk '/Mem:/ {print $3 "/" $2}')
+                            UPTIME=$(uptime -p)
+                            MSG="📊 <b>ESTADO DEL VPS</b>
+
+💾 <b>RAM:</b> $RAM_USED
+⏱ <b>Uptime:</b> $UPTIME"
+                            send_message "$CHAT_ID" "$MSG"
+                            ;;
+                        /online)
+                            ONLINE_COUNT=$(ps aux | grep sshd | grep -v root | grep -v grep | wc -l)
+                            MSG="👥 <b>USUARIOS CONECTADOS</b>
+
+🟢 <b>Conexiones activas:</b> $ONLINE_COUNT"
+                            send_message "$CHAT_ID" "$MSG"
+                            ;;
+                        /crear)
+                            if [ -z "$PARAM1" ] || [ -z "$PARAM2" ] || [ -z "$PARAM3" ]; then
+                                send_message "$CHAT_ID" "❌ <b>Uso correcto:</b>
+<code>/crear [usuario] [pass] [dias] [limite]</code>"
+                            else
+                                USERNAME="$PARAM1"
+                                PASSWORD="$PARAM2"
+                                DAYS="$PARAM3"
+                                LIMIT="${PARAM4:-1}"
+
+                                if id "$USERNAME" &>/dev/null; then
+                                    send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> ya existe."
+                                else
+                                    useradd -M -s /bin/false "$USERNAME" 2>/dev/null
+                                    echo "$USERNAME:$PASSWORD" | chpasswd 2>/dev/null
+                                    
+                                    echo "$(date +%s) ${DAYS}d" > "/etc/kira/expire/$USERNAME"
+                                    echo "$LIMIT" > "/etc/kira/limits/$USERNAME"
+                                    echo "$USERNAME $PASSWORD ${DAYS}d $LIMIT $(date)" >> /etc/kira/users.log
+
+                                    EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+                                    chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
+
+                                    MSG="✅ <b>USUARIO CREADO CON ÉXITO</b>
+
+👤 <b>Usuario:</b> <code>$USERNAME</code>
+🔑 <b>Contraseña:</b> <code>$PASSWORD</code>
+📅 <b>Días:</b> $DAYS días
+📱 <b>Límite:</b> $LIMIT disps."
+                                    send_message "$CHAT_ID" "$MSG"
+                                fi
+                            fi
+                            ;;
+                    esac
+                done
+            fi
+        fi
+    fi
+    sleep 1
 done
 EOF
     chmod +x "$BOT_SCRIPT"
@@ -137,6 +145,9 @@ start_bot() {
         sleep 2
         return
     fi
+
+    # Instalar jq si no está instalado
+    command -v jq &>/dev/null || apt-get install jq -y &>/dev/null
 
     stop_bot
     create_bot_daemon
@@ -161,6 +172,10 @@ config_bot() {
     echo -e "${D}━━━━━━━━━━━━ CONFIGURACIÓN DE TELEGRAM ━━━━━━━━━━━━${N}"
     read -p " ► Ingresa el BOT TOKEN (de @BotFather): " token_input
     read -p " ► Ingresa tu TELEGRAM ID (de @userinfobot): " admin_input
+
+    # Limpiar posibles espacios
+    token_input=$(echo "$token_input" | xargs)
+    admin_input=$(echo "$admin_input" | xargs)
 
     if [ -n "$token_input" ] && [ -n "$admin_input" ]; then
         echo "TOKEN=\"$token_input\"" > "$BOT_CONFIG"

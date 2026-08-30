@@ -18,9 +18,9 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 while true; do
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 🔄   PANEL DE EDICIÓN Y RENOVACIÓN                   ${D} ║${N}"
+echo -e "${D}║${Y}                 🔄   PANEL DE EDICIÓN Y RENOVACIÓN                    ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
+printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 declare -A users_list
@@ -29,16 +29,20 @@ i=1
 while IFS=: read -u 3 -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
-        # Obtener Contraseña
-        pass=$(grep -w "^$username" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
-        [ -z "$pass" ] && pass="---"
+        # 1. Obtener Contraseña (Prioriza /etc/kira/pass/)
+        if [ -f "/etc/kira/pass/$username" ]; then
+            pass=$(cat "/etc/kira/pass/$username")
+        else
+            pass=$(grep -w "^$username" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
+            [ -z "$pass" ] && pass="---"
+        fi
 
-        # Obtener Límite
+        # 2. Obtener Límite
         limit=$(cat /etc/kira/limits/$username 2>/dev/null)
         [ -z "$limit" ] && limit="1"
         limit_txt="${limit} disp."
 
-        # CÁLCULO DE VALIDEZ
+        # 3. CÁLCULO DE VALIDEZ
         validez_txt=""
         validez_color=""
         now_sec=$(date +%s)
@@ -106,11 +110,11 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
 done 3< /etc/passwd
 
 if [ $i -eq 1 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}     ║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                       ${D} ║${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                        ${D}║${N}"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona el ID del usuario a editar: " selection
@@ -122,7 +126,14 @@ fi
 if [[ -n "${users_list[$selection]}" ]]; then
     user_to_edit="${users_list[$selection]}"
     
-    current_pass=$(grep -w "^$user_to_edit" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
+    # Obtener contraseña actual desde /etc/kira/pass/ o respaldo en log
+    if [ -f "/etc/kira/pass/$user_to_edit" ]; then
+        current_pass=$(cat "/etc/kira/pass/$user_to_edit")
+    else
+        current_pass=$(grep -w "^$user_to_edit" /etc/kira/users.log 2>/dev/null | awk '{print $2}')
+    fi
+    [ -z "$current_pass" ] && current_pass="---"
+
     current_limit=$(cat /etc/kira/limits/$user_to_edit 2>/dev/null)
     [ -z "$current_limit" ] && current_limit=1
 
@@ -135,6 +146,11 @@ if [[ -n "${users_list[$selection]}" ]]; then
     read -p " ► Nueva Contraseña (Enter para mantener '$current_pass'): " new_pass
     if [ -n "$new_pass" ]; then
         echo "$user_to_edit:$new_pass" | chpasswd 2>/dev/null
+        
+        # Guardar/Actualizar en /etc/kira/pass/
+        mkdir -p /etc/kira/pass
+        echo "$new_pass" > "/etc/kira/pass/$user_to_edit"
+        
         # Actualizar en log
         if grep -q "^$user_to_edit " /etc/kira/users.log 2>/dev/null; then
             sed -i "s/^$user_to_edit [^ ]*/$user_to_edit $new_pass/" /etc/kira/users.log
@@ -147,15 +163,17 @@ if [[ -n "${users_list[$selection]}" ]]; then
     # EDITAR LÍMITE
     read -p " ► Nuevo Límite SSH (Enter para mantener '$current_limit'): " new_limit
     if [ -n "$new_limit" ] && [[ "$new_limit" =~ ^[0-9]+$ ]]; then
-        echo "$new_limit" > /etc/kira/limits/$user_to_edit
+        mkdir -p /etc/kira/limits
+        echo "$new_limit" > "/etc/kira/limits/$user_to_edit"
         echo -e " ${G}✔ Límite actualizado a $new_limit.${N}"
     fi
 
     # RENOVAR VALIDEZ
     read -p " ► Días / Tiempo de validez a añadir (Ej: 30d / 2h / 30m - Enter para no cambiar): " new_time
     if [ -n "$new_time" ]; then
+        mkdir -p /etc/kira/expire
         if [[ "$new_time" =~ ^[0-9]+[smhd]$ ]]; then
-            echo "$(date +%s) $new_time" > /etc/kira/expire/$user_to_edit
+            echo "$(date +%s) $new_time" > "/etc/kira/expire/$user_to_edit"
             
             # Si es en días, extender también en el sistema operativo
             if [[ "$new_time" =~ d$ ]]; then
@@ -167,7 +185,7 @@ if [[ -n "${users_list[$selection]}" ]]; then
             fi
             echo -e " ${G}✔ Validez renovada correctamente por $new_time.${N}"
         elif [[ "$new_time" =~ ^[0-9]+$ ]]; then
-            echo "$(date +%s) ${new_time}d" > /etc/kira/expire/$user_to_edit
+            echo "$(date +%s) ${new_time}d" > "/etc/kira/expire/$user_to_edit"
             exp_date=$(date -d "+$new_time days" +%Y-%m-%d)
             chage -E "$exp_date" "$user_to_edit" 2>/dev/null
             echo -e " ${G}✔ Validez renovada correctamente por ${new_time} días.${N}"

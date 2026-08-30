@@ -48,8 +48,13 @@ echo "$LIMIT" > "/etc/kira/limits/$USERNAME"
 EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
 echo "$EXP_DATE" > "/etc/kira/expire/$USERNAME"
 
-# Aplicar chage con la fecha exacta en formato YYYY-MM-DD
-chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
+# Convertir a días desde la época Unix para compatibilidad total con chage -E
+EXPR_DAYS=$(( $(date -d "$EXP_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$EXP_DATE" +%s 2>/dev/null) / 86400 ))
+if [ -n "$EXPR_DAYS" ] && [ "$EXPR_DAYS" -gt 0 ]; then
+    chage -E "$EXPR_DAYS" "$USERNAME" 2>/dev/null || chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
+else
+    chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
+fi
 
 echo -e "\033[1;32m✔ Usuario $USERNAME creado exitosamente con clave '$PASSWORD' por $DAYS días (Expira: $EXP_DATE).\033[0m"
 EOF
@@ -306,7 +311,8 @@ LIMITE : <code>$LIM_VAL</code>
                                 if id "$USERNAME" &>/dev/null && [ -n "$DAYS" ]; then
                                     EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
                                     echo "$EXP_DATE" > "/etc/kira/expire/$USERNAME"
-                                    chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
+                                    EXPR_DAYS=$(( $(date -d "$EXP_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$EXP_DATE" +%s 2>/dev/null) / 86400 ))
+                                    chage -E "$EXPR_DAYS" "$USERNAME" 2>/dev/null || chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "🔄 Usuario <b>$USERNAME</b> renovado a <b>$DAYS días</b> (F. Expiración: <code>$EXP_DATE</code>)."
                                 else
                                     send_message "$CHAT_ID_CLEAN" "⚠️ El usuario <b>$USERNAME</b> no existe o los días son inválidos."
@@ -328,7 +334,8 @@ LIMITE : <code>$LIM_VAL</code>
                                         NEW_EXP=$(date -d "+$ADD_DAYS days" +%Y-%m-%d)
                                     fi
                                     echo "$NEW_EXP" > "/etc/kira/expire/$USERNAME"
-                                    chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
+                                    EXPR_DAYS=$(( $(date -d "$NEW_EXP" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$NEW_EXP" +%s 2>/dev/null) / 86400 ))
+                                    chage -E "$EXPR_DAYS" "$USERNAME" 2>/dev/null || chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "➕ <b>+$ADD_DAYS Días añadidos a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
                                     send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado o días inválidos."
@@ -350,7 +357,8 @@ LIMITE : <code>$LIM_VAL</code>
                                         NEW_EXP=$(date -d "+1 days" +%Y-%m-%d)
                                     fi
                                     echo "$NEW_EXP" > "/etc/kira/expire/$USERNAME"
-                                    chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
+                                    EXPR_DAYS=$(( $(date -d "$NEW_EXP" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$NEW_EXP" +%s 2>/dev/null) / 86400 ))
+                                    chage -E "$EXPR_DAYS" "$USERNAME" 2>/dev/null || chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
                                     send_message "$CHAT_ID_CLEAN" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
                                 else
                                     send_message "$CHAT_ID_CLEAN" "⚠️ Usuario no encontrado o días inválidos."

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Evita que cualquier error o señal cierre la terminal por completo
+trap '' INT TERM
+
 # ========= COLORES =========
 W='\033[1;37m'
 D='\033[38;5;108m'
@@ -9,10 +12,10 @@ C='\033[38;5;51m'
 G='\033[38;5;82m'
 N='\033[0m'
 
-PINK='\033[38;5;218m' # Rosado bebé (Expirado)
-BLUE='\033[38;5;75m'  # Azul claro (Vigente)
+PINK='\033[38;5;218m'
+BLUE='\033[38;5;75m'
 
-PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+PORT=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
 
 while true; do
@@ -23,13 +26,14 @@ echo -e "${D}╠═════════════════════�
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N}  ${D} ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
-declare -A users_list
+# Usamos arrays indexados estándar (compatible con cualquier Bash)
+usernames_arr=()
 i=1
 
 while IFS=: read -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
-        # 1. Obtener Contraseña (Prioriza /etc/kira/pass/)
+        # 1. Obtener Contraseña
         if [ -f "/etc/kira/pass/$username" ]; then
             pass=$(cat "/etc/kira/pass/$username")
         else
@@ -98,7 +102,7 @@ while IFS=: read -r username _ uid _ _ _ _; do
             fi
         fi
 
-        users_list[$i]="$username"
+        usernames_arr[$i]="$username"
         id_str="[$i]"
         [ $i -lt 10 ] && id_str="[0$i]"
 
@@ -119,14 +123,15 @@ echo -e "${D}╚═════════════════════�
 echo ""
 read -p " ► Selecciona el ID del usuario a editar: " selection
 
-if [[ "$selection" == "0" || "$selection" == "00" ]]; then
-    exit 0
+# Validar si eligió salir
+if [[ "$selection" == "0" || "$selection" == "00" || -z "$selection" ]]; then
+    break
 fi
 
-if [[ -n "${users_list[$selection]}" ]]; then
-    user_to_edit="${users_list[$selection]}"
+# Validar selección numérica y existencia en el array
+if [[ "$selection" =~ ^[0-9]+$ ]] && [ -n "${usernames_arr[$selection]}" ]; then
+    user_to_edit="${usernames_arr[$selection]}"
     
-    # Obtener contraseña actual desde /etc/kira/pass/ o respaldo en log
     if [ -f "/etc/kira/pass/$user_to_edit" ]; then
         current_pass=$(cat "/etc/kira/pass/$user_to_edit")
     else
@@ -146,12 +151,9 @@ if [[ -n "${users_list[$selection]}" ]]; then
     read -p " ► Nueva Contraseña (Enter para mantener '$current_pass'): " new_pass
     if [ -n "$new_pass" ]; then
         echo "$user_to_edit:$new_pass" | chpasswd 2>/dev/null
-        
-        # Guardar/Actualizar en /etc/kira/pass/
         mkdir -p /etc/kira/pass
         echo "$new_pass" > "/etc/kira/pass/$user_to_edit"
         
-        # Actualizar en log
         if grep -q "^$user_to_edit " /etc/kira/users.log 2>/dev/null; then
             sed -i "s/^$user_to_edit [^ ]*/$user_to_edit $new_pass/" /etc/kira/users.log
         else
@@ -174,11 +176,9 @@ if [[ -n "${users_list[$selection]}" ]]; then
         mkdir -p /etc/kira/expire
         if [[ "$new_time" =~ ^[0-9]+[smhd]$ ]]; then
             echo "$(date +%s) $new_time" > "/etc/kira/expire/$user_to_edit"
-            
-            # Si es en días, extender también en el sistema operativo
             if [[ "$new_time" =~ d$ ]]; then
                 days_num="${new_time//d/}"
-                exp_date=$(date -d "+$days_num days" +%Y-%m-%d 2>/dev/null || date -j -v+${days_num}d +%Y-%m-%d 2>/dev/null)
+                exp_date=$(date -d "+$days_num days" +%Y-%m-%d 2>/dev/null)
                 chage -E "$exp_date" "$user_to_edit" 2>/dev/null
             else
                 chage -E -1 "$user_to_edit" 2>/dev/null
@@ -186,11 +186,11 @@ if [[ -n "${users_list[$selection]}" ]]; then
             echo -e " ${G}✔ Validez renovada correctamente por $new_time.${N}"
         elif [[ "$new_time" =~ ^[0-9]+$ ]]; then
             echo "$(date +%s) ${new_time}d" > "/etc/kira/expire/$user_to_edit"
-            exp_date=$(date -d "+$new_time days" +%Y-%m-%d 2>/dev/null || date -j -v+${new_time}d +%Y-%m-%d 2>/dev/null)
+            exp_date=$(date -d "+$new_time days" +%Y-%m-%d 2>/dev/null)
             chage -E "$exp_date" "$user_to_edit" 2>/dev/null
             echo -e " ${G}✔ Validez renovada correctamente por ${new_time} días.${N}"
         else
-            echo -e " ${R}❌ Formato de tiempo inválido. No se aplicaron cambios de fecha.${N}"
+            echo -e " ${R}❌ Formato de tiempo inválido.${N}"
         fi
     fi
 

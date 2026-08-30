@@ -70,7 +70,7 @@ bash modules/user_online.sh
 ;;
 
 6|06)
-bash modules/protocols.sh
+bash modules/ssh_banner.sh
 ;;
 
 7|07|8|08|9|09|10|11|12|13|14)

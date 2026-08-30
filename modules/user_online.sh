@@ -16,7 +16,7 @@ clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
 echo -e "${D}║${Y}                 👥   USUARIOS SSH CONECTADOS                          ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${C}%-4s %-16s %-12s %-10s %-10s %-11s${N} ${D}║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "CONEXIÓN" "ESTADO"
+printf "${D}║${N} ${C}%-4s %-16s %-12s %-10s %-10s %-11s${N} ${D}  ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "CONEXIÓN" "ESTADO"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 i=1
@@ -58,11 +58,11 @@ done 3< /etc/passwd
 total_users_online=$((i - 1))
 
 if [ $total_users_online -eq 0 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios conectados en este momento.     ${D}    ║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios conectados en este momento.     ${D}       ║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}USUARIOS ONLINE:${N} %-10s ${C}TOTAL CONEXIONES:${N} %-17s ${D}║${N}\n" "$total_users_online" "$total_online"
+printf "${D}║${N} ${W}USUARIOS ONLINE:${N} %-10s ${C}TOTAL CONEXIONES:${N} %-17s ${D}     ║${N}\n" "$total_users_online" "$total_online"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 
 echo ""

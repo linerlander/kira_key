@@ -58,8 +58,7 @@ bash modules/user_clear.sh
 ;;
 
 3|03)
-echo -e "${Y}En desarrollo...${N}"
-sleep 2
+bash modules/user_edit.sh
 ;;
 
 4|04)

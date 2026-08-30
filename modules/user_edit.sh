@@ -18,7 +18,7 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 while true; do
 clear
 echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}                 🔄   PANEL DE EDICIÓN Y RENOVACIÓN                   ${D} ║${N}"
+echo -e "${D}║${Y}                     🔄   PANEL DE EDICIÓN Y RENOVACIÓN                  ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${C}%-4s %-16s %-12s %-8s %-9s %-15s${N}  ${D} ║${N}\n" "ID" "USUARIO" "PASS" "PUERTO" "LÍMITE" "EXPIRACIÓN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
@@ -26,7 +26,7 @@ echo -e "${D}╠═════════════════════�
 declare -A users_list
 i=1
 
-while IFS=: read -u 3 -r username _ uid _ _ _ _; do
+while IFS=: read -r username _ uid _ _ _ _; do
     if [ "$uid" -ge 1000 ] && [ "$username" != "nobody" ]; then
         
         # 1. Obtener Contraseña (Prioriza /etc/kira/pass/)
@@ -48,7 +48,7 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
         now_sec=$(date +%s)
 
         if [ -f "/etc/kira/expire/$username" ]; then
-            read -r created_sec duration < "/etc/kira/expire/$username"
+            read -r created_sec duration < "/etc/kira/expire/$username" 2>/dev/null
             
             num="${duration//[!0-9]/}"
             unit="${duration//[0-9]/}"
@@ -107,14 +107,14 @@ while IFS=: read -u 3 -r username _ uid _ _ _ _; do
 
         ((i++))
     fi
-done 3< /etc/passwd
+done < /etc/passwd
 
 if [ $i -eq 1 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios SSH registrados.                  ${D}║${N}"
+    echo -e "${D}║${N} ${R}                    No hay usuarios SSH registrados.                   ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                        ${D}║${N}"
+echo -e "${D}║${N} ${R}[0] REGRESAR AL MENÚ PRINCIPAL${N}                                    ${D}║${N}"
 echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
 echo ""
 read -p " ► Selecciona el ID del usuario a editar: " selection
@@ -178,7 +178,7 @@ if [[ -n "${users_list[$selection]}" ]]; then
             # Si es en días, extender también en el sistema operativo
             if [[ "$new_time" =~ d$ ]]; then
                 days_num="${new_time//d/}"
-                exp_date=$(date -d "+$days_num days" +%Y-%m-%d)
+                exp_date=$(date -d "+$days_num days" +%Y-%m-%d 2>/dev/null || date -j -v+${days_num}d +%Y-%m-%d 2>/dev/null)
                 chage -E "$exp_date" "$user_to_edit" 2>/dev/null
             else
                 chage -E -1 "$user_to_edit" 2>/dev/null
@@ -186,7 +186,7 @@ if [[ -n "${users_list[$selection]}" ]]; then
             echo -e " ${G}✔ Validez renovada correctamente por $new_time.${N}"
         elif [[ "$new_time" =~ ^[0-9]+$ ]]; then
             echo "$(date +%s) ${new_time}d" > "/etc/kira/expire/$user_to_edit"
-            exp_date=$(date -d "+$new_time days" +%Y-%m-%d)
+            exp_date=$(date -d "+$new_time days" +%Y-%m-%d 2>/dev/null || date -j -v+${new_time}d +%Y-%m-%d 2>/dev/null)
             chage -E "$exp_date" "$user_to_edit" 2>/dev/null
             echo -e " ${G}✔ Validez renovada correctamente por ${new_time} días.${N}"
         else

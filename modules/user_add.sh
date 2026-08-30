@@ -6,13 +6,14 @@ D='\033[38;5;245m'
 Y='\033[38;5;220m'
 R='\033[38;5;196m'
 C='\033[38;5;51m'
+G='\033[38;5;82m'
 N='\033[0m'
 
 while true; do
 clear
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}🔐 CREADOR DE CUENTAS SSH | KIRA${N}"
+echo -e " ${Y}🔐 CREADOR DE CUENTAS SSH | KIRA VIP${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 printf " ${Y}[01]${N} %-36s ${D}%-12s${N} %s\n" "➤ GENERAR CUENTA DEMO" "(TEMPORAL)" "⚡"
@@ -67,21 +68,21 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
 
 clear
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}⚡ CUENTA DEMO GENERADA EXITOSAMENTE ⚡${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
-printf " ${Y}⚡ IP SERVER   :${N} ${W}%s\n" "$IP"
-printf " ${Y}👤 USUARIO     :${N} ${W}%s\n" "$user"
-printf " ${Y}🔑 CONTRASEÑA  :${N} ${W}%s\n" "$pass"
-printf " ${Y}📡 PUERTO SSH  :${N} ${W}%s\n" "$PORT"
-printf " ${Y}📊 LÍMITE SSH  :${N} ${W}%s dispositivo(s)\n" "$limit"
-printf " ${Y}⏳ TIEMPO VALIDO:${N} ${W}%s\n" "$tiempo"
-
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}🔗 CONEXIÓN DIRECTA:${N}\n ${W}${IP}:${PORT}@${user}:${pass}${N}"
-echo -e " ${Y}⚡ PROXY PAYLOAD:${N}\n ${W}${IP}:80@${user}:${pass}${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
+echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡         ${D}║${N}"
+echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
+printf "${D}║${N} ${C}🌐 IP SERVER   :${N} %-31s ${D}║${N}\n" "$IP"
+printf "${D}║${N} ${C}👤 USUARIO     :${N} %-31s ${D}║${N}\n" "$user"
+printf "${D}║${N} ${C}🔑 CONTRASEÑA  :${N} %-31s ${D}║${N}\n" "$pass"
+printf "${D}║${N} ${C}📡 PUERTO SSH  :${N} %-31s ${D}║${N}\n" "$PORT"
+printf "${D}║${N} ${C}📊 LÍMITE SSH  :${N} %-31s ${D}║${N}\n" "$limit dispo."
+printf "${D}║${N} ${C}⏳ VALIDEZ     :${N} %-31s ${D}║${N}\n" "$tiempo"
+echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
+echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+echo -e "${D}║${N}                                                  ${D}║${N}"
+echo -e " ${W}🔗 DIRECTO :${N} ${Y}${IP}:${PORT}@${user}:${pass}${N}"
+echo -e " ${W}🌐 PROXY   :${N} ${Y}${IP}:80@${user}:${pass}${N}"
+echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
 
@@ -132,21 +133,21 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 expira_format=$(date -d "$dias days" +"%d/%m/%Y")
 
 clear
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}👤 CUENTA SSH GENERADA EXITOSAMENTE 👤${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-
-printf " ${Y}⚡ IP SERVER   :${N} ${W}%s\n" "$IP"
-printf " ${Y}👤 USUARIO     :${N} ${W}%s\n" "$user"
-printf " ${Y}🔑 CONTRASEÑA  :${N} ${W}%s\n" "$pass"
-printf " ${Y}📡 PUERTO SSH  :${N} ${W}%s\n" "$PORT"
-printf " ${Y}📊 LÍMITE SSH  :${N} ${W}%s dispositivo(s)\n" "$limit"
-printf " ${Y}⏳ EXPIRACIÓN  :${N} ${W}%s (%s días)\n" "$expira_format" "$dias"
-
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}🔗 CONEXIÓN DIRECTA:${N}\n ${W}${IP}:${PORT}@${user}:${pass}${N}"
-echo -e " ${Y}⚡ PROXY PAYLOAD:${N}\n ${W}${IP}:80@${user}:${pass}${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
+echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑        ${D}║${N}"
+echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
+printf "${D}║${N} ${C}🌐 IP SERVER   :${N} %-31s ${D}║${N}\n" "$IP"
+printf "${D}║${N} ${C}👤 USUARIO     :${N} %-31s ${D}║${N}\n" "$user"
+printf "${D}║${N} ${C}🔑 CONTRASEÑA  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
+printf "${D}║${N} ${C}📡 PUERTO SSH  :${N} %-31s ${D}║${N}\n" "$PORT"
+printf "${D}║${N} ${C}📊 LÍMITE SSH  :${N} %-31s ${D}║${N}\n" "$limit dispo."
+printf "${D}║${N} ${C}⏳ EXPIRACIÓN  :${N} %-31s ${D}║${N}\n" "$expira_format ($dias d)"
+echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
+echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+echo -e "${D}║${N}                                                  ${D}║${N}"
+echo -e " ${W}🔗 DIRECTO :${N} ${Y}${IP}:${PORT}@${user}:${pass}${N}"
+echo -e " ${W}🌐 PROXY   :${N} ${Y}${IP}:80@${user}:${pass}${N}"
+echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log
 

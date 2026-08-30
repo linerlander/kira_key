@@ -66,8 +66,7 @@ bash modules/user_list.sh
 ;;
 
 5|05)
-who
-read -p "Enter..."
+bas modules/user_online.sh
 ;;
 
 6|06)

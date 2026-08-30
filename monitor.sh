@@ -123,11 +123,11 @@ while true; do
 
     # Top procesos limpios (5 líneas exactas)
     ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 6 | tail -n 5 | while read -r pid comm cpu_use mem_use; do
-        printf "${C}║${N} ${W}%-6s ${C}%-16s ${Y}%-7s ${G}%-7s${N}           ${C}║${N}\n" "$pid" "${comm:0:15}" "${cpu_use}%" "${mem_use}%"
+        printf "${C}║${N} ${W}%-6s ${C}%-16s ${Y}%-7s ${G}%-7s${N}           ${C} ║${N}\n" "$pid" "${comm:0:15}" "${cpu_use}%" "${mem_use}%"
     done
 
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${N} ${R}[0] SALIR DEL MONITOR                               ${C}║${N}"
+    echo -e "${C}║${N} ${R}[0] SALIR DEL MONITOR                                 ${C}║${N}"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
 
     # Captura de tecla sin interrumpir el refresco fluido de 1 segundo

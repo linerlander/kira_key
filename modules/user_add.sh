@@ -139,7 +139,7 @@ proxy="${IP}:80@${user}:${pass}"
 
 clear
 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑        ${D}║${N}"
+echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑         ${D}║${N}"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
 printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"

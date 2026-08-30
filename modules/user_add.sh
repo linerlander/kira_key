@@ -21,7 +21,7 @@ printf " ${Y}[01]${N} %-36s ${D}%-12s${N} %s\n" "➤ GENERAR CUENTA DEMO" "(TEMP
 printf " ${Y}[02]${N} %-36s ${D}%-12s${N} %s\n" "➤ CREAR USUARIO NORMAL" "(OFICIAL)" "👤"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${P}[00]${N} ➤ ${W}[ REGRESAR ]${N}"
+echo -e " ${P}[00]${P} ➤ ${W}[ REGRESAR ]${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
 read -p " ► Opción: " op
@@ -81,7 +81,7 @@ printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$tiempo"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${W}║${N}🔗 Direct:${N} ${Y}${IP}:${PORT}@${user}:${pass}  ${D}║${N}"
+echo -e "${W}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}  ${D}║${N}"
 echo -e "${W}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}  ${D}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
@@ -146,7 +146,7 @@ echo -e "${D}╠═════════════════════�
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${W}║${N}🔗 Direct:${N} ${Y}${IP}:${PORT}@${user}:${pass} ${D}║${N}"
+echo -e "${W}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass} ${D}║${N}"
 echo -e "${W}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass} ${D}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 

@@ -32,7 +32,6 @@ BOT_DIR="/etc/kira/bot"
 source "$BOT_DIR/bot.conf"
 
 TOKEN=$(echo "$TOKEN" | tr -d '\r\n"')
-ADMIN_IDS=$(echo "$ADMIN_IDS" | tr -d '\r\n"')
 
 URL="https://api.telegram.org/bot$TOKEN"
 OFFSET=0
@@ -41,11 +40,15 @@ VPS_IP=$(curl -s https://api.ipify.org || echo "VPS_IP")
 send_message() {
     local chat_id="$1"
     local text="$2"
-    curl -s -X POST "$URL/sendMessage" -d "chat_id=$chat_id" --data-urlencode "text=$text" -d "parse_mode=HTML" > /dev/null
+    curl -s -X POST "$URL/sendMessage" \
+        -d "chat_id=$chat_id" \
+        --data-urlencode "text=$text" \
+        -d "parse_mode=HTML" > /dev/null
 }
 
 is_authorized() {
     local target_id="$1"
+    source "$BOT_DIR/bot.conf"
     IFS=',' read -ra ADM_LIST <<< "$ADMIN_IDS"
     for id in "${ADM_LIST[@]}"; do
         clean_id=$(echo "$id" | tr -d ' ')
@@ -87,7 +90,7 @@ while true; do
                     case "$CMD" in
                         /start|/menu)
                             MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-👑 <b>BIENVENIDO SUPER ADMIN PREMIUM</b> 👑
+👑 <b>BIENVENIDO SUPER ADMIN PREMIUM</b>
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
 😃 <i>MENU DE ACCIONES RÁPIDAS</i> 😃
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
@@ -96,18 +99,25 @@ while true; do
 
 👥 <b>Usuarios</b>
  • /agregar → <i>Agregar usuario SSH</i>
- • /demo → <i>Crear usuario demo (1 día)</i>
+ • /demo → <i>Crear usuario demo</i>
  • /usuarios → <i>Lista de usuarios</i>
  • /conectados → <i>Usuarios conectados</i>
  • /borrar → <i>Eliminar usuario</i>
 
 ⌛ <b>Renovaciones</b>
  • /renovar → <i>Renovación directa</i>
+ • /renovarM → <i>Renovación + días ➕</i>
+ • /renovarQ → <i>Renovación - días ➖</i>
 
 ⚙️ <b>VPS</b>
  • /infovps → <i>Información del VPS</i>
- • /liberados → <i>Usuarios liberados (Sin Límite)</i>
- • /reiniciar → <i>Reiniciar SSH/WS</i>
+ • /liberados → <i>Usuarios liberados</i>
+ • /reiniciar → <i>Reiniciar servicios</i>
+
+🔐 <b>Gestión de Admin</b>
+ • /aggADM → <i>Agregar admin</i>
+ • /creditos → <i>Autorizar créditos</i>
+ • /admkill → <i>Quitar autorización</i>
 
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID" "$MSG"
@@ -157,21 +167,29 @@ while true; do
                             ;;
 
                         /demo)
-                            DEMO_USER="demo$(RANDOM%8999+1000)"
+                            # Generación autogenerada de usuario demo con prefijo Kira-
+                            RAND_ID=$((RANDOM % 899999 + 100000))
+                            DEMO_USER="Kira-$RAND_ID"
                             DEMO_PASS="123456"
+                            TIME_VAL="${PARAM1:-1d}" # Ejemplo: 30m, 2h, 1d (por defecto 1d)
+
                             useradd -M -s /bin/false "$DEMO_USER" 2>/dev/null
                             echo "$DEMO_USER:$DEMO_PASS" | chpasswd 2>/dev/null
                             echo "$DEMO_PASS" > "/etc/kira/pass/$DEMO_USER"
                             echo "1" > "/etc/kira/limits/$DEMO_USER"
+                            
                             EXP_DATE=$(date -d "+1 days" +%Y-%m-%d)
                             chage -E "$EXP_DATE" "$DEMO_USER" 2>/dev/null
 
-                            MSG="🎁 <b>USUARIO DEMO GENERADO (24H)</b>
-
-👤 <b>Usuario:</b> <code>$DEMO_USER</code>
+                            MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+🎁 <b>GENERAR CUENTA DEMO</b>
+✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+▶ <b>Usuario autogenerado:</b> <code>$DEMO_USER</code>
 🔑 <b>Contraseña:</b> <code>$DEMO_PASS</code>
-⏱ <b>Duración:</b> 1 Día (24 Horas)
-📱 <b>Límite:</b> 1 Dispositivo"
+► <b>Tiempo de duración:</b> $TIME_VAL
+📱 <b>Límite:</b> 1 Dispositivo
+🌐 <b>IP VPS:</b> <code>$VPS_IP</code>
+✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID" "$MSG"
                             ;;
 
@@ -183,29 +201,124 @@ while true; do
                                 MSG=""
                                 count=1
                                 for u in $USERS_LIST; do
-                                    # Obtener Password guardado o default
+                                    # Omitir usuarios demo del listado si se desea o mostrarlos limpios
                                     [ -f "/etc/kira/pass/$u" ] && PASS_VAL=$(cat "/etc/kira/pass/$u") || PASS_VAL="****"
                                     
-                                    # Expiración
                                     EXP_RAW=$(chage -l "$u" | grep "Account expires" | awk -F: '{print $2}')
                                     if [[ "$EXP_RAW" == *"never"* ]]; then
-                                        EXP_FMT="NUNCA"
+                                        EXP_FMT="CADUCADO"
                                     else
-                                        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "$EXP_RAW")
+                                        EXP_FMT=$(date -d "$EXP_RAW" "+%Y-%m-%d" 2>/dev/null || echo "CADUCADO")
                                     fi
 
-                                    # Límite
                                     [ -f "/etc/kira/limits/$u" ] && LIM_VAL=$(cat "/etc/kira/limits/$u") || LIM_VAL="1"
 
-                                    MSG+="==================================%0A"
-                                    MSG+="<i>USER ($count) :</i> <b>$u</b>%0A"
-                                    MSG+="<i>PASSWD :</i> <code>$PASS_VAL</code>%0A"
-                                    MSG+="<i>EXPIRA :</i> <code>$EXP_FMT</code>%0A"
-                                    MSG+="<i>LIMITE :</i> <code>$LIM_VAL</code>%0A"
+                                    MSG+="==================================
+<i>USER ($count) :</i> <b>$u</b>
+<i>PASSWD :</i> <code>$PASS_VAL</code>
+<i>EXPIRA :</i> <code>$EXP_FMT</code>
+<i>LIMITE :</i> <code>$LIM_VAL</code>
+"
                                     count=$((count+1))
                                 done
                                 MSG+="=================================="
                                 send_message "$CHAT_ID" "$MSG"
+                            fi
+                            ;;
+
+                        /renovar)
+                            if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
+                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+<b>FORMA DE USAR ESTA OPCIÓN</b>
+✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
+<code>/renovar Nombre_User Dias</code>
+✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
+                                send_message "$CHAT_ID" "$MSG"
+                            else
+                                USERNAME="$PARAM1"
+                                DAYS="$PARAM2"
+                                if id "$USERNAME" &>/dev/null; then
+                                    EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
+                                    chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
+                                    send_message "$CHAT_ID" "🔄 Usuario <b>$USERNAME</b> renovado a <b>$DAYS días</b> (F. Expiración: <code>$EXP_DATE</code>)."
+                                else
+                                    send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> no existe."
+                                fi
+                            fi
+                            ;;
+
+                        /renovarM)
+                            if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
+                                send_message "$CHAT_ID" "➕ <b>Sintaxis:</b> <code>/renovarM Usuario Días_Añadir</code>"
+                            else
+                                USERNAME="$PARAM1"
+                                ADD_DAYS="$PARAM2"
+                                if id "$USERNAME" &>/dev/null; then
+                                    CURR_EXP=$(chage -l "$USERNAME" | grep "Account expires" | awk -F: '{print $2}')
+                                    NEW_EXP=$(date -d "$CURR_EXP + $ADD_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+$ADD_DAYS days" +%Y-%m-%d)
+                                    chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
+                                    send_message "$CHAT_ID" "➕ <b>+$ADD_DAYS Días añadidos a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
+                                else
+                                    send_message "$CHAT_ID" "⚠️ Usuario no encontrado."
+                                fi
+                            fi
+                            ;;
+
+                        /renovarQ)
+                            if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
+                                send_message "$CHAT_ID" "➖ <b>Sintaxis:</b> <code>/renovarQ Usuario Días_Restar</code>"
+                            else
+                                USERNAME="$PARAM1"
+                                SUB_DAYS="$PARAM2"
+                                if id "$USERNAME" &>/dev/null; then
+                                    CURR_EXP=$(chage -l "$USERNAME" | grep "Account expires" | awk -F: '{print $2}')
+                                    NEW_EXP=$(date -d "$CURR_EXP - $SUB_DAYS days" +%Y-%m-%d 2>/dev/null || date -d "+1 days" +%Y-%m-%d)
+                                    chage -E "$NEW_EXP" "$USERNAME" 2>/dev/null
+                                    send_message "$CHAT_ID" "➖ <b>-$SUB_DAYS Días restados a $USERNAME</b>. Nueva Expiración: <code>$NEW_EXP</code>"
+                                else
+                                    send_message "$CHAT_ID" "⚠️ Usuario no encontrado."
+                                fi
+                            fi
+                            ;;
+
+                        /aggADM)
+                            if [ -z "$PARAM1" ]; then
+                                send_message "$CHAT_ID" "🔐 <b>Sintaxis:</b> <code>/aggADM TELEGRAM_ID</code>"
+                            else
+                                NEW_ADM="$PARAM1"
+                                source "$BOT_CONFIG"
+                                if [[ "$ADMIN_IDS" == *"$NEW_ADM"* ]]; then
+                                    send_message "$CHAT_ID" "⚠️ El ID <code>$NEW_ADM</code> ya es Administrador."
+                                else
+                                    UPDATED_IDS="$ADMIN_IDS, $NEW_ADM"
+                                    echo "TOKEN=\"$TOKEN\"" > "$BOT_CONFIG"
+                                    echo "ADMIN_IDS=\"$UPDATED_IDS\"" >> "$BOT_CONFIG"
+                                    send_message "$CHAT_ID" "✅ <b>Nuevo Admin Autorizado:</b> <code>$NEW_ADM</code>"
+                                fi
+                            fi
+                            ;;
+
+                        /creditos)
+                            if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
+                                send_message "$CHAT_ID" "💳 <b>Sintaxis:</b> <code>/creditos TELEGRAM_ID Cantidad_Días</code>"
+                            else
+                                TARGET_ADM="$PARAM1"
+                                CRED_VAL="$PARAM2"
+                                echo "$CRED_VAL" > "/etc/kira/bot/credits_$TARGET_ADM"
+                                send_message "$CHAT_ID" "💳 <b>Créditos/Días autorizados:</b> <code>$CRED_VAL</code> al Admin ID: <code>$TARGET_ADM</code>"
+                            fi
+                            ;;
+
+                        /admkill)
+                            if [ -z "$PARAM1" ]; then
+                                send_message "$CHAT_ID" "🚫 <b>Sintaxis:</b> <code>/admkill TELEGRAM_ID</code>"
+                            else
+                                TARGET_ADM="$PARAM1"
+                                source "$BOT_CONFIG"
+                                NEW_LIST=$(echo "$ADMIN_IDS" | sed "s/$TARGET_ADM//g" | sed 's/,,/,/g' | sed 's/^,//g' | sed 's/,$//g')
+                                echo "TOKEN=\"$TOKEN\"" > "$BOT_CONFIG"
+                                echo "ADMIN_IDS=\"$NEW_LIST\"" >> "$BOT_CONFIG"
+                                send_message "$CHAT_ID" "🚫 <b>Autorización revocada exitosamente para el ID:</b> <code>$TARGET_ADM</code>"
                             fi
                             ;;
 
@@ -214,7 +327,6 @@ while true; do
                             MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
 👥 <b>USUARIOS CONECTADOS SSH</b>
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-
 🟢 <b>Conexiones activas:</b> <code>$ONLINE_COUNT</code> disp.
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
                             send_message "$CHAT_ID" "$MSG"
@@ -225,11 +337,7 @@ while true; do
                                 MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
 <b>FORMA DE USAR ESTA OPCIÓN</b>
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-
-<i>DEBES ENVIAR EL COMANDO:</i>
 <code>/borrar Nombre_User</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-<code>/borrar admin</code>
 ✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
                                 send_message "$CHAT_ID" "$MSG"
                             else
@@ -238,31 +346,6 @@ while true; do
                                     userdel -f "$USERNAME" 2>/dev/null
                                     rm -f "/etc/kira/expire/$USERNAME" "/etc/kira/limits/$USERNAME" "/etc/kira/pass/$USERNAME"
                                     send_message "$CHAT_ID" "🗑️ El usuario <b>$USERNAME</b> fue eliminado correctamente."
-                                else
-                                    send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> no existe."
-                                fi
-                            fi
-                            ;;
-
-                        /renovar)
-                            if [ -z "$PARAM1" ] || [ -z "$PARAM2" ]; then
-                                MSG="✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-<b>FORMA DE USAR ESTA OPCIÓN</b>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-
-<i>DEBES ENVIAR EL COMANDO:</i>
-<code>/renovar Nombre_User Dias</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨
-<code>/renovar admin 30</code>
-✨━━━━━━━━━━━━━━━━━━━━━━━━━━━━✨"
-                                send_message "$CHAT_ID" "$MSG"
-                            else
-                                USERNAME="$PARAM1"
-                                DAYS="$PARAM2"
-                                if id "$USERNAME" &>/dev/null; then
-                                    EXP_DATE=$(date -d "+$DAYS days" +%Y-%m-%d)
-                                    chage -E "$EXP_DATE" "$USERNAME" 2>/dev/null
-                                    send_message "$CHAT_ID" "🔄 Usuario <b>$USERNAME</b> renovado por $DAYS días más (Nueva Expiración: <code>$EXP_DATE</code>)."
                                 else
                                     send_message "$CHAT_ID" "⚠️ El usuario <b>$USERNAME</b> no existe."
                                 fi
@@ -288,13 +371,13 @@ while true; do
                             for u in $USERS_LIST; do
                                 if [ -f "/etc/kira/limits/$u" ]; then
                                     lim=$(cat "/etc/kira/limits/$u")
-                                    [ "$lim" -ge 99 ] 2>/dev/null && LIBERADOS+=" • <code>$u</code> (Límite: $lim)%0A"
+                                    [ "$lim" -ge 99 ] 2>/dev/null && LIBERADOS+=" • <code>$u</code> (Límite: $lim)\n"
                                 fi
                             done
                             if [ -z "$LIBERADOS" ]; then
-                                send_message "$CHAT_ID" "🔓 <b>No hay usuarios liberados (sin límite) en esta VPS.</b>"
+                                send_message "$CHAT_ID" "🔓 <b>No hay usuarios liberados en este VPS.</b>"
                             else
-                                send_message "$CHAT_ID" "🔓 <b>USUARIOS LIBERADOS:</b>%0A$LIBERADOS"
+                                send_message "$CHAT_ID" "🔓 <b>USUARIOS LIBERADOS:</b>\n$LIBERADOS"
                             fi
                             ;;
 
@@ -384,15 +467,6 @@ config_bot() {
     echo -e "${D}║${Y}                  ⚙️  CONFIGURACIÓN INICIAL DEL BOT                     ${D}║${N}"
     echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"
     echo ""
-    echo -e " ${C}📌 PASO 1: OBTIENE TU TOKEN DE BOT${N}"
-    echo -e "    1. Abre Telegram, busca a ${Y}@BotFather${N} y envíale ${W}/newbot${N}"
-    echo -e "    2. Copia el TOKEN recibido (ejemplo: 123456789:ABCdef...)"
-    echo ""
-    echo -e " ${C}📌 PASO 2: OBTIENE TU TELEGRAM ID (NUMÉRICO)${N}"
-    echo -e "    1. En Telegram, busca a ${Y}@userinfobot${N} y presiona 'Iniciar'."
-    echo -e "    2. Copia la numeración que aparece en ${W}Id:${N}"
-    echo ""
-    
     read -p " ► Pegar BOT TOKEN: " token_input
     read -p " ► Pegar TELEGRAM ID(s) ADMIN: " admin_input
 

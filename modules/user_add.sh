@@ -59,9 +59,11 @@ echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
-mkdir -p /etc/kira/limits /etc/kira/expire
+# GUARDADO BASE DE DATOS KIRA (Sincronizado con Telegram y Terminal)
+mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
 echo "$(date +%s) $tiempo" > /etc/kira/expire/$user
+echo "$pass" > /etc/kira/pass/$user
 
 # OBTENER DATOS DE CONEXIÓN
 IP=$(curl -s ifconfig.me)
@@ -124,9 +126,11 @@ echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -I -1 -m 0 -M 99999 -E -1 "$user"
 
-mkdir -p /etc/kira/limits /etc/kira/expire
+# GUARDADO BASE DE DATOS KIRA (Sincronizado con Telegram y Terminal)
+mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
 echo "$(date +%s) ${dias}d" > /etc/kira/expire/$user
+echo "$pass" > /etc/kira/pass/$user
 
 IP=$(curl -s ifconfig.me)
 PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)

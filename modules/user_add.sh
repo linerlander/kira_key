@@ -81,8 +81,8 @@ printf "${D}║${N} ${R}⏳ VALIDEZ     :${N} %-31s ${D}║${N}\n" "$tiempo"
 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
 echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
 echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${W}║${N}🔗 DIRECT:${N} ${Y}${IP}:${PORT}@${user}:${pass}${N}"
-echo -e "${W}║${N}🖥️ PROXY  :${N} ${Y}${IP}:80@${user}:${pass}${N}"
+echo -e "${W}║${N}🔗 DIREC:${N} ${Y}${IP}:${PORT}@${user}:${pass}║${N}"
+echo -e "${W}║${N}🖥️ PROXY:${N} ${Y}${IP}:80@${user}:${pass}║${N}"
 echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
 echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log

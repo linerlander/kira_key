@@ -38,9 +38,9 @@ REMOTE_COMMIT=$(git ls-remote origin $BRANCH | awk '{print $1}')
 
 # ========= ESTADO =========
 if [[ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]]; then
-    STATUS="${Y}[!] ACTUALIZAR DISPONIBLE${N}"
+    STATUS="${Y}[! ] ACTUALIZAR DISPONIBLE${N}"
 else
-    STATUS="${G}[✔] SCRIPT ACTUALIZADO${N}"
+    STATUS="${G}[✔ ] SCRIPT ACTUALIZADO${N}"
 fi
 
 while true; do
@@ -48,7 +48,7 @@ while true; do
 
     # ========= BANNER =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    echo -e "${C}║${W}               ⚡ GESTOR DE ACTUALIZACIÓN ⚡          ${C}║${N}"
+    echo -e "${C}║${W}               ⚡ GESTOR DE ACTUALIZACIÓN ⚡         ${C}║${N}"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 

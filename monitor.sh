@@ -127,7 +127,7 @@ while true; do
     done
 
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${N} ${R}[0]${N} ${W} SALIR DEL MONITOR                               ${C}║${N}"
+    echo -e "${C}║${N} ${R}[0]${N} ${W} SALIR DEL MONITOR                              ${C}║${N}"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
 
     # Captura de tecla sin interrumpir el refresco fluido de 1 segundo

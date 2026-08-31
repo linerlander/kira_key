@@ -38,7 +38,7 @@ REMOTE_COMMIT=$(git ls-remote origin $BRANCH | awk '{print $1}')
 
 # ========= ESTADO =========
 if [[ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]]; then
-    STATUS="${Y}[! ] ACTUALIZAR DISPONIBLE${N}"
+    STATUS="${Y}[!] ACTUALIZAR DISPONIBLE${N}"
 else
     STATUS="${G}[✔ ] SCRIPT ACTUALIZADO${N}"
 fi

@@ -19,7 +19,7 @@ echo -e "${D}╠═════════════════════�
 DOMAIN=""
 while [ -z "$DOMAIN" ]; do
     printf "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}%-44s ${D}║${N}\n" " "
-    echo -ne "${D}║${N} ${Y}➤ ${N}"
+    echo -ne "${D}║${N} ${Y}➤ ${N}${D}║${N}\n" " "
     read DOMAIN
     if [ -z "$DOMAIN" ]; then
         printf "${D}║${N} ${R}✘ El dominio no puede estar vacío. Intenta de nuevo.${N}%-19s${D}║${N}\n" " "

@@ -18,7 +18,8 @@ echo -e "${D}╠═════════════════════�
 # SOLICITAR DOMINIO DE FORMA OBLIGATORIA
 DOMAIN=""
 while [ -z "$DOMAIN" ]; do
-    echo -ne "${D}║${N} ${C}Ingresa tu Dominio / SNI:                        ${N}${D}║${N}"
+    printf "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}%-44s${D}║${N}\n" " "
+    echo -ne "${D}║${N} ${Y}➤ ${N}"
     read DOMAIN
     if [ -z "$DOMAIN" ]; then
         printf "${D}║${N} ${R}✘ El dominio no puede estar vacío. Intenta de nuevo.${N}%-19s${D}║${N}\n" " "

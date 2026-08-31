@@ -6,7 +6,7 @@ D='\033[38;5;183m'         # Morado vibrante (Bordes)
 M='\033[38;5;129m'         # Magenta neón (Secciones)
 Y='\033[38;5;220m'         # Amarillo (Puertos/Avisos)
 R='\033[38;5;196m'         # Rojo (Errores)
-C='\033[38;5;51m'          # Cyan (Subtítulos/Texto)
+C='\033[38;5;39m'          # Cyan (Subtítulos/Texto)
 G='\033[38;5;82m'          # Verde neón (Exito/ONLINE)
 N='\033[0m'                # Reset
 
@@ -18,7 +18,7 @@ echo -e "${D}╠═════════════════════�
 # SOLICITAR DOMINIO DE FORMA OBLIGATORIA
 DOMAIN=""
 while [ -z "$DOMAIN" ]; do
-    printf "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}%-44s${D}║${N}\n" " "
+    printf "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}%-44s ${D}║${N}\n" " "
     echo -ne "${D}║${N} ${Y}➤ ${N}"
     read DOMAIN
     if [ -z "$DOMAIN" ]; then

@@ -31,7 +31,7 @@ while [ -z "$DOMAIN" ]; do
     else
         # Redibuja la línea ingresada encajando la barra derecha ║ en la columna exacta
         PAD_LEN=$((67 - ${#DOMAIN}))
-        echo -e "\033[1A\033[K${D}║${N} ${Y}➤ ${W}${DOMAIN}${N}$(printf '%*s' "$PAD_LEN" "")${D}║${N}"
+        echo -e "\033[1A\033[K${D}║${N} ${Y}➤ ${W}${DOMAIN}${N}$(printf '%*s' "$PAD_LEN" "") ${D}║${N}"
     fi
 done
 

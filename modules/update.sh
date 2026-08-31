@@ -3,10 +3,10 @@
 # ========= COLORES Y ESTILOS =========
 W='\033[1;37m'
 D='\033[38;5;108m'
-Y='\033[1;33m'
+Y='\033[38;5;220m'
 R='\033[38;5;196m'
 C='\033[38;5;51m'
-G='\033[38;5;46m'
+G='\033[38;5;82m'
 N='\033[0m'
 
 # ========= CONFIGURACIÓN =========
@@ -18,11 +18,7 @@ RAW_VERSION="https://raw.githubusercontent.com/$REPO/$BRANCH/version.txt"
 # ========= IR AL DIRECTORIO =========
 cd "$INSTALL_DIR" 2>/dev/null || {
     clear
-    echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    echo -e "${C}║${R}              ❌ ERROR DE DIRECTORIO                 ${C}║${N}"
-    echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${W} No se encontró la ruta: ${D}$INSTALL_DIR          ${C}║${N}"
-    echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
+    echo -e "${R}Error: no se encontró kira_key en $INSTALL_DIR${N}"
     exit 1
 }
 
@@ -42,60 +38,51 @@ REMOTE_COMMIT=$(git ls-remote origin $BRANCH | awk '{print $1}')
 
 # ========= ESTADO =========
 if [[ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]]; then
-    STATUS="${Y}ACTUALIZACIÓN DISPONIBLE${N}"
-    STATUS_ICON="${Y}[!]${N}"
+    STATUS="${Y}[!] ACTUALIZAR DISPONIBLE${N}"
 else
-    STATUS="${G}SCRIPT AL DÍA${N}"
-    STATUS_ICON="${G}[✔]${N}"
+    STATUS="${G}[✔] SCRIPT ACTUALIZADO${N}"
 fi
 
 while true; do
     clear
 
-    # ========= BANNER ESTILIZADO =========
+    # ========= BANNER =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    echo -e "${C}║${W}                 ⚙️ GESTOR DE KIRA ⚙️                ${C}║${N}"
-    echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
-    echo ""
-    
-    # ========= INFO DE VERSIÓN EN CAJA =========
-    echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Versión Actual:${N}  %-33s ${C}│${N}\n" "$LOCAL_VERSION"
-    printf "${C}│${N} ${W}Versión Remota:${N}  %-33s ${C}│${N}\n" "$REMOTE_VERSION"
-    echo -e "${C}├─────────────────────────────────────────────────────┤${N}"
-    printf "${C}│${N} ${W}Estado:${N}          %b %-23s ${C}│${N}\n" "$STATUS_ICON" "$STATUS"
-    echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
-    echo ""
-
-    # ========= MENÚ DE OPCIONES =========
-    echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    printf "${C}║${N} ${Y}[1]${N} ${W}%-45s${C}║${N}\n" "Actualizar o sincronizar repositorio"
-    printf "${C}║${N} ${R}[2]${N} ${W}%-45s${C}║${N}\n" "Desinstalar script por completo"
-    echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    printf "${C}║${N} ${R}[0]${N} ${W}%-45s${C}║${N}\n" "Regresar al menú principal"
+    echo -e "${C}║${W}               ⚡ GESTOR DE ACTUALIZACIÓN ⚡          ${C}║${N}"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 
-    read -p " ► Selecciona una opción: " op
+    # ========= INFO VERSION =========
+    echo -e "${W} Versión actual : ${C}$LOCAL_VERSION${N}"
+    echo -e "${W} Versión remota : ${Y}$REMOTE_VERSION${N}"
+    echo -e "${D}─────────────────────────────────────────────────────${N}"
+
+    # ========= MENU =========
+    echo -e " ${W}[1]${N} ➮ ${status_label:-Actualizar Sistema} $STATUS"
+    echo -e " ${W}[2]${N} ➮ ${R}Desinstalar Script${N}"
+    echo -e "${D}─────────────────────────────────────────────────────${N}"
+    echo -e " ${R}[0]${N} ➮ ${W}Regresar al menú${N}"
+    echo -e "${D}─────────────────────────────────────────────────────${N}"
+    echo ""
+
+    read -p " ► Opción: " op
     echo ""
 
     case $op in
 
         1)
             if [[ "$LOCAL_COMMIT" == "$REMOTE_COMMIT" ]]; then
-                echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-                echo -e "${C}║${N} ${G}✔ YA TIENES LA ÚLTIMA VERSIÓN (${LOCAL_VERSION})${N}      ${C}║${N}"
-                echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
+                echo -e "${G}✔ YA TIENES LA ÚLTIMA VERSIÓN (${LOCAL_VERSION})${N}"
                 sleep 2
                 continue
             fi
 
-            echo -e "${Y}🔄 Actualizando sistema y repositorio...${N}"
+            echo -e "${Y}🔄 ACTUALIZANDO...${N}"
 
             # BACKUP
             BACKUP_DIR="$HOME/kira_backup_$(date +%s)"
             cp -r "$INSTALL_DIR" "$BACKUP_DIR"
-            echo -e "${C} ✔ Backup temporal creado con éxito.${N}"
+            echo -e "${C}✔ Backup temporal creado${N}"
 
             # ACTUALIZAR
             git reset --hard origin/$BRANCH >/dev/null 2>&1
@@ -106,24 +93,24 @@ while true; do
             NEW_VERSION=$(cat version.txt 2>/dev/null | tr -d '\r\n ')
 
             if [[ "$NEW_COMMIT" == "$REMOTE_COMMIT" ]]; then
-                echo -e "${G} ✔ ¡Actualizado con éxito a la versión ${NEW_VERSION}!${N}"
+                echo -e "${G}✔ ACTUALIZADO A VERSIÓN ${NEW_VERSION}${N}"
                 sleep 2
                 exec bash menu.sh
             else
-                echo -e "${R} ❌ Error en la actualización. Restaurando backup...${N}"
+                echo -e "${R}❌ ERROR → RESTAURANDO BACKUP${N}"
                 cd ~
                 rm -rf "$INSTALL_DIR"
                 mv "$BACKUP_DIR" "$INSTALL_DIR"
-                echo -e "${Y} ✔ Sistema restaurado al estado anterior.${N}"
+                echo -e "${Y}✔ RESTAURADO CON ÉXITO${N}"
                 sleep 2
             fi
         ;;
 
         2)
-            echo -e "${R} ⚠ Desinstalando Kira Key de tu sistema...${N}"
+            echo -e "${R}⚠ DESINSTALANDO KIRA KEY...${N}"
             cd ~
             rm -rf "$INSTALL_DIR"
-            echo -e "${G} ✔ Script desinstalado correctamente.${N}"
+            echo -e "${G}✔ ELIMINADO CORRECTAMENTE${N}"
             sleep 2
             exit 0
         ;;
@@ -133,7 +120,7 @@ while true; do
         ;;
 
         *)
-            echo -e "${R} ✘ Opción inválida, intenta de nuevo.${N}"
+            echo -e "${R}Opción inválida${N}"
             sleep 1
         ;;
 

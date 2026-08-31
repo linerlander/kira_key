@@ -15,14 +15,18 @@ echo -e "${D}╔═════════════════════�
 echo -e "${D}║${M}                  🔒 INSTALACIÓN Y CONFIGURACIÓN SSL / TLS             ${D}║${N}"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
-# SOLICITAR DOMINIO / SNI
-echo -e "${D}║${N} ${C}Ingresa tu Dominio / SNI para el certificado SSL:${N}"
-read -p " ➤ Dominio [Default: lander.linerlander.space]: " INPUT_DOMAIN
-
-DOMAIN="${INPUT_DOMAIN:-lander.linerlander.space}"
+# SOLICITAR DOMINIO DE FORMA OBLIGATORIA
+DOMAIN=""
+while [ -z "$DOMAIN" ]; do
+    echo -ne "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N} "
+    read DOMAIN
+    if [ -z "$DOMAIN" ]; then
+        printf "${D}║${N} ${R}✘ El dominio no puede estar vacío. Intenta de nuevo.${N}%-19s${D}║${N}\n" " "
+    fi
+done
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${W}Dominio configurado:${N} ${Y}%-50s${N}${D}║${N}\n" "$DOMAIN"
+printf "${D}║${N} ${W}Dominio a configurar:${N} ${Y}%-48s${N} ${D}║${N}\n" "$DOMAIN"
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
 # PASO 1: INSTALAR PAQUETES
@@ -46,8 +50,8 @@ fi
 fuser -k 443/tcp >/dev/null 2>&1 || true
 
 # PASO 3: LIMPIAR Y GENERAR NUEVO CERTIFICADO SSL
-printf "${D}║${N} ${C}[3/5] Eliminando certificado previo y creando nuevo (.pem)...${N}%-3s${D}║${N}\n" " "
-rm -rf /etc/stunnel/stunnel.pem
+printf "${D}║${N} ${C}[3/5] Generando nuevo certificado SSL/TLS (.pem)...${N}%-13s${D}║${N}\n" " "
+rm -f /etc/stunnel/stunnel.pem
 mkdir -p /etc/stunnel
 
 openssl req -new -x509 -days 365 -nodes \
@@ -57,8 +61,8 @@ openssl req -new -x509 -days 365 -nodes \
 chmod 600 /etc/stunnel/stunnel.pem
 
 # PASO 4: CONFIGURACIÓN OPTIMIZADA DE STUNNEL
-printf "${D}║${N} ${C}[4/5] Escribiendo reglas de red en stunnel.conf...${N}%-17s${D}║${N}\n" " "
-rm -rf /etc/stunnel/stunnel.conf
+printf "${D}║${N} ${C}[4/5] Aplicando reglas de enrutamiento en Stunnel...${N}%-14s${D}║${N}\n" " "
+rm -f /etc/stunnel/stunnel.conf
 mkdir -p /var/run/stunnel4
 chown -R stunnel4:stunnel4 /var/run/stunnel4 2>/dev/null
 
@@ -79,7 +83,7 @@ EOF
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null
 
 # PASO 5: ENCENDER SERVICIO Y VERIFICAR
-printf "${D}║${N} ${C}[5/5] Reiniciando y activando demonio Stunnel4...${N}%-17s${D}║${N}\n" " "
+printf "${D}║${N} ${C}[5/5] Reiniciando y activando servicio Stunnel4...${N}%-16s${D}║${N}\n" " "
 killall -9 stunnel4 stunnel 2>/dev/null || true
 systemctl daemon-reload
 systemctl enable stunnel4 >/dev/null 2>&1

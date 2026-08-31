@@ -18,7 +18,7 @@ echo -e "${D}╠═════════════════════�
 # SOLICITAR DOMINIO DE FORMA OBLIGATORIA
 DOMAIN=""
 while [ -z "$DOMAIN" ]; do
-    echo -ne "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}${D}║ "
+    echo -ne "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}${D}║${N}"
     read DOMAIN
     if [ -z "$DOMAIN" ]; then
         printf "${D}║${N} ${R}✘ El dominio no puede estar vacío. Intenta de nuevo.${N}%-19s${D}║${N}\n" " "
@@ -50,7 +50,7 @@ fi
 fuser -k 443/tcp >/dev/null 2>&1 || true
 
 # PASO 3: LIMPIAR Y GENERAR NUEVO CERTIFICADO SSL
-printf "${D}║${N} ${C}[3/5] Generando nuevo certificado SSL/TLS (.pem)...${N}%-13s     ${D}║${N}\n" " "
+printf "${D}║${N} ${C}[3/5] Generando nuevo certificado SSL/TLS (.pem)...${N}%-13s      ${D}║${N}\n" " "
 rm -f /etc/stunnel/stunnel.pem
 mkdir -p /etc/stunnel
 
@@ -61,7 +61,7 @@ openssl req -new -x509 -days 365 -nodes \
 chmod 600 /etc/stunnel/stunnel.pem
 
 # PASO 4: CONFIGURACIÓN OPTIMIZADA DE STUNNEL
-printf "${D}║${N} ${C}[4/5] Aplicando reglas de enrutamiento en Stunnel...${N}%-14s${D}     ║${N}\n" " "
+printf "${D}║${N} ${C}[4/5] Aplicando reglas de enrutamiento en Stunnel...${N}%-14s${D}    ║${N}\n" " "
 rm -f /etc/stunnel/stunnel.conf
 mkdir -p /var/run/stunnel4
 chown -R stunnel4:stunnel4 /var/run/stunnel4 2>/dev/null
@@ -83,7 +83,7 @@ EOF
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null
 
 # PASO 5: ENCENDER SERVICIO Y VERIFICAR
-printf "${D}║${N} ${C}[5/5] Reiniciando y activando servicio Stunnel4...${N}%-16s     ${D}║${N}\n" " "
+printf "${D}║${N} ${C}[5/5] Reiniciando y activando servicio Stunnel4...${N}%-16s    ${D}║${N}\n" " "
 killall -9 stunnel4 stunnel 2>/dev/null || true
 systemctl daemon-reload
 systemctl enable stunnel4 >/dev/null 2>&1
@@ -97,8 +97,8 @@ echo -e "${D}╠═════════════════════�
 
 # COMPROBACIÓN FINAL DE ESTADO Y PUERTOS
 if systemctl is-active --quiet stunnel4 || pgrep -x "stunnel4" >/dev/null || pgrep -x "stunnel" >/dev/null; then
-    printf "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado a SSL/TLS con éxito. ${D}║${N}\n"
-    printf "${D}║${N} Puertos activos: ${Y}443 (SSL->WS)${N} | ${Y}444 (SSL->SSH)${N}%-21s${D}║${N}\n" " "
+    printf "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado a SSL/TLS con éxito.       ${D}║${N}\n"
+    printf "${D}║${N} Puertos activos: ${Y}443 (SSL->WS)${N} | ${Y}444 (SSL->SSH)${N}%-21s  ${D}║${N}\n" " "
 else
     printf "${D}║${N} Status: ${R}[ERROR]${N} - Fallo al iniciar el puerto 443.                   ${D}║${N}\n"
 fi

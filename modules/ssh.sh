@@ -75,10 +75,10 @@ while true; do
 
     # ========= MENÚ DE OPCIONES =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    printf "${C}║${N} ${G}[1]${N} ${W}%-45s${C}║${N}\n" "Agregar nuevo puerto SSH"
-    printf "${C}║${N} ${R}[2]${N} ${W}%-45s${C}║${N}\n" "Eliminar puerto SSH existente"
+    printf "${C}║${N} ${G}[1]${N} ${W}%-45s   ${C}║${N}\n" "Agregar nuevo puerto SSH"
+    printf "${C}║${N} ${R}[2]${N} ${W}%-45s   ${C}║${N}\n" "Eliminar puerto SSH existente"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    printf "${C}║${N} ${W}[0]${N} ${W}%-45s${C}║${N}\n" "Regresar al menú principal"
+    printf "${C}║${N} ${R}[0]${N} ${W}%-45s    ${C}║${N}\n" "Regresar al menú principal"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 

@@ -38,7 +38,7 @@ printf "${W}[01]${N} %-18s %-8b    ${W}[11]${N} %-22s %b\n" "OpenSSH" "$(status 
 printf "${W}[02]${N} %-18s %-8b   ${W}[12]${N} %-22s %b\n" "Dropbear" "$(status dropbear)" "TCP DNS" "${Y}[BETA]${N}"
 printf "${W}[03]${N} %-18s %-8b   ${W}[13]${N} %-22s %b\n" "OpenVPN" "${R}[OFF]${N}" "Webmin" "${R}[OFF]${N}"
 printf "${W}[04]${N} %-18s %-8b   ${W}[14]${N} %-22s %b\n" "SSL/TLS" "${R}[OFF]${N}" "SlowDNS" "${R}[OFF]${N}"
-printf "${W}[05]${N} %-18s %-8b   ${W}[15]${N} %-22s %b\n" "Shadowsocks" "  ${R}[OFF]${N}" "SSL→Python" "${R}[OFF]${N}"
+printf "${W}[05]${N} %-18s %-8b   ${W}[15]${N} %-22s %b\n" "Shadowsocks" "${R}[OFF]${N}" "SSL→Python" "  ${R}[OFF]${N}"
 printf "${W}[06]${N} %-18s %-8b   ${W}[16]${N} %-22s %b\n" "Squid Proxy" "$(status squid)" "SSH Multiplex" "${R}[OFF]${N}"
 printf "${W}[07]${N} %-18s %-8b   ${W}[17]${N} %-22s %b\n" "Proxy Python" "${C}[PyD]${N}" "Over WebSocket" "${Y}[BETA]${N}"
 printf "${W}[08]${N} %-18s %-8b   ${W}[18]${N} %-22s %b\n" "V2Ray Switch" "${R}[OFF]${N}" "SOCKS5" "${R}[OFF]${N}"

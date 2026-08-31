@@ -115,7 +115,7 @@ while true; do
     echo -e " ${D}(${RAM_USED}M/${RAM_TOTAL}M)${N}      ${C}     ║${N}"
 
     echo -e "${C}⟠─────────────────────────────────────────────────────⟠${N}"
-    echo -e "${C}║${W} RED [${B}$IFACE${W}] ↓ ${G}${RX_RATE}${N}  |  ↑ ${G}${TX_RATE}                  ${C}║${N}"
+    echo -e "${C}║${W} RED [${B}$IFACE${W}] ↓ ${G}${RX_RATE}${N}  |  ↑ ${G}${TX_RATE}                     ${C}║${N}"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
     echo -e "${C}║${W} TOP 5 PROCESOS MÁS CONSUMIDORES                     ${C}║${N}"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"

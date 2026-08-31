@@ -18,11 +18,20 @@ echo -e "${D}╠═════════════════════�
 # SOLICITAR DOMINIO DE FORMA OBLIGATORIA
 DOMAIN=""
 while [ -z "$DOMAIN" ]; do
-    printf "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}%-44s ${D}║${N}\n" " "
-    echo -ne "${D}║${N} ${Y}➤ ${N}${D}║${N}\n" " "
+    printf "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}%-45s${D}║${N}\n" " "
+    echo -ne "${D}║${N} ${Y}➤ ${N}"
     read DOMAIN
+    
+    # Limpia espacios accidentales
+    DOMAIN=$(echo "$DOMAIN" | xargs)
+    
     if [ -z "$DOMAIN" ]; then
-        printf "${D}║${N} ${R}✘ El dominio no puede estar vacío. Intenta de nuevo.${N}%-19s${D}║${N}\n" " "
+        # Vuelve a la línea del prompt para mostrar mensaje de error encuadrado
+        echo -e "\033[1A\033[K${D}║${N} ${R}✘ El dominio no puede estar vacío.${N}%-33s${D}║${N}"
+    else
+        # Redibuja la línea ingresada encajando la barra derecha ║ en la columna exacta
+        PAD_LEN=$((67 - ${#DOMAIN}))
+        echo -e "\033[1A\033[K${D}║${N} ${Y}➤ ${W}${DOMAIN}${N}$(printf '%*s' "$PAD_LEN" "")${D}║${N}"
     fi
 done
 

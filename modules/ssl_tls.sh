@@ -17,18 +17,24 @@ echo -e "${D}╠═════════════════════�
 # PASO 1: INSTALAR PAQUETES
 echo -e "${D}║${N} ${C}[1/5] Instalando Stunnel4 y OpenSSL...${N}"
 apt-get update -y >/dev/null 2>&1
-apt-get install stunnel4 openssl -y >/dev/null 2>&1
+apt-get install stunnel4 openssl fuser -y >/dev/null 2>&1
 
-# PASO 2: LIBERAR PUERTO 443 EN SSH (DESALOJAR SSH DEL 443)
-echo -e "${D}║${N} ${C}[2/5] Liberando puerto 443 de OpenSSH...${N}"
+# PASO 2: LIBERAR PUERTO 443 DE FORMA FORZADA
+echo -e "${D}║${N} ${C}[2/5] Liberando puerto 443 de SSH y sockets activos...${N}"
+# Remover Port 443 de sshd_config
 if grep -qE "^Port 443" /etc/ssh/sshd_config; then
     sed -i '/^Port 443/d' /etc/ssh/sshd_config
     systemctl restart ssh >/dev/null 2>&1
 fi
+
+# Desactivar ssh.socket de systemd si existe (Ubuntu 22.04+)
 if systemctl is-active --quiet ssh.socket 2>/dev/null; then
     systemctl stop ssh.socket >/dev/null 2>&1
     systemctl disable ssh.socket >/dev/null 2>&1
 fi
+
+# Matar cualquier proceso restante que esté usando el puerto 443
+fuser -k 443/tcp >/dev/null 2>&1
 
 # PASO 3: GENERAR CERTIFICADO SSL
 echo -e "${D}║${N} ${C}[3/5] Generando certificado de seguridad (.pem)...${N}"
@@ -39,10 +45,13 @@ openssl req -new -x509 -days 365 -nodes \
     -subj "/C=PE/ST=Lima/L=Lima/O=Kira/CN=lander.linerlander.space" >/dev/null 2>&1
 chmod 600 /etc/stunnel/stunnel.pem
 
-# PASO 4: ASIGNAR EL PUERTO 443 A STUNNEL
+# PASO 4: CONFIGURACIÓN OPTIMIZADA DE STUNNEL
 echo -e "${D}║${N} ${C}[4/5] Asignando puerto 443 libre a Stunnel...${N}"
+mkdir -p /var/run/stunnel4
+chown -R stunnel4:stunnel4 /var/run/stunnel4 2>/dev/null
+
 cat << 'EOF' > /etc/stunnel/stunnel.conf
-pid = /var/run/stunnel4.pid
+pid = /var/run/stunnel4/stunnel4.pid
 cert = /etc/stunnel/stunnel.pem
 client = no
 
@@ -64,9 +73,14 @@ systemctl daemon-reload
 systemctl enable stunnel4 >/dev/null 2>&1
 systemctl restart stunnel4 >/dev/null 2>&1
 
+# Intentar arranque directo si systemd no lo levanta
+if ! systemctl is-active --quiet stunnel4; then
+    stunnel4 /etc/stunnel/stunnel.conf >/dev/null 2>&1
+fi
+
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"
 
-if systemctl is-active --quiet stunnel4 || pgrep -x "stunnel" >/dev/null; then
+if systemctl is-active --quiet stunnel4 || pgrep -x "stunnel4" >/dev/null || pgrep -x "stunnel" >/dev/null; then
     echo -e "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado a SSL/TLS exitosamente. ${D}║${N}"
 else
     echo -e "${D}║${N} Status: ${R}[ERROR]${N} - No se pudo levantar Stunnel.                      ${D}║${N}"

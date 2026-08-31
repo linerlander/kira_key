@@ -155,8 +155,8 @@ while true; do
 
     # ========= INFO DE ESTADO Y PUERTOS EN CAJA =========
     echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Estado:${N}   %b %-34s ${C}│${N}\n" "" "$STATE"
-    printf "${C}│${N} ${W}Puertos:${N}  ${C}%-35s${N} ${C}│${N}\n" "$PORTS"
+    printf "${C}│${N} ${W}Estado:${N}   %b %-34s                   ${C}│${N}\n" "" "$STATE"
+    printf "${C}│${N} ${W}Puertos:${N}  ${C}%-35s${N}           ${C}│${N}\n" "$PORTS"
     echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
     echo ""
 
@@ -169,13 +169,13 @@ while true; do
 
     # ========= MENÚ DE OPCIONES =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    printf "${C}║${N} ${W}[1]${N} ${W}%-45s${C}║${N}\n" "Instalar o Reinstalar BadVPN"
-    printf "${C}║${N} ${W}[2]${N} ${W}%-45s${C}║${N}\n" "Añadir nuevo puerto"
-    printf "${C}║${N} ${W}[3]${N} ${W}%-45s${C}║${N}\n" "Eliminar puerto existente"
-    printf "${C}║${N} ${W}[4]${N} ${W}%-45s${C}║${N}\n" "Reiniciar servicio"
-    printf "${C}║${N} ${W}[5]${N} ${W}%-45s${C}║${N}\n" "Detener servicio"
+    printf "${C}║${N} ${W}[1]${N} ${W}%-45s   ${C}║${N}\n" "Instalar o Reinstalar BadVPN"
+    printf "${C}║${N} ${W}[2]${N} ${W}%-45s    ${C}║${N}\n" "Añadir nuevo puerto"
+    printf "${C}║${N} ${W}[3]${N} ${W}%-45s    ${C}║${N}\n" "Eliminar puerto existente"
+    printf "${C}║${N} ${W}[4]${N} ${W}%-45s    ${C}║${N}\n" "Reiniciar servicio"
+    printf "${C}║${N} ${W}[5]${N} ${W}%-45s    ${C}║${N}\n" "Detener servicio"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    printf "${C}║${N} ${R}[0]${N} ${W}%-45s${C}║${N}\n" "Volver al menú principal"
+    printf "${C}║${N} ${R}[0]${N} ${W}%-45s           ${C}║${N}\n" "Volver al menú principal"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 

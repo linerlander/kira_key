@@ -73,8 +73,7 @@ case $op in
 ;;
 
 2|02)
-  apt install dropbear -y
-  systemctl restart dropbear
+  bash modules/dropbear.sh
 ;;
 
 6|06)

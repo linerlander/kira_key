@@ -76,6 +76,10 @@ case $op in
   bash modules/dropbear.sh
 ;;
 
+4|04)
+  bash modules/ssl_tls.sh
+;;
+
 6|06)
   apt install squid -y
   systemctl restart squid

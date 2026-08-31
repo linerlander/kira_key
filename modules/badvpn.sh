@@ -15,13 +15,9 @@ PORT_FILE="/etc/kira/badvpn_ports"
 
 mkdir -p /etc/kira
 
-# ===== ESTADO (DEVUELVE TEXTO LIMPIO SIN CÓDIGOS ANSI DE COLOR PARA MEDIR BIEN) =====
+# ===== ESTADO =====
 status_badvpn() {
-    if pgrep -f badvpn-udpgw >/dev/null; then
-        echo "ACTIVO"
-    else
-        echo "DETENIDO"
-    fi
+    pgrep -f badvpn-udpgw >/dev/null && echo -e "${G}● ACTIVADO${N}" || echo -e "${R}● DETENIDO${N}"
 }
 
 # ===== LEER PUERTOS =====
@@ -148,13 +144,7 @@ stop_badvpn() {
 while true; do
     clear
 
-    RAW_STATE=$(status_badvpn)
-    if [ "$RAW_STATE" = "ACTIVO" ]; then
-        STATE_STR="${G}● ACTIVO${N}"
-    else
-        STATE_STR="${R}● DETENIDO${N}"
-    fi
-
+    STATE=$(status_badvpn)
     PORTS=$(get_ports)
 
     # ========= BANNER ESTILIZADO =========
@@ -163,10 +153,10 @@ while true; do
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 
-    # ========= INFO DE ESTADO Y PUERTOS EN CAJA (MEDICIÓN EXACTA) =========
+    # ========= INFO DE ESTADO Y PUERTOS EN CAJA =========
     echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Estado:${N}   %b %-34s ${C}│${N}\n" "$STATE_STR" ""
-    printf "${C}│${N} ${W}Puertos:${N}  ${C}%-35s${N} ${C}│${N}\n" "$PORTS"
+    printf "${C}│${N} ${W}Estado:${N}   %b %-34s                        ${C}│${N}\n" "" "$STATE"
+    printf "${C}│${N} ${W}Puertos:${N}  ${C}%-35s${N}       ${C}│${N}\n" "$PORTS"
     echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
     echo ""
 
@@ -179,13 +169,13 @@ while true; do
 
     # ========= MENÚ DE OPCIONES =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    printf "${C}║${N} ${W}[1]${N} ${W}%-45s${C}║${N}\n" "Instalar o Reinstalar BadVPN"
-    printf "${C}║${N} ${W}[2]${N} ${W}%-45s${C}║${N}\n" "Añadir nuevo puerto"
-    printf "${C}║${N} ${W}[3]${N} ${W}%-45s${C}║${N}\n" "Eliminar puerto existente"
-    printf "${C}║${N} ${W}[4]${N} ${W}%-45s${C}║${N}\n" "Reiniciar servicio"
-    printf "${C}║${N} ${W}[5]${N} ${W}%-45s${C}║${N}\n" "Detener servicio"
+    printf "${C}║${N} ${W}[1]${N} ${W}%-45s   ${C}║${N}\n" "Instalar o Reinstalar BadVPN"
+    printf "${C}║${N} ${W}[2]${N} ${W}%-45s    ${C}║${N}\n" "Añadir nuevo puerto"
+    printf "${C}║${N} ${W}[3]${N} ${W}%-45s   ${C}║${N}\n" "Eliminar puerto existente"
+    printf "${C}║${N} ${W}[4]${N} ${W}%-45s   ${C}║${N}\n" "Reiniciar servicio"
+    printf "${C}║${N} ${W}[5]${N} ${W}%-45s   ${C}║${N}\n" "Detener servicio"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    printf "${C}║${N} ${R}[0]${N} ${W}%-45s${C}║${N}\n" "Volver al menú principal"
+    printf "${C}║${N} ${R}[0]${N} ${W}%-45s    ${C}║${N}\n" "Volver al menú principal"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 

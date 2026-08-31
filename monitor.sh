@@ -112,7 +112,7 @@ while true; do
 
     printf "${C}║${N} ${W}RAM:${N}  "
     bar $RAM_P "$RAM_COL"
-    echo -e " ${D}(${RAM_USED}M/${RAM_TOTAL}M)${N}      ${C}       ║${N}"
+    echo -e " ${D}(${RAM_USED}M/${RAM_TOTAL}M)${N}      ${C}      ║${N}"
 
     echo -e "${C}⟠─────────────────────────────────────────────────────⟠${N}"
     echo -e "${C}║${W} RED [${B}$IFACE${W}] ↓ ${G}${RX_RATE}${N}  |  ↑ ${G}${TX_RATE}        ${C}║${N}"

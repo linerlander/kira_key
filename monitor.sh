@@ -102,7 +102,7 @@ while true; do
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
     echo -e "${C}║${W}               ⚡ MONITOR EN TIEMPO REAL ⚡          ${C}║${N}"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    echo -e "${C}║${W} Uptime: ${Y}${UPspace:-$UPTIME_SYS}                   ${C}║${N}"
+    echo -e "${C}║${W} Uptime: ${Y}${UPspace:-$UPTIME_SYS}                  ${C}║${N}"
     echo -e "${C}⟠─────────────────────────────────────────────────────⟠${N}"
     
     # Métricas con barras

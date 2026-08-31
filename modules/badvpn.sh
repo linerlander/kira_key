@@ -155,7 +155,7 @@ while true; do
 
     # ========= INFO DE ESTADO Y PUERTOS EN CAJA =========
     echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Estado:${N}   %b %-34s                        ${C}│${N}\n""" "$STATE"
+    printf "${C}│${N} ${W}Estado:${N}   %b %-34s            ${C}│${N}\n""" "$STATE"
     printf "${C}│${N} ${W}Puertos:${N}  ${C}%-35s${N}       ${C}│${N}\n" "$PORTS"
     echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
     echo ""

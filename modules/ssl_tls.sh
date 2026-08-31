@@ -18,7 +18,7 @@ echo -e "${D}╠═════════════════════�
 # SOLICITAR DOMINIO DE FORMA OBLIGATORIA
 DOMAIN=""
 while [ -z "$DOMAIN" ]; do
-    echo -ne "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}${D}║${N}"
+    echo -ne "${D}║${N} ${C}Ingresa tu Dominio / SNI:${N}${D}║${N}\n"
     read DOMAIN
     if [ -z "$DOMAIN" ]; then
         printf "${D}║${N} ${R}✘ El dominio no puede estar vacío. Intenta de nuevo.${N}%-19s${D}║${N}\n" " "
@@ -97,7 +97,7 @@ echo -e "${D}╠═════════════════════�
 
 # COMPROBACIÓN FINAL DE ESTADO Y PUERTOS
 if systemctl is-active --quiet stunnel4 || pgrep -x "stunnel4" >/dev/null || pgrep -x "stunnel" >/dev/null; then
-    printf "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado a SSL/TLS con éxito.       ${D}║${N}\n"
+    printf "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado a SSL/TLS con éxito.           ${D}║${N}\n"
     printf "${D}║${N} Puertos activos: ${Y}443 (SSL->WS)${N} | ${Y}444 (SSL->SSH)${N}%-21s  ${D}║${N}\n" " "
 else
     printf "${D}║${N} Status: ${R}[ERROR]${N} - Fallo al iniciar el puerto 443.                   ${D}║${N}\n"

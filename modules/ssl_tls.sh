@@ -83,7 +83,7 @@ else
     opt3=" [0] Regresar al menú principal"
     
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
-    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N}  ${D}║${N}\n" "$opt3"
     draw_bot
     echo ""
     read -p " ➤ Opción: " opc

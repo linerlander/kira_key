@@ -10,7 +10,6 @@ C='\033[1;36m'
 G='\033[38;5;82m'
 N='\033[0m'
 
-# Ancho interno fijo: exactamente 69 caracteres de contenido útil
 BOX_WIDTH=69
 
 draw_top()    { echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"; }
@@ -36,9 +35,6 @@ mkdir -p /etc/kira
 DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 
-# ================================
-# 1. INSTALAR DEPENDENCIAS Y SERVIDOR WS
-# ================================
 install_all() {
     clear
     draw_top
@@ -57,12 +53,10 @@ install_all() {
     mv /tmp/wstunnel /usr/bin/
     chmod +x /usr/bin/wstunnel
 
-    # ===== LIMPIEZA TOTAL =====
     systemctl stop kira-ws 2>/dev/null
     killall wstunnel 2>/dev/null
     fuser -k ${WS_PORT}/tcp 2>/dev/null
 
-    # ===== SERVER SYSTEMD =====
     cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA WS SERVER High Performance
@@ -90,9 +84,6 @@ EOF
     read -p " Presiona Enter para continuar..."
 }
 
-# ================================
-# 2. CONFIGURAR DOMINIO + SSL (SOPORTE SNI 101)
-# ================================
 setup_domain() {
     clear
     draw_top
@@ -119,10 +110,16 @@ setup_domain() {
     draw_title
     draw_mid
 
-    draw_step_line "[1/2] Configurando Nginx con soporte SNI y Upgrade 101..."
-    rm -f /etc/nginx/conf.d/kira.conf
+    draw_step_line "[1/3] Deteniendo servicios web para certificado..."
+    systemctl stop nginx 2>/dev/null
+    fuser -k 80/tcp 2>/dev/null
+    fuser -k 443/tcp 2>/dev/null
 
-    # Configuración optimizada de Nginx con manejo nativo de SNI y Upgrade 101
+    draw_step_line "[2/3] Solicitando certificado SSL (Certbot)..."
+    certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN >/dev/null 2>&1
+
+    draw_step_line "[3/3] Aplicando configuración Nginx (SNI + 101)..."
+    
     cat > /etc/nginx/conf.d/kira.conf <<EOF
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
@@ -136,7 +133,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name $DOMAIN;
 
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
@@ -149,7 +147,6 @@ server {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
 
-        # Cabeceras críticas para forzar el código 101 Switching Protocols
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
@@ -162,13 +159,14 @@ server {
 }
 EOF
 
-    # Detenemos Nginx temporalmente para el certificado si aplica, o generamos directo con webroot/standalone
-    systemctl stop nginx 2>/dev/null
-    certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN >/dev/null 2>&1
     systemctl restart nginx
 
     draw_mid
-    ok_ssl=" ✔ Dominio y Certificado SSL configurados con éxito."
+    if systemctl is-active --quiet nginx; then
+        ok_ssl=" ✔ Dominio y Certificado SSL configurados con éxito."
+    else
+        ok_ssl=" ⚠ Certificado listo, revisa configuración de Nginx."
+    fi
     pad_ssl=$(( BOX_WIDTH - ${#ok_ssl} ))
     printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_ssl" "$pad_ssl" ""
     draw_bot
@@ -176,9 +174,6 @@ EOF
     read -p " Presiona Enter para continuar..."
 }
 
-# ================================
-# 3. ACTIVAR CLIENTE SOCKS5 LOCAL
-# ================================
 install_client() {
     DOMAIN=$(cat $CONFIG 2>/dev/null)
 
@@ -242,9 +237,6 @@ EOF
     read -p " Presiona Enter para continuar..."
 }
 
-# ================================
-# 4. ESTADO DE LOS SERVICIOS
-# ================================
 status_all() {
     clear
     draw_top
@@ -284,9 +276,6 @@ status_all() {
     read -p " Presiona Enter para volver..."
 }
 
-# ================================
-# MENÚ PRINCIPAL
-# ================================
 while true; do
     clear
     draw_top

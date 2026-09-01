@@ -39,7 +39,7 @@ PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 [ -z "$PORTS" ] && PORTS="80"
 
-# ===== INSTALAR PROXY =====
+# ===== INSTALAR / REINICIAR PROXY =====
 install_proxy() {
     clear
     draw_top
@@ -49,12 +49,14 @@ install_proxy() {
     draw_step_line "[1/3] Preparando puertos y depurando sockets..."
     systemctl stop proxy-python 2>/dev/null
 
+    PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
     PORTS=$(echo $PORTS | tr ' ' '\n' | sort -u | xargs)
     [ -z "$PORTS" ] && PORTS="80"
+    echo "$PORTS" > $PORT_FILE
 
     PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
 
-    # ===== PYTHON CONNECT REAL (CON 'EOF' PARA PROTEGER VARIABLES Y BARRAS) =====
+    # ===== PYTHON CONNECT REAL =====
     draw_step_line "[2/3] Generando motor de túnel optimizado en Python..."
     cat > /usr/local/bin/proxy.py << 'EOF'
 import socket
@@ -157,7 +159,6 @@ while True:
     time.sleep(60)
 EOF
 
-    # Reemplazar dinámicamente la lista de puertos en el archivo de python creado
     sed -i "s/\[\$PY_PORTS\]/[$PY_PORTS]/g" /usr/local/bin/proxy.py
     chmod +x /usr/local/bin/proxy.py
 
@@ -231,12 +232,15 @@ reset_all() {
 
 # ===== MENU PRINCIPAL =====
 while true; do
+    # Actualizar variable global de puertos en cada vuelta del menú
+    PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
+    [ -z "$PORTS" ] && PORTS="80"
+
     clear
     draw_top
     draw_title
     draw_mid
 
-    # Mostrar estado del servicio actual
     if systemctl is-active --quiet proxy-python 2>/dev/null; then
         st_text="ACTIVO (ON)"
         st_color="${G}"
@@ -261,12 +265,14 @@ while true; do
 
     opt1=" [1] Iniciar / Reiniciar Proxy Python"
     opt2=" [2] Agregar Nuevo Puerto de Escucha"
+    opt5=" [5] Eliminar un Puerto de Escucha"
     opt3=" [3] Reset Total / Desinstalar"
     opt4=" [4] Ver Registros en Vivo (Logs)"
     opt0=" [0] Salir del Módulo"
 
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt2"
+    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt5"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
     printf "${D}║${N} ${C}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
     printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
@@ -308,10 +314,55 @@ while true; do
             fi
 
             echo "$P" >> $PORT_FILE
-            PORTS=$(cat $PORT_FILE | xargs)
-            draw_mid
             
-            ok_p=" ✔ Puerto $P agregado correctamente."
+            # Auto-aplicar cambios reiniciando el servicio de inmediato
+            install_proxy >/dev/null 2>&1
+            
+            draw_top
+            draw_title
+            draw_mid
+            ok_p=" ✔ Puerto $P agregado y aplicado con éxito."
+            pad_okp=$(( BOX_WIDTH - ${#ok_p} ))
+            printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_p" "$pad_okp" ""
+            draw_bot
+            sleep 2
+            ;;
+        5)
+            clear
+            draw_top
+            draw_title
+            draw_mid
+
+            prompt_p=" Puertos actuales: $PORTS"
+            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
+            prompt_p2=" Ingresa el puerto que deseas eliminar:"
+            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p2"
+            echo -ne "${D}║${N} ${Y}➤ ${N}"
+            read P
+
+            if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
+                err_p=" ✘ El puerto no existe en la lista."
+                pad_ep=$(( BOX_WIDTH - ${#err_p} ))
+                printf "\033[1A\033[K${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_p" "$pad_ep" ""
+                sleep 2
+                continue
+            fi
+
+            # Eliminar el puerto del archivo filtrando las líneas
+            grep -vxF "$P" $PORT_FILE > "${PORT_FILE}.tmp" && mv "${PORT_FILE}.tmp" $PORT_FILE
+
+            # Si el archivo queda vacío, dejar por defecto el puerto 80
+            if [ ! -s "$PORT_FILE" ]; then
+                echo "80" > $PORT_FILE
+            fi
+
+            # Auto-aplicar cambios reiniciando el servicio de inmediato
+            install_proxy >/dev/null 2>&1
+
+            draw_top
+            draw_title
+            draw_mid
+            ok_p=" ✔ Puerto $P eliminado y aplicado con éxito."
             pad_okp=$(( BOX_WIDTH - ${#ok_p} ))
             printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_p" "$pad_okp" ""
             draw_bot

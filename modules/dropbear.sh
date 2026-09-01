@@ -95,11 +95,12 @@ toggle_service() {
 while true; do
     clear
 
+    # Obtenemos el texto puro sin colores para poder contar sus caracteres
     RAW_STATE=$(status_dropbear)
     if [ "$RAW_STATE" = "ACTIVO" ]; then
-        STATE_STR="${G}● ACTIVO${N}"
+        STATE_COLOR="${G}"
     else
-        STATE_STR="${R}● DETENIDO${N}"
+        STATE_COLOR="${R}"
     fi
 
     DPORT=$(get_dropbear_port)
@@ -110,10 +111,17 @@ while true; do
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 
+    # ========= CÁLCULO DINÁMICO DE ESPACIOS =========
+    # El ancho interno exacto de nuestra caja es de 53 caracteres.
+    # Restamos los textos fijos ("Estado: ● ") y la longitud del resultado dinámico.
+    
+    PAD_STATE=$(( 53 - 11 - ${#RAW_STATE} ))
+    PAD_PORT=$(( 53 - 9 - ${#DPORT} ))
+
     # ========= INFO DE ESTADO Y PUERTO EN CAJA =========
     echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Estado:${N}%b %-34s${C}│${N}\n" "$STATE_STR" ""
-    printf "${C}│${N} ${W}Puerto:${N}   ${C}%-35s${N}        ${C}│${N}\n" "$DPORT"
+    echo -e "${C}│${N} ${W}Estado:${N} ${STATE_COLOR}● ${RAW_STATE}${N}$(printf '%*s' "$PAD_STATE" "")${C}│${N}"
+    echo -e "${C}│${N} ${W}Puerto:${N} ${C}${DPORT}${N}$(printf '%*s' "$PAD_PORT" "")${C}│${N}"
     echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
     echo ""
 

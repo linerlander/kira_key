@@ -62,7 +62,7 @@ done 3< /etc/passwd
 total_users_online=$((i - 1))
 
 if [ $total_users_online -eq 0 ]; then
-    echo -e "${D}║${N} ${R}               No hay usuarios conectados en este momento.             ${D}║${N}"
+    echo -e "${D}║${N} ${R}               No hay usuarios conectados en este momento.            ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"

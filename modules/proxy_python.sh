@@ -288,7 +288,7 @@ while true; do
             draw_mid
             
             prompt_p=" Ingresa el nuevo puerto:"
-            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
+            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}" "$prompt_p"
             echo -ne "${D}║${N} ${Y}➤ ${N}"
             read P
             P=$(echo "$P" | xargs) # Limpiar espacios accidentales

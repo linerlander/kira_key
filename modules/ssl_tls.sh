@@ -18,7 +18,7 @@ draw_mid()    { echo -e "${D}╠════════════════
 draw_bot()    { echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"; }
 
 draw_title()  {
-    printf "${D}║${M} %-${BOX_WIDTH}s ${D}║${N}\n" "           🔒 SERVICIO SSL / TLS ( STUNNEL4 )"
+    printf "${D}║${M} %-${BOX_WIDTH}s   ${D}║${N}\n" "           🔒 SERVICIO SSL / TLS ( STUNNEL4 )"
 }
 
 draw_step_line() {
@@ -47,7 +47,7 @@ draw_mid
 # Línea de estado con cálculo exacto de caracteres visibles
 RAW_STATUS_CONTENT=" Estado actual: $STATUS_TEXT"
 PAD_STATUS=$(( BOX_WIDTH - ${#RAW_STATUS_CONTENT} ))
-printf "${D}║${N} ${W}Estado actual:${N} ${STATUS_COLOR}%s${N}%*s ${D}║${N}\n" "$STATUS_TEXT" "$PAD_STATUS" ""
+printf "${D}║${N} ${W}Estado actual:${N} ${STATUS_COLOR}%s${N}%*s  ${D}║${N}\n" "$STATUS_TEXT" "$PAD_STATUS" ""
 
 draw_mid
 
@@ -83,7 +83,7 @@ else
     opt3=" [0] Regresar al menú principal"
     
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
-    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N}  ${D}║${N}\n" "$opt3"
     draw_bot
     echo ""
     read -p " ➤ Opción: " opc

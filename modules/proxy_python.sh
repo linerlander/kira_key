@@ -245,15 +245,15 @@ while true; do
 
     r_st=" Estado del Servicio: $st_text"
     p_st=$(( BOX_WIDTH - ${#r_st} ))
-    printf "${D}║${N} ${W}Estado del Servicio:${N} ${st_color}%s${N}%*s ${D}║${N}\n" "$st_text" "$p_st" ""
+    printf "${D}║${N} ${W}Estado del Servicio:${N} ${st_color}%s${N}%*s  ${D}║${N}\n" "$st_text" "$p_st" ""
 
     r_dom=" Dominio enlazado   : $DOMAIN"
     p_dom=$(( BOX_WIDTH - ${#r_dom} ))
-    printf "${D}║${N} ${W}Dominio enlazado   :${N} ${C}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$p_dom" ""
+    printf "${D}║${N} ${W}Dominio enlazado   :${N} ${C}%s${N}%*s  ${D}║${N}\n" "$DOMAIN" "$p_dom" ""
 
     r_prt=" Puertos de escucha : $PORTS"
     p_prt=$(( BOX_WIDTH - ${#r_prt} ))
-    printf "${D}║${N} ${W}Puertos de escucha :${N} ${Y}%s${N}%*s ${D}║${N}\n" "$PORTS" "$p_prt" ""
+    printf "${D}║${N} ${W}Puertos de escucha :${N} ${Y}%s${N}%*s  ${D}║${N}\n" "$PORTS" "$p_prt" ""
 
     draw_mid
 
@@ -267,7 +267,7 @@ while true; do
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt2"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
     printf "${D}║${N} ${C}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
-    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N}  ${D}║${N}\n" "$opt0"
 
     draw_bot
     echo ""

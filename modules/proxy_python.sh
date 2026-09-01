@@ -292,12 +292,8 @@ while true; do
             printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p" "$pad_p" ""
             draw_mid
             
-            # Línea de entrada integrada dentro de la caja
-            input_lbl=" ➜ Puerto: "
-            # Ocultamos temporalmente los colores para medir el tamaño real del string de entrada
-            read -p "$(echo -e "${D}║${N}${Y} ➜ Puerto:${N} ")" P
-            # Como el read nativo con prompt suele salir de la caja, manejamos la captura limpia:
-            # Redibujamos la caja inferior para cerrar estéticamente
+            printf "${D}║${N}${Y} ➜ Puerto:${N} "
+            read P
             draw_bot
             
             P=$(echo "$P" | xargs)
@@ -352,8 +348,10 @@ while true; do
             printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p2" "$pad_p2" ""
             draw_mid
             
+            printf "${D}║${N}${Y} ➜ Puerto a eliminar:${N} "
+            read P
             draw_bot
-            read -p "$(echo -e "${D}║${N}${Y} ➜ Puerto a eliminar:${N} ")" P
+            
             P=$(echo "$P" | xargs)
 
             if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then

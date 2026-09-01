@@ -39,14 +39,8 @@ PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 [ -z "$PORTS" ] && PORTS="80"
 
-# ===== INSTALAR / REINICIAR PROXY =====
-install_proxy() {
-    clear
-    draw_top
-    draw_title
-    draw_mid
-
-    draw_step_line "[1/3] Preparando puertos y depurando sockets..."
+# ===== FUNCIÓN PURA PARA APLICAR CAMBIOS SIN INTERACTIVIDAD MOLESTA =====
+apply_proxy_silent() {
     systemctl stop proxy-python 2>/dev/null
 
     PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
@@ -56,8 +50,6 @@ install_proxy() {
 
     PY_PORTS=$(echo $PORTS | sed 's/ /,/g')
 
-    # ===== PYTHON CONNECT REAL =====
-    draw_step_line "[2/3] Generando motor de túnel optimizado en Python..."
     cat > /usr/local/bin/proxy.py << 'EOF'
 import socket
 import threading
@@ -93,8 +85,6 @@ def handle_client(conn):
         if not data:
             conn.close()
             return
-
-        print(f"[DEBUG] Tráfico entrante: {data[:60]}", flush=True)
 
         first_line = data.split(b'\n')[0]
 
@@ -132,7 +122,7 @@ def handle_client(conn):
             tunnel(conn, remote)
 
     except Exception as e:
-        print(f"[ERROR CLIENTE] {e}", flush=True)
+        pass
     finally:
         conn.close()
 
@@ -143,14 +133,12 @@ def start_server(port):
         s.bind(("0.0.0.0", port))
         s.listen(200)
 
-        print(f"[OK] Proxy activo en puerto {port}", flush=True)
-
         while True:
             conn, _ = s.accept()
             threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
 
     except Exception as e:
-        print(f"[ERROR SERVER] {port}: {e}", flush=True)
+        pass
 
 for p in PORTS:
     threading.Thread(target=start_server, args=(p,), daemon=False).start()
@@ -162,8 +150,6 @@ EOF
     sed -i "s/\[\$PY_PORTS\]/[$PY_PORTS]/g" /usr/local/bin/proxy.py
     chmod +x /usr/local/bin/proxy.py
 
-    # ===== SYSTEMD =====
-    draw_step_line "[3/3] Configurando servicio en systemd..."
     cat > /etc/systemd/system/proxy-python.service <<EOF
 [Unit]
 Description=KIRA Proxy Python High Performance
@@ -184,6 +170,17 @@ EOF
     systemctl daemon-reload
     systemctl start proxy-python
     systemctl enable proxy-python >/dev/null 2>&1
+}
+
+# ===== INSTALAR / REINICIAR PROXY (DESDE MENÚ) =====
+install_proxy() {
+    clear
+    draw_top
+    draw_title
+    draw_mid
+
+    draw_step_line "[1/3] Preparando puertos y depurando sockets..."
+    apply_proxy_silent
 
     sleep 1
     draw_mid
@@ -232,7 +229,6 @@ reset_all() {
 
 # ===== MENU PRINCIPAL =====
 while true; do
-    # Actualizar variable global de puertos en cada vuelta del menú
     PORTS=$(cat $PORT_FILE 2>/dev/null | xargs)
     [ -z "$PORTS" ] && PORTS="80"
 
@@ -295,6 +291,7 @@ while true; do
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
             echo -ne "${D}║${N} ${Y}➤ ${N}"
             read P
+            P=$(echo "$P" | xargs) # Limpiar espacios accidentales
 
             if ! [[ "$P" =~ ^[0-9]+$ ]]; then
                 err_p=" ✘ Puerto inválido. Solo números."
@@ -302,6 +299,17 @@ while true; do
                 printf "\033[1A\033[K${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_p" "$pad_ep" ""
                 sleep 2
                 continue
+            fi
+
+            # Validar si el puerto ya está en uso por OTRO servicio del sistema (Apache, Nginx, SSH, etc.)
+            if ss -tlnp | grep -qw ":$P " || netstat -tlnp 2>/dev/null | grep -qw ":$P "; then
+                if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
+                    err_occ=" ⚠ El puerto $P está ocupado por otro servicio."
+                    pad_occ=$(( BOX_WIDTH - ${#err_occ} ))
+                    printf "\033[1A\033[K${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_occ" "$pad_occ" ""
+                    sleep 2
+                    continue
+                fi
             fi
 
             touch $PORT_FILE
@@ -315,8 +323,8 @@ while true; do
 
             echo "$P" >> $PORT_FILE
             
-            # Auto-aplicar cambios reiniciando el servicio de inmediato
-            install_proxy >/dev/null 2>&1
+            # Aplicar de forma limpia y silenciosa sin saltos de línea colgados
+            apply_proxy_silent
             
             draw_top
             draw_title
@@ -339,7 +347,9 @@ while true; do
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p2"
             echo -ne "${D}║${N} ${Y}➤ ${N}"
             read P
+            P=$(echo "$P" | xargs) # Limpiar espacios accidentales
 
+            # Verificación exacta por palabra en el archivo de puertos
             if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
                 err_p=" ✘ El puerto no existe en la lista."
                 pad_ep=$(( BOX_WIDTH - ${#err_p} ))
@@ -348,16 +358,19 @@ while true; do
                 continue
             fi
 
-            # Eliminar el puerto del archivo filtrando las líneas
-            grep -vxF "$P" $PORT_FILE > "${PORT_FILE}.tmp" && mv "${PORT_FILE}.tmp" $PORT_FILE
+            # Eliminar limpiando concordancias exactas de línea
+            grep -vxe "$P" $PORT_FILE > "${PORT_FILE}.tmp" && mv "${PORT_FILE}.tmp" $PORT_FILE
 
-            # Si el archivo queda vacío, dejar por defecto el puerto 80
+            # Asegurar que no queden líneas vacías o espacios
+            sed -i '/^[[:space:]]*$/d' $PORT_FILE
+
+            # Si el archivo queda vacío, asignar puerto 80 por defecto
             if [ ! -s "$PORT_FILE" ]; then
                 echo "80" > $PORT_FILE
             fi
 
-            # Auto-aplicar cambios reiniciando el servicio de inmediato
-            install_proxy >/dev/null 2>&1
+            # Aplicar cambios de forma limpia y silenciosa
+            apply_proxy_silent
 
             draw_top
             draw_title

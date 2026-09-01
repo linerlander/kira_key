@@ -50,7 +50,8 @@ install_all() {
 
     draw_step_line "[2/2] Creando servidor WebSocket nativo (Python)..."
 
-    cat > /usr/local/bin/ws_server.py << 'EOF'import socket
+    cat > /usr/local/bin/ws_server.py << 'EOF'
+import socket
 import threading
 import select
 import base64
@@ -63,7 +64,6 @@ TARGET_PORT = 22
 def handle_client(client_socket):
     target_socket = None
     try:
-        # Leer la petición HTTP completa de manera segura
         request = b""
         client_socket.settimeout(3.0)
         while True:
@@ -82,9 +82,7 @@ def handle_client(client_socket):
             client_socket.close()
             return
 
-        # Verificar si es una petición WebSocket
         if b"Upgrade: websocket" in request or b"upgrade: websocket" in request:
-            # Extraer dinámicamente la Sec-WebSocket-Key para calcular el Accept exacto
             ws_key = None
             for line in request.split(b"\r\n"):
                 if line.lower().startswith(b"sec-websocket-key:"):
@@ -92,7 +90,6 @@ def handle_client(client_socket):
                     break
             
             if ws_key:
-                # Cálculo oficial del WebSocket Accept (RFC 6455)
                 magic_guid = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
                 accept_sha = hashlib.sha1(ws_key + magic_guid).digest()
                 accept_key = base64.b64encode(accept_sha).decode('utf-8')
@@ -107,13 +104,11 @@ def handle_client(client_socket):
             )
             client_socket.sendall(response.encode())
         else:
-            # Si se usa como proxy HTTP normal
             response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
             client_socket.sendall(response.encode())
             client_socket.close()
             return
 
-        # Conectar al servicio SSH local (Puerto 22)
         target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         target_socket.connect((TARGET_HOST, TARGET_PORT))
 
@@ -221,7 +216,6 @@ setup_domain() {
 
     draw_step_line "[3/3] Aplicando configuración Nginx compatible..."
     
-    # Configuración limpia sin directivas obsoletas que rompan el servicio
     cat > /etc/nginx/conf.d/kira.conf <<EOF
 map \$http_upgrade \$connection_upgrade {
     default upgrade;

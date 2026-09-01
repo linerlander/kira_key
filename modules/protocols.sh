@@ -83,7 +83,7 @@ echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${R}[0]${W} REGRESAR${N}"
 echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-read -p "➤ Opcion: " op
+read -p "➤ Opcion: " op 
 
 case $op in
 

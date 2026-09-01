@@ -17,7 +17,7 @@ draw_mid()    { echo -e "${D}╠════════════════
 draw_bot()    { echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"; }
 
 draw_title()  {
-    printf "${D}║${M} %-${BOX_WIDTH}s ${D}║${N}\n" "          ⚡ MÓDULO OVER WEBSOCKET ( WSTUNNEL / SSL )"
+    printf "${D}║${M} %-${BOX_WIDTH}s ${D}║${N}\n" "       ⚡ MÓDULO WEBSOCKET NATIVO ( HTTP INJECTOR / 101 )"
 }
 
 draw_step_line() {
@@ -28,42 +28,119 @@ draw_step_line() {
 }
 
 CONFIG="/etc/kira/domain"
-WS_PORT=8888
-SOCKS_PORT=1080
+WS_PORT=8880  # Puerto interno donde correrá el WS de Python
 
 mkdir -p /etc/kira
 DOMAIN=$(cat $CONFIG 2>/dev/null)
 [ -z "$DOMAIN" ] && DOMAIN="--"
 
+# ================================
+# 1. INSTALAR Y CREAR MOTOR WEBSOCKET PYTHON (101)
+# ================================
 install_all() {
     clear
     draw_top
     draw_title
     draw_mid
 
-    draw_step_line "[1/3] Actualizando paquetes y dependencias..."
+    draw_step_line "[1/2] Actualizando paquetes y dependencias..."
     export DEBIAN_FRONTEND=noninteractive
     apt update -y >/dev/null 2>&1
-    apt install -y wget tar nginx certbot python3-certbot-nginx >/dev/null 2>&1
+    apt install -y python3 python3-pip nginx certbot python3-certbot-nginx >/dev/null 2>&1
 
-    draw_step_line "[2/3] Descargando wstunnel optimizado..."
-    rm -f /usr/bin/wstunnel
-    wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
-    tar -xzf /tmp/ws.tar.gz -C /tmp >/dev/null 2>&1
-    mv /tmp/wstunnel /usr/bin/
-    chmod +x /usr/bin/wstunnel
+    draw_step_line "[2/2] Creando servidor WebSocket nativo (Python)..."
 
-    systemctl stop kira-ws 2>/dev/null
-    killall wstunnel 2>/dev/null
-    fuser -k ${WS_PORT}/tcp 2>/dev/null
+    # Script de Python que intercepta la petición, responde 101 y enlaza con SSH (puerto 22)
+    cat > /usr/local/bin/ws_server.py << 'EOF'
+import socket
+import threading
+import select
+import sys
 
+LOCAL_PORT = 8880
+TARGET_HOST = '127.0.0.1'
+TARGET_PORT = 22  # Destino SSH estándar
+
+def handle_client(client_socket):
+    try:
+        # Recibir las cabeceras HTTP del HTTP Injector
+        request = client_socket.recv(4096)
+        if not request:
+            client_socket.close()
+            return
+
+        # Verificar si la app solicita Upgrade a WebSocket
+        if b"Upgrade: websocket" in request or b"upgrade: websocket" in request:
+            # Responder con el código 101 Switching Protocols requerido por Injector
+            response = (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n"
+            )
+            client_socket.sendall(response.encode())
+        else:
+            # Si se conecta por HTTP normal, respondemos OK genérico
+            response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+            client_socket.sendall(response.encode())
+            client_socket.close()
+            return
+
+        # Conectar al servicio SSH local (puerto 22)
+        target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        target_socket.connect((TARGET_HOST, TARGET_PORT))
+
+        # Túnel bidireccional transparente
+        sockets = [client_socket, target_socket]
+        while True:
+            r, _, _ = select.select(sockets, [], [], 60)
+            if not r:
+                break
+            
+            for s in r:
+                data = s.recv(8192)
+                if not data:
+                    break
+                if s is client_socket:
+                    target_socket.sendall(data)
+                else:
+                    client_socket.sendall(data)
+    except Exception as e:
+        pass
+    finally:
+        try:
+            client_socket.close()
+        except:
+            pass
+        try:
+            target_socket.close()
+        except:
+            pass
+
+def main():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('127.0.0.1', LOCAL_PORT))
+    server.listen(500)
+    
+    while True:
+        client, _ = server.accept()
+        threading.Thread(target=handle_client, args=(client,), daemon=True).start()
+
+if __name__ == '__main__':
+    main()
+EOF
+
+    chmod +x /usr/local/bin/ws_server.py
+
+    # Configurar servicio systemd para el WS Python
     cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
-Description=KIRA WS SERVER High Performance
+Description=KIRA Native WebSocket Python Service
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel server ws://127.0.0.1:${WS_PORT}
+ExecStart=/usr/bin/python3 /usr/local/bin/ws_server.py
 Restart=always
 RestartSec=3
 
@@ -76,7 +153,7 @@ EOF
     systemctl restart kira-ws
 
     draw_mid
-    ok_msg=" ✔ Servidor wstunnel activo en puerto interno ${WS_PORT}."
+    ok_msg=" ✔ Motor WebSocket nativo activo en puerto interno ${WS_PORT}."
     pad_ok=$(( BOX_WIDTH - ${#ok_msg} ))
     printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_msg" "$pad_ok" ""
     draw_bot
@@ -84,13 +161,16 @@ EOF
     read -p " Presiona Enter para continuar..."
 }
 
+# ================================
+# 2. CONFIGURAR DOMINIO + SSL + NGINX (SNI)
+# ================================
 setup_domain() {
     clear
     draw_top
     draw_title
     draw_mid
 
-    prompt_d=" Ingresa tu dominio enlazado (Ej: vps.tudominio.com):"
+    prompt_d=" Ingresa tu dominio (Ej: yomi.linerlander.space):"
     pad_d=$(( BOX_WIDTH - ${#prompt_d} ))
     printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_d" "$pad_d" ""
     draw_mid
@@ -112,14 +192,15 @@ setup_domain() {
 
     draw_step_line "[1/3] Deteniendo servicios web para certificado..."
     systemctl stop nginx 2>/dev/null
-    fuser -k 80/tcp 2>/dev/null
-    fuser -k 443/tcp 2>/dev/null
+    fuser -k 80/tcp >/dev/null 2>&1
+    fuser -k 443/tcp >/dev/null 2>&1
 
     draw_step_line "[2/3] Solicitando certificado SSL (Certbot)..."
     certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN >/dev/null 2>&1
 
-    draw_step_line "[3/3] Aplicando configuración Nginx (SNI + 101)..."
+    draw_step_line "[3/3] Aplicando configuración Nginx (SNI + 101 Proxy)..."
     
+    # Nginx configurado para rutear el puerto 443 hacia el script Python local
     cat > /etc/nginx/conf.d/kira.conf <<EOF
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
@@ -147,6 +228,7 @@ server {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
 
+        # Cabeceras obligatorias para el traspaso de WebSocket y código 101
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
@@ -163,9 +245,9 @@ EOF
 
     draw_mid
     if systemctl is-active --quiet nginx; then
-        ok_ssl=" ✔ Dominio y Certificado SSL configurados con éxito."
+        ok_ssl=" ✔ Dominio, SSL y Nginx configurados para HTTP Injector."
     else
-        ok_ssl=" ⚠ Certificado listo, revisa configuración de Nginx."
+        ok_ssl=" ⚠ Error al levantar Nginx, verifica sintaxis."
     fi
     pad_ssl=$(( BOX_WIDTH - ${#ok_ssl} ))
     printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_ssl" "$pad_ssl" ""
@@ -174,69 +256,9 @@ EOF
     read -p " Presiona Enter para continuar..."
 }
 
-install_client() {
-    DOMAIN=$(cat $CONFIG 2>/dev/null)
-
-    if [ -z "$DOMAIN" ] || [ "$DOMAIN" == "--" ]; then
-        clear
-        draw_top
-        draw_title
-        draw_mid
-        err_c=" ✘ Debes configurar el dominio y SSL primero (Opción 2)."
-        pad_errc=$(( BOX_WIDTH - ${#err_c} ))
-        printf "${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_c" "$pad_errc" ""
-        draw_bot
-        echo ""
-        read -p " Presiona Enter para continuar..."
-        return
-    fi
-
-    clear
-    draw_top
-    draw_title
-    draw_mid
-
-    draw_step_line "Activando túnel cliente SOCKS5 local..."
-
-    systemctl stop kira-client 2>/dev/null
-    killall wstunnel 2>/dev/null
-    fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
-
-    cat > /etc/systemd/system/kira-client.service <<EOF
-[Unit]
-Description=KIRA CLIENT SOCKS5
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/wstunnel client -L socks5://127.0.0.1:${SOCKS_PORT} wss://${DOMAIN}/
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable kira-client >/dev/null 2>&1
-    systemctl restart kira-client
-    sleep 2
-
-    draw_mid
-    if ss -tuln | grep -q "${SOCKS_PORT}"; then
-        st_ok=" ✔ Cliente SOCKS5 activo en puerto ${SOCKS_PORT}."
-        pad_stok=$(( BOX_WIDTH - ${#st_ok} ))
-        printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$st_ok" "$pad_stok" ""
-    else
-        st_er=" ✖ Error al iniciar el cliente SOCKS5."
-        pad_ster=$(( BOX_WIDTH - ${#st_er} ))
-        printf "${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$st_er" "$pad_ster" ""
-    fi
-
-    draw_bot
-    echo ""
-    read -p " Presiona Enter para continuar..."
-}
-
+# ================================
+# 3. VER ESTADO DE LOS SERVICIOS
+# ================================
 status_all() {
     clear
     draw_top
@@ -251,47 +273,48 @@ status_all() {
         ws_col="${R}"
     fi
 
-    if systemctl is-active --quiet kira-client; then
-        cl_st="ACTIVO (ON)"
-        cl_col="${G}"
+    if systemctl is-active --quiet nginx; then
+        ng_st="ACTIVO (ON)"
+        ng_col="${G}"
     else
-        cl_st="DETENIDO (OFF)"
-        cl_col="${R}"
+        ng_st="DETENIDO (OFF)"
+        ng_col="${R}"
     fi
 
-    r1=" Servidor WS (wstunnel) : $ws_st"
+    r1=" Servidor WebSocket (Python) : $ws_st"
     p1=$(( BOX_WIDTH - ${#r1} ))
-    printf "${D}║${N} ${W}Servidor WS (wstunnel) :${N} ${ws_col}%s${N}%*s ${D}║${N}\n" "$ws_st" "$p1" ""
+    printf "${D}║${N} ${W}Servidor WebSocket (Python) :${N} ${ws_col}%s${N}%*s ${D}║${N}\n" "$ws_st" "$p1" ""
 
-    r2=" Cliente SOCKS5         : $cl_st"
+    r2=" Nginx SSL / SNI (Puerto 443): $ng_st"
     p2=$(( BOX_WIDTH - ${#r2} ))
-    printf "${D}║${N} ${W}Cliente SOCKS5         :${N} ${cl_col}%s${N}%*s ${D}║${N}\n" "$cl_st" "$p2" ""
+    printf "${D}║${N} ${W}Nginx SSL / SNI (Puerto 443):${N} ${ng_col}%s${N}%*s ${D}║${N}\n" "$ng_st" "$p2" ""
 
-    r3=" Dominio enlazado       : $DOMAIN"
+    r3=" Dominio enlazado            : $DOMAIN"
     p3=$(( BOX_WIDTH - ${#r3} ))
-    printf "${D}║${N} ${W}Dominio enlazado       :${N} ${C}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$p3" ""
+    printf "${D}║${N} ${W}Dominio enlazado            :${N} ${C}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$p3" ""
 
     draw_bot
     echo ""
     read -p " Presiona Enter para volver..."
 }
 
+# ================================
+# MENÚ PRINCIPAL DEL MÓDULO
+# ================================
 while true; do
     clear
     draw_top
     draw_title
     draw_mid
 
-    opt1=" [1] Instalar / Actualizar wstunnel y Servidor"
+    opt1=" [1] Instalar / Reiniciar Servidor WebSocket Nativo"
     opt2=" [2] Configurar Dominio y Certificado SSL (SNI)"
-    opt3=" [3] Activar Cliente SOCKS5 Local"
-    opt4=" [4] Ver Estado de los Servicios WS"
+    opt3=" [3] Ver Estado de los Servicios"
     opt0=" [0] Salir del Módulo"
 
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt2"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
-    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
     printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
 
     draw_bot
@@ -301,8 +324,7 @@ while true; do
     case $op in
         1) install_all ;;
         2) setup_domain ;;
-        3) install_client ;;
-        4) status_all ;;
+        3) status_all ;;
         0) break ;;
         *) 
            echo -e "\n ${R}Opción inválida.${N}"

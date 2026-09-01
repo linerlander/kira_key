@@ -1,57 +1,75 @@
 #!/bin/bash
 
-# ===== COLORES =====
-R='\033[1;31m'
-G='\033[1;32m'
-Y='\033[1;33m'
-B='\033[1;34m'
-C='\033[1;36m'
+# ========= PALETA DE COLORES (ESTILO NEÓN / MORADO) =========
 W='\033[1;37m'
+D='\033[38;5;183m'
+M='\033[38;5;129m'
+Y='\033[38;5;220m'
+R='\033[38;5;196m'
+C='\033[1;36m'
+G='\033[38;5;82m'
 N='\033[0m'
+
+# Ancho interno fijo: exactamente 69 caracteres de contenido útil
+BOX_WIDTH=69
+
+draw_top()    { echo -e "${D}╔═══════════════════════════════════════════════════════════════════════╗${N}"; }
+draw_mid()    { echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"; }
+draw_bot()    { echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"; }
+
+draw_title()  {
+    printf "${D}║${M} %-${BOX_WIDTH}s ${D}║${N}\n" "          ⚡ MÓDULO OVER WEBSOCKET ( WSTUNNEL / SSL )"
+}
+
+draw_step_line() {
+    local text="$1"
+    local raw_len=${#text}
+    local pad=$(( BOX_WIDTH - raw_len ))
+    printf "${D}║${N} ${C}%s${N}%*s ${D}║${N}\n" "$text" "$pad" ""
+}
 
 CONFIG="/etc/kira/domain"
 WS_PORT=8888
 SOCKS_PORT=1080
 
 mkdir -p /etc/kira
-
-banner() {
-clear
-echo -e "${C}"
-echo "╔══════════════════════════════════════╗"
-echo "║      🚀 KIRA WS + INJECTOR PRO       ║"
-echo "║         FIXED & STABLE BUILD         ║"
-echo "╚══════════════════════════════════════╝"
-echo -e "${N}"
-}
+DOMAIN=$(cat $CONFIG 2>/dev/null)
+[ -z "$DOMAIN" ] && DOMAIN="--"
 
 # ================================
+# 1. INSTALAR DEPENDENCIAS Y SERVIDOR WS
+# ================================
 install_all() {
+    clear
+    draw_top
+    draw_title
+    draw_mid
 
-echo -e "${B}📦 Instalando dependencias...${N}"
-apt update -y
-apt install -y wget tar nginx certbot python3-certbot-nginx
+    draw_step_line "[1/3] Actualizando paquetes y dependencias..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt update -y >/dev/null 2>&1
+    apt install -y wget tar nginx certbot python3-certbot-nginx >/dev/null 2>&1
 
-echo -e "${B}⬇️ Instalando wstunnel limpio...${N}"
-rm -f /usr/bin/wstunnel
-wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
-tar -xzf /tmp/ws.tar.gz -C /tmp
-mv /tmp/wstunnel /usr/bin/
-chmod +x /usr/bin/wstunnel
+    draw_step_line "[2/3] Descargando wstunnel optimizado..."
+    rm -f /usr/bin/wstunnel
+    wget -q -O /tmp/ws.tar.gz https://github.com/erebe/wstunnel/releases/download/v10.5.3/wstunnel_10.5.3_linux_amd64.tar.gz
+    tar -xzf /tmp/ws.tar.gz -C /tmp >/dev/null 2>&1
+    mv /tmp/wstunnel /usr/bin/
+    chmod +x /usr/bin/wstunnel
 
-# ===== LIMPIEZA TOTAL =====
-systemctl stop kira-ws 2>/dev/null
-killall wstunnel 2>/dev/null
-fuser -k ${WS_PORT}/tcp 2>/dev/null
+    # ===== LIMPIEZA TOTAL =====
+    systemctl stop kira-ws 2>/dev/null
+    killall wstunnel 2>/dev/null
+    fuser -k ${WS_PORT}/tcp 2>/dev/null
 
-# ===== SERVER =====
-cat > /etc/systemd/system/kira-ws.service <<EOF
+    # ===== SERVER SYSTEMD =====
+    cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
-Description=KIRA WS SERVER
+Description=KIRA WS SERVER High Performance
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/wstunnel server ws://0.0.0.0:${WS_PORT}
+ExecStart=/usr/bin/wstunnel server ws://127.0.0.1:${WS_PORT}
 Restart=always
 RestartSec=3
 
@@ -59,25 +77,53 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable kira-ws
-systemctl restart kira-ws
+    systemctl daemon-reload
+    systemctl enable kira-ws >/dev/null 2>&1
+    systemctl restart kira-ws
 
-echo -e "${G}✔ WS server activo${N}"
+    draw_mid
+    ok_msg=" ✔ Servidor wstunnel activo en puerto interno ${WS_PORT}."
+    pad_ok=$(( BOX_WIDTH - ${#ok_msg} ))
+    printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_msg" "$pad_ok" ""
+    draw_bot
+    echo ""
+    read -p " Presiona Enter para continuar..."
 }
 
 # ================================
+# 2. CONFIGURAR DOMINIO + SSL (SOPORTE SNI 101)
+# ================================
 setup_domain() {
+    clear
+    draw_top
+    draw_title
+    draw_mid
 
-read -p "🌐 Dominio: " DOMAIN
-echo "$DOMAIN" > $CONFIG
+    prompt_d=" Ingresa tu dominio enlazado (Ej: vps.tudominio.com):"
+    pad_d=$(( BOX_WIDTH - ${#prompt_d} ))
+    printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_d" "$pad_d" ""
+    draw_mid
 
-echo -e "${B}⚙️ Configurando nginx limpio...${N}"
+    lbl_in=" ➜ Dominio: "
+    echo -ne "${D}║${N}${Y}${lbl_in}${N}"
+    read DOMAIN
+    draw_bot
 
-rm -f /etc/nginx/conf.d/*.conf
+    DOMAIN=$(echo "$DOMAIN" | xargs)
+    [ -z "$DOMAIN" ] && return
 
-# ===== CONFIG GLOBAL =====
-cat > /etc/nginx/conf.d/kira.conf <<EOF
+    echo "$DOMAIN" > $CONFIG
+
+    clear
+    draw_top
+    draw_title
+    draw_mid
+
+    draw_step_line "[1/2] Configurando Nginx con soporte SNI y Upgrade 101..."
+    rm -f /etc/nginx/conf.d/kira.conf
+
+    # Configuración optimizada de Nginx con manejo nativo de SNI y Upgrade 101
+    cat > /etc/nginx/conf.d/kira.conf <<EOF
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
     '' close;
@@ -86,49 +132,82 @@ map \$http_upgrade \$connection_upgrade {
 server {
     listen 80;
     server_name $DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name $DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
 
     location / {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
 
+        # Cabeceras críticas para forzar el código 101 Switching Protocols
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 
         proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 EOF
 
-systemctl restart nginx
+    # Detenemos Nginx temporalmente para el certificado si aplica, o generamos directo con webroot/standalone
+    systemctl stop nginx 2>/dev/null
+    certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN >/dev/null 2>&1
+    systemctl restart nginx
 
-echo -e "${B}🔐 Generando SSL...${N}"
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
-
-systemctl restart nginx
-
-echo -e "${G}✔ Dominio + SSL listos${N}"
+    draw_mid
+    ok_ssl=" ✔ Dominio y Certificado SSL configurados con éxito."
+    pad_ssl=$(( BOX_WIDTH - ${#ok_ssl} ))
+    printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_ssl" "$pad_ssl" ""
+    draw_bot
+    echo ""
+    read -p " Presiona Enter para continuar..."
 }
 
 # ================================
+# 3. ACTIVAR CLIENTE SOCKS5 LOCAL
+# ================================
 install_client() {
+    DOMAIN=$(cat $CONFIG 2>/dev/null)
 
-DOMAIN=$(cat $CONFIG)
+    if [ -z "$DOMAIN" ] || [ "$DOMAIN" == "--" ]; then
+        clear
+        draw_top
+        draw_title
+        draw_mid
+        err_c=" ✘ Debes configurar el dominio y SSL primero (Opción 2)."
+        pad_errc=$(( BOX_WIDTH - ${#err_c} ))
+        printf "${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_c" "$pad_errc" ""
+        draw_bot
+        echo ""
+        read -p " Presiona Enter para continuar..."
+        return
+    fi
 
-if [ -z "$DOMAIN" ]; then
-echo -e "${R}Configura dominio primero${N}"
-return
-fi
+    clear
+    draw_top
+    draw_title
+    draw_mid
 
-echo -e "${B}🔗 Activando SOCKS5 limpio...${N}"
+    draw_step_line "Activando túnel cliente SOCKS5 local..."
 
-# ===== LIMPIEZA =====
-systemctl stop kira-client 2>/dev/null
-killall wstunnel 2>/dev/null
-fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
+    systemctl stop kira-client 2>/dev/null
+    killall wstunnel 2>/dev/null
+    fuser -k ${SOCKS_PORT}/tcp 2>/dev/null
 
-# ===== CLIENT =====
-cat > /etc/systemd/system/kira-client.service <<EOF
+    cat > /etc/systemd/system/kira-client.service <<EOF
 [Unit]
 Description=KIRA CLIENT SOCKS5
 After=network.target
@@ -142,48 +221,103 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable kira-client
-systemctl restart kira-client
+    systemctl daemon-reload
+    systemctl enable kira-client >/dev/null 2>&1
+    systemctl restart kira-client
+    sleep 2
 
-sleep 3
+    draw_mid
+    if ss -tuln | grep -q "${SOCKS_PORT}"; then
+        st_ok=" ✔ Cliente SOCKS5 activo en puerto ${SOCKS_PORT}."
+        pad_stok=$(( BOX_WIDTH - ${#st_ok} ))
+        printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$st_ok" "$pad_stok" ""
+    else
+        st_er=" ✖ Error al iniciar el cliente SOCKS5."
+        pad_ster=$(( BOX_WIDTH - ${#st_er} ))
+        printf "${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$st_er" "$pad_ster" ""
+    fi
 
-ss -tuln | grep ${SOCKS_PORT} && \
-echo -e "${G}✔ SOCKS5 activo en ${SOCKS_PORT}${N}" || \
-echo -e "${R}✖ Error SOCKS5${N}"
+    draw_bot
+    echo ""
+    read -p " Presiona Enter para continuar..."
 }
 
+# ================================
+# 4. ESTADO DE LOS SERVICIOS
 # ================================
 status_all() {
+    clear
+    draw_top
+    draw_title
+    draw_mid
 
-echo -e "${Y}===== ESTADO =====${N}"
-echo -e "WS SERVER : $(systemctl is-active kira-ws)"
-echo -e "CLIENTE   : $(systemctl is-active kira-client)"
-echo ""
+    if systemctl is-active --quiet kira-ws; then
+        ws_st="ACTIVO (ON)"
+        ws_col="${G}"
+    else
+        ws_st="DETENIDO (OFF)"
+        ws_col="${R}"
+    fi
 
-ss -tuln | grep -E "8888|1080"
+    if systemctl is-active --quiet kira-client; then
+        cl_st="ACTIVO (ON)"
+        cl_col="${G}"
+    else
+        cl_st="DETENIDO (OFF)"
+        cl_col="${R}"
+    fi
+
+    r1=" Servidor WS (wstunnel) : $ws_st"
+    p1=$(( BOX_WIDTH - ${#r1} ))
+    printf "${D}║${N} ${W}Servidor WS (wstunnel) :${N} ${ws_col}%s${N}%*s ${D}║${N}\n" "$ws_st" "$p1" ""
+
+    r2=" Cliente SOCKS5         : $cl_st"
+    p2=$(( BOX_WIDTH - ${#r2} ))
+    printf "${D}║${N} ${W}Cliente SOCKS5         :${N} ${cl_col}%s${N}%*s ${D}║${N}\n" "$cl_st" "$p2" ""
+
+    r3=" Dominio enlazado       : $DOMAIN"
+    p3=$(( BOX_WIDTH - ${#r3} ))
+    printf "${D}║${N} ${W}Dominio enlazado       :${N} ${C}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$p3" ""
+
+    draw_bot
+    echo ""
+    read -p " Presiona Enter para volver..."
 }
 
 # ================================
+# MENÚ PRINCIPAL
+# ================================
 while true; do
-banner
+    clear
+    draw_top
+    draw_title
+    draw_mid
 
-echo -e "${W}[1] Instalar sistema${N}"
-echo -e "${W}[2] Configurar dominio + SSL${N}"
-echo -e "${W}[3] Activar SOCKS5${N}"
-echo -e "${W}[4] Estado${N}"
-echo -e "${W}[0] Salir${N}"
+    opt1=" [1] Instalar / Actualizar wstunnel y Servidor"
+    opt2=" [2] Configurar Dominio y Certificado SSL (SNI)"
+    opt3=" [3] Activar Cliente SOCKS5 Local"
+    opt4=" [4] Ver Estado de los Servicios WS"
+    opt0=" [0] Salir del Módulo"
 
-read -p "➤ Opción: " op
+    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
+    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt2"
+    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
+    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
 
-case $op in
-1) install_all ;;
-2) setup_domain ;;
-3) install_client ;;
-4) status_all ;;
-0) exit ;;
-*) echo "Opción inválida" ;;
-esac
+    draw_bot
+    echo ""
+    read -p " ➤ Opción: " op
 
-read -p "Enter..."
+    case $op in
+        1) install_all ;;
+        2) setup_domain ;;
+        3) install_client ;;
+        4) status_all ;;
+        0) break ;;
+        *) 
+           echo -e "\n ${R}Opción inválida.${N}"
+           sleep 1 
+           ;;
+    esac
 done

@@ -261,16 +261,16 @@ while true; do
 
     opt1=" [1] Iniciar / Reiniciar Proxy Python"
     opt2=" [2] Agregar Nuevo Puerto de Escucha"
-    opt3=" [3] Reset Total / Desinstalar"
-    opt4=" [4] Ver Registros en Vivo (Logs)"
-    opt5=" [5] Eliminar un Puerto de Escucha"
+    opt3=" [3] Eliminar un Puerto de Escucha"
+    opt4=" [4] Reset Total / Desinstalar"
+    opt5=" [5] Ver Registros en Vivo (Logs)"
     opt0=" [0] Salir del Módulo"
 
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt2"
-    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt5"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
-    printf "${D}║${N} ${C}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
+    printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
+    printf "${D}║${N} ${C}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt5"
     printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
 
     draw_bot
@@ -288,11 +288,18 @@ while true; do
             draw_mid
             
             prompt_p=" Ingresa el nuevo puerto:"
-            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
+            pad_p=$(( BOX_WIDTH - ${#prompt_p} ))
+            printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p" "$pad_p" ""
+            draw_mid
+            
+            # Línea de entrada integrada dentro de la caja
+            input_lbl=" ➜ Puerto: "
+            # Ocultamos temporalmente los colores para medir el tamaño real del string de entrada
+            read -p "$(echo -e "${D}║${N}${Y} ➜ Puerto:${N} ")" P
+            # Como el read nativo con prompt suele salir de la caja, manejamos la captura limpia:
+            # Redibujamos la caja inferior para cerrar estéticamente
             draw_bot
-            echo ""
-            echo -ne " ${Y}➤ Puerto:${N} "
-            read P
+            
             P=$(echo "$P" | xargs)
 
             if ! [[ "$P" =~ ^[0-9]+$ ]]; then
@@ -330,15 +337,6 @@ while true; do
             sleep 2
             ;;
         3)
-            reset_all
-            ;;
-        4)
-            clear
-            journalctl -u proxy-python -n 25 --no-pager
-            echo ""
-            read -p " Presiona Enter para volver..."
-            ;;
-        5)
             clear
             draw_top
             draw_title
@@ -346,13 +344,16 @@ while true; do
 
             PORTS_CLEAN=$(cat $PORT_FILE 2>/dev/null | xargs)
             prompt_p=" Puertos actuales: $PORTS_CLEAN"
-            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
+            pad_p1=$(( BOX_WIDTH - ${#prompt_p} ))
+            printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p" "$pad_p1" ""
+            
             prompt_p2=" Ingresa el puerto que deseas eliminar:"
-            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p2"
+            pad_p2=$(( BOX_WIDTH - ${#prompt_p2} ))
+            printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p2" "$pad_p2" ""
+            draw_mid
+            
             draw_bot
-            echo ""
-            echo -ne " ${Y}➤ Puerto a eliminar:${N} "
-            read P
+            read -p "$(echo -e "${D}║${N}${Y} ➜ Puerto a eliminar:${N} ")" P
             P=$(echo "$P" | xargs)
 
             if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
@@ -382,6 +383,15 @@ while true; do
             printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_p" "$pad_okp" ""
             draw_bot
             sleep 2
+            ;;
+        4)
+            reset_all
+            ;;
+        5)
+            clear
+            journalctl -u proxy-python -n 25 --no-pager
+            echo ""
+            read -p " Presiona Enter para volver..."
             ;;
         0)
             break

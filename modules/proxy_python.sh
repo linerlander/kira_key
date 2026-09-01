@@ -292,8 +292,14 @@ while true; do
             printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p" "$pad_p" ""
             draw_mid
             
-            printf "${D}║${N}${Y} ➜ Puerto:${N} "
+            # Cálculo exacto de relleno para la línea de entrada interactiva
+            lbl_in=" ➜ Puerto: "
+            lbl_in_len=${#lbl_in}
+            pad_in=$(( BOX_WIDTH - lbl_in_len ))
+            
+            echo -ne "${D}║${N}${Y}${lbl_in}${N}"
             read P
+            # Limpiamos los caracteres sobrantes y cerramos la caja inmediatamente
             draw_bot
             
             P=$(echo "$P" | xargs)
@@ -342,13 +348,11 @@ while true; do
             prompt_p=" Puertos actuales: $PORTS_CLEAN"
             pad_p1=$(( BOX_WIDTH - ${#prompt_p} ))
             printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p" "$pad_p1" ""
-            
-            prompt_p2=" Ingresa el puerto que deseas eliminar:"
-            pad_p2=$(( BOX_WIDTH - ${#prompt_p2} ))
-            printf "${D}║${N} %s%*s ${D}║${N}\n" "$prompt_p2" "$pad_p2" ""
             draw_mid
             
-            printf "${D}║${N}${Y} ➜ Puerto a eliminar:${N} "
+            lbl_del=" ➜ Puerto a eliminar: "
+            
+            echo -ne "${D}║${N}${Y}${lbl_del}${N}"
             read P
             draw_bot
             

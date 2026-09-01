@@ -50,36 +50,70 @@ install_all() {
 
     draw_step_line "[2/2] Creando servidor WebSocket nativo (Python)..."
 
-    cat > /usr/local/bin/ws_server.py << 'EOF'
-import socket
+    cat > /usr/local/bin/ws_server.py << 'EOF'import socket
 import threading
 import select
+import base64
+import hashlib
 
 LOCAL_PORT = 8880
 TARGET_HOST = '127.0.0.1'
 TARGET_PORT = 22
 
 def handle_client(client_socket):
+    target_socket = None
     try:
-        request = client_socket.recv(4096)
+        # Leer la petición HTTP completa de manera segura
+        request = b""
+        client_socket.settimeout(3.0)
+        while True:
+            try:
+                chunk = client_socket.recv(4096)
+                if not chunk:
+                    break
+                request += chunk
+                if b"\r\n\r\n" in request or len(request) > 8192:
+                    break
+            except socket.timeout:
+                break
+        
+        client_socket.settimeout(None)
         if not request:
             client_socket.close()
             return
 
+        # Verificar si es una petición WebSocket
         if b"Upgrade: websocket" in request or b"upgrade: websocket" in request:
+            # Extraer dinámicamente la Sec-WebSocket-Key para calcular el Accept exacto
+            ws_key = None
+            for line in request.split(b"\r\n"):
+                if line.lower().startswith(b"sec-websocket-key:"):
+                    ws_key = line.split(b":", 1)[1].strip()
+                    break
+            
+            if ws_key:
+                # Cálculo oficial del WebSocket Accept (RFC 6455)
+                magic_guid = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+                accept_sha = hashlib.sha1(ws_key + magic_guid).digest()
+                accept_key = base64.b64encode(accept_sha).decode('utf-8')
+            else:
+                accept_key = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+
             response = (
                 "HTTP/1.1 101 Switching Protocols\r\n"
                 "Upgrade: websocket\r\n"
                 "Connection: Upgrade\r\n"
-                "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n"
+                f"Sec-WebSocket-Accept: {accept_key}\r\n\r\n"
             )
             client_socket.sendall(response.encode())
         else:
+            # Si se usa como proxy HTTP normal
             response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
             client_socket.sendall(response.encode())
             client_socket.close()
             return
 
+        # Conectar al servicio SSH local (Puerto 22)
         target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         target_socket.connect((TARGET_HOST, TARGET_PORT))
 
@@ -101,7 +135,8 @@ def handle_client(client_socket):
     finally:
         try: client_socket.close()
         except: pass
-        try: target_socket.close()
+        try: 
+            if target_socket: target_socket.close()
         except: pass
 
 def main():

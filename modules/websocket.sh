@@ -28,7 +28,7 @@ draw_step_line() {
 }
 
 CONFIG="/etc/kira/domain"
-WS_PORT=8880  # Puerto interno donde correrá el WS de Python
+WS_PORT=8880
 
 mkdir -p /etc/kira
 DOMAIN=$(cat $CONFIG 2>/dev/null)
@@ -50,28 +50,23 @@ install_all() {
 
     draw_step_line "[2/2] Creando servidor WebSocket nativo (Python)..."
 
-    # Script de Python que intercepta la petición, responde 101 y enlaza con SSH (puerto 22)
     cat > /usr/local/bin/ws_server.py << 'EOF'
 import socket
 import threading
 import select
-import sys
 
 LOCAL_PORT = 8880
 TARGET_HOST = '127.0.0.1'
-TARGET_PORT = 22  # Destino SSH estándar
+TARGET_PORT = 22
 
 def handle_client(client_socket):
     try:
-        # Recibir las cabeceras HTTP del HTTP Injector
         request = client_socket.recv(4096)
         if not request:
             client_socket.close()
             return
 
-        # Verificar si la app solicita Upgrade a WebSocket
         if b"Upgrade: websocket" in request or b"upgrade: websocket" in request:
-            # Responder con el código 101 Switching Protocols requerido por Injector
             response = (
                 "HTTP/1.1 101 Switching Protocols\r\n"
                 "Upgrade: websocket\r\n"
@@ -80,23 +75,19 @@ def handle_client(client_socket):
             )
             client_socket.sendall(response.encode())
         else:
-            # Si se conecta por HTTP normal, respondemos OK genérico
             response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
             client_socket.sendall(response.encode())
             client_socket.close()
             return
 
-        # Conectar al servicio SSH local (puerto 22)
         target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         target_socket.connect((TARGET_HOST, TARGET_PORT))
 
-        # Túnel bidireccional transparente
         sockets = [client_socket, target_socket]
         while True:
             r, _, _ = select.select(sockets, [], [], 60)
             if not r:
                 break
-            
             for s in r:
                 data = s.recv(8192)
                 if not data:
@@ -105,24 +96,19 @@ def handle_client(client_socket):
                     target_socket.sendall(data)
                 else:
                     client_socket.sendall(data)
-    except Exception as e:
+    except Exception:
         pass
     finally:
-        try:
-            client_socket.close()
-        except:
-            pass
-        try:
-            target_socket.close()
-        except:
-            pass
+        try: client_socket.close()
+        except: pass
+        try: target_socket.close()
+        except: pass
 
 def main():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('127.0.0.1', LOCAL_PORT))
     server.listen(500)
-    
     while True:
         client, _ = server.accept()
         threading.Thread(target=handle_client, args=(client,), daemon=True).start()
@@ -133,7 +119,6 @@ EOF
 
     chmod +x /usr/local/bin/ws_server.py
 
-    # Configurar servicio systemd para el WS Python
     cat > /etc/systemd/system/kira-ws.service <<EOF
 [Unit]
 Description=KIRA Native WebSocket Python Service
@@ -190,17 +175,18 @@ setup_domain() {
     draw_title
     draw_mid
 
-    draw_step_line "[1/3] Deteniendo servicios web para certificado..."
+    draw_step_line "[1/3] Limpiando puertos y servicios web..."
     systemctl stop nginx 2>/dev/null
     fuser -k 80/tcp >/dev/null 2>&1
     fuser -k 443/tcp >/dev/null 2>&1
+    rm -f /etc/nginx/sites-enabled/default
 
     draw_step_line "[2/3] Solicitando certificado SSL (Certbot)..."
     certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN >/dev/null 2>&1
 
-    draw_step_line "[3/3] Aplicando configuración Nginx (SNI + 101 Proxy)..."
+    draw_step_line "[3/3] Aplicando configuración Nginx compatible..."
     
-    # Nginx configurado para rutear el puerto 443 hacia el script Python local
+    # Configuración limpia sin directivas obsoletas que rompan el servicio
     cat > /etc/nginx/conf.d/kira.conf <<EOF
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
@@ -215,7 +201,6 @@ server {
 
 server {
     listen 443 ssl;
-    http2 on;
     server_name $DOMAIN;
 
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
@@ -228,7 +213,6 @@ server {
         proxy_pass http://127.0.0.1:${WS_PORT};
         proxy_http_version 1.1;
 
-        # Cabeceras obligatorias para el traspaso de WebSocket y código 101
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
@@ -247,7 +231,7 @@ EOF
     if systemctl is-active --quiet nginx; then
         ok_ssl=" ✔ Dominio, SSL y Nginx configurados para HTTP Injector."
     else
-        ok_ssl=" ⚠ Error al levantar Nginx, verifica sintaxis."
+        ok_ssl=" ⚠ Error al levantar Nginx, revisa sintaxis."
     fi
     pad_ssl=$(( BOX_WIDTH - ${#ok_ssl} ))
     printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_ssl" "$pad_ssl" ""

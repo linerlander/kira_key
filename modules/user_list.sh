@@ -122,7 +122,7 @@ done 3< /etc/passwd
 total_users=$((i - 1))
 
 if [ $total_users -eq 0 ]; then
-    echo -e "${D}║${N} ${R}                    No hay usuarios SSH registrados.                    ${D}║${N}"
+    echo -e "${D}║${N} ${R}                    No hay usuarios SSH registrados.                   ${D}║${N}"
 fi
 
 echo -e "${D}╠═══════════════════════════════════════════════════════════════════════╣${N}"

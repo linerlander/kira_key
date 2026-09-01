@@ -18,7 +18,7 @@ draw_mid()    { echo -e "${D}╠════════════════
 draw_bot()    { echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"; }
 
 draw_title()  {
-    printf "${D}║${M} %-${BOX_WIDTH}s ${D}║${N}\n" "           ⚡ MÓDULO PROXY PYTHON ( HTTP / WS )"
+    printf "${D}║${M} %-${BOX_WIDTH}s   ${D}║${N}\n" "           ⚡ MÓDULO PROXY PYTHON ( HTTP / WS )"
 }
 
 draw_step_line() {
@@ -247,15 +247,15 @@ while true; do
 
     r_st=" Estado del Servicio: $st_text"
     p_st=$(( BOX_WIDTH - ${#r_st} ))
-    printf "${D}║${N} ${W}Estado del Servicio:${N} ${st_color}%s${N}%*s ${D}║${N}\n" "$st_text" "$p_st" ""
+    printf "${D}║${N} ${W}Estado del Servicio:${N} ${st_color}%s${N}%*s  ${D}║${N}\n" "$st_text" "$p_st" ""
 
     r_dom=" Dominio enlazado   : $DOMAIN"
     p_dom=$(( BOX_WIDTH - ${#r_dom} ))
-    printf "${D}║${N} ${W}Dominio enlazado   :${N} ${C}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$p_dom" ""
+    printf "${D}║${N} ${W}Dominio enlazado   :${N} ${C}%s${N}%*s  ${D}║${N}\n" "$DOMAIN" "$p_dom" ""
 
     r_prt=" Puertos de escucha : $PORTS"
     p_prt=$(( BOX_WIDTH - ${#r_prt} ))
-    printf "${D}║${N} ${W}Puertos de escucha :${N} ${Y}%s${N}%*s ${D}║${N}\n" "$PORTS" "$p_prt" ""
+    printf "${D}║${N} ${W}Puertos de escucha :${N} ${Y}%s${N}%*s  ${D}║${N}\n" "$PORTS" "$p_prt" ""
 
     draw_mid
 
@@ -271,7 +271,7 @@ while true; do
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt5"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
     printf "${D}║${N} ${C}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
-    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N}  ${D}║${N}\n" "$opt0"
 
     draw_bot
     echo ""
@@ -335,6 +335,16 @@ while true; do
             draw_bot
             sleep 2
             ;;
+       
+        3)
+            reset_all
+            ;;
+        4)
+            clear
+            journalctl -u proxy-python -n 25 --no-pager
+            echo ""
+            read -p " Presiona Enter para volver..."
+            ;;
         5)
             clear
             draw_top
@@ -383,15 +393,6 @@ while true; do
             printf "${D}║${N} ${G}%s${N}%*s ${D}║${N}\n" "$ok_p" "$pad_okp" ""
             draw_bot
             sleep 2
-            ;;
-        3)
-            reset_all
-            ;;
-        4)
-            clear
-            journalctl -u proxy-python -n 25 --no-pager
-            echo ""
-            read -p " Presiona Enter para volver..."
             ;;
         0)
             break

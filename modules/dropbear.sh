@@ -112,8 +112,8 @@ while true; do
 
     # ========= INFO DE ESTADO Y PUERTO EN CAJA =========
     echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Estado:${N}  %b %-34s${C}│${N}\n" "$STATE_STR" ""
-    printf "${C}│${N} ${W}Puerto:${N}   ${C}%-35s${N}      ${C}│${N}\n" "$DPORT"
+    printf "${C}│${N} ${W}Estado:${N}%b %-34s${C}│${N}\n" "$STATE_STR" ""
+    printf "${C}│${N} ${W}Puerto:${N}   ${C}%-35s${N}        ${C}│${N}\n" "$DPORT"
     echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
     echo ""
 

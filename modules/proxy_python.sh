@@ -288,7 +288,7 @@ while true; do
             draw_mid
             
             prompt_p=" Ingresa el nuevo puerto:"
-            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}" "$prompt_p"
+            printf "${D}║${N} %-${BOX_WIDTH}s             ${D}║${N}" "$prompt_p"
             echo -ne "${D}║${N} ${Y}➤ ${N}"
             read P
             P=$(echo "$P" | xargs) # Limpiar espacios accidentales
@@ -356,7 +356,7 @@ while true; do
             prompt_p=" Puertos actuales: $PORTS_CLEAN"
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
             prompt_p2=" Ingresa el puerto que deseas eliminar:"
-            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p2"
+            printf "${D}║${N} %-${BOX_WIDTH}s            ${D}║${N}" "$prompt_p2"
             echo -ne "${D}║${N} ${Y}➤ ${N}"
             read P
             P=$(echo "$P" | xargs) # Limpiar espacios

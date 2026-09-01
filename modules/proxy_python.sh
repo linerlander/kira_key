@@ -220,7 +220,7 @@ reset_all() {
 
     raw_res=" Status: [RESET] - Sistema limpio con éxito."
     pad_res=$(( BOX_WIDTH - ${#raw_res} ))
-    printf "${D}║${N} Status: ${Y}[RESET]${N} - Sistema limpio con éxito.%*s ${D}║${N}\n" "$pad_res" ""
+    printf "${D}║${N} Status: ${Y}[RESET]${N} - Sistema limpio con éxito.%*s  ${D}║${N}\n" "$pad_res" ""
 
     draw_bot
     echo ""

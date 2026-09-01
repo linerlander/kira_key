@@ -261,9 +261,9 @@ while true; do
 
     opt1=" [1] Iniciar / Reiniciar Proxy Python"
     opt2=" [2] Agregar Nuevo Puerto de Escucha"
-    opt5=" [5] Eliminar un Puerto de Escucha"
     opt3=" [3] Reset Total / Desinstalar"
     opt4=" [4] Ver Registros en Vivo (Logs)"
+    opt5=" [5] Eliminar un Puerto de Escucha"
     opt0=" [0] Salir del Módulo"
 
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
@@ -341,15 +341,16 @@ while true; do
             draw_title
             draw_mid
 
-            prompt_p=" Puertos actuales: $PORTS"
+            # Mostrar puertos limpios en pantalla
+            PORTS_CLEAN=$(cat $PORT_FILE 2>/dev/null | xargs)
+            prompt_p=" Puertos actuales: $PORTS_CLEAN"
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
             prompt_p2=" Ingresa el puerto que deseas eliminar:"
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p2"
             echo -ne "${D}║${N} ${Y}➤ ${N}"
             read P
-            P=$(echo "$P" | xargs) # Limpiar espacios accidentales
+            P=$(echo "$P" | xargs) # Limpiar espacios
 
-            # Verificación exacta por palabra en el archivo de puertos
             if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
                 err_p=" ✘ El puerto no existe en la lista."
                 pad_ep=$(( BOX_WIDTH - ${#err_p} ))
@@ -358,15 +359,17 @@ while true; do
                 continue
             fi
 
-            # Eliminar limpiando concordancias exactas de línea
-            grep -vxe "$P" $PORT_FILE > "${PORT_FILE}.tmp" && mv "${PORT_FILE}.tmp" $PORT_FILE
-
-            # Asegurar que no queden líneas vacías o espacios
-            sed -i '/^[[:space:]]*$/d' $PORT_FILE
+            # Método robusto: Reescribir el archivo ignorando exactamente el puerto indicado y limpiando espacios
+            awk -v port="$P" '{for(i=1;i<=NF;i++) if($i != port) printf "%s ", $i; print ""}' $PORT_FILE > "${PORT_FILE}.tmp"
+            tr -s ' ' '\n' < "${PORT_FILE}.tmp" | grep -v '^[[:space:]]*$' > $PORT_FILE
+            rm -f "${PORT_FILE}.tmp"
 
             # Si el archivo queda vacío, asignar puerto 80 por defecto
             if [ ! -s "$PORT_FILE" ]; then
                 echo "80" > $PORT_FILE
+            else
+                # Reorganizar en una sola línea limpia separados por espacio
+                echo $(cat $PORT_FILE) > $PORT_FILE
             fi
 
             # Aplicar cambios de forma limpia y silenciosa

@@ -112,8 +112,8 @@ while true; do
 
     # ========= INFO DE ESTADO Y PUERTO EN CAJA =========
     echo -e "${C}┌─────────────────────────────────────────────────────┐${N}"
-    printf "${C}│${N} ${W}Estado:${N}   %b %-34s${C}│${N}\n" "$STATE_STR" ""
-    printf "${C}│${N} ${W}Puerto:${N}   ${C}%-35s${N}    ${C}│${N}\n" "$DPORT"
+    printf "${C}│${N} ${W}Estado:${N}  %b %-34s${C}│${N}\n" "$STATE_STR" ""
+    printf "${C}│${N} ${W}Puerto:${N}   ${C}%-35s${N}      ${C}│${N}\n" "$DPORT"
     echo -e "${C}└─────────────────────────────────────────────────────┘${N}"
     echo ""
 
@@ -123,12 +123,12 @@ while true; do
 
     # ========= MENÚ DE OPCIONES =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    printf "${C}║${N} ${W}[1]${N} ${W}%-45s  ${C}║${N}\n" "Instalar o Reinstalar Dropbear"
-    printf "${C}║${N} ${W}[2]${N} ${W}%-45s  ${C}║${N}\n" "Cambiar puerto de escucha"
-    printf "${C}║${N} ${W}[3]${N} ${W}%-45s  ${C}║${N}\n" "Alternar Encendido / Apagado"
-    printf "${C}║${N} ${W}[4]${N} ${W}%-45s  ${C}║${N}\n" "Reiniciar servicio"
+    printf "${C}║${N} ${W}[1]${N} ${W}%-45s   ${C}║${N}\n" "Instalar o Reinstalar Dropbear"
+    printf "${C}║${N} ${W}[2]${N} ${W}%-45s   ${C}║${N}\n" "Cambiar puerto de escucha"
+    printf "${C}║${N} ${W}[3]${N} ${W}%-45s   ${C}║${N}\n" "Alternar Encendido / Apagado"
+    printf "${C}║${N} ${W}[4]${N} ${W}%-45s   ${C}║${N}\n" "Reiniciar servicio"
     echo -e "${C}╠═════════════════════════════════════════════════════╣${N}"
-    printf "${C}║${N} ${R}[0]${N} ${W}%-45s  ${C}║${N}\n" "Volver al menú principal"
+    printf "${C}║${N} ${R}[0]${N} ${W}%-45s    ${C}║${N}\n" "Volver al menú principal"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
 

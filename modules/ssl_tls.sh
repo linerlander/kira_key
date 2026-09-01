@@ -59,7 +59,7 @@ if [ "$IS_ACTIVE" = true ]; then
     
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt1"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt2"
-    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N}  ${D}║${N}\n" "$opt3"
     draw_bot
     echo ""
     read -p " ➤ Opción: " opc
@@ -124,7 +124,7 @@ done
 draw_mid
 raw_info=" Dominio configurado: $DOMAIN"
 pad_info=$(( BOX_WIDTH - ${#raw_info} ))
-printf "${D}║${N} ${W}Dominio configurado:${N} ${Y}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$pad_info" ""
+printf "${D}║${N} ${W}Dominio configurado:${N} ${Y}%s${N}%*s  ${D}║${N}\n" "$DOMAIN" "$pad_info" ""
 draw_mid
 
 # PASO 1
@@ -198,8 +198,8 @@ if systemctl is-active --quiet stunnel4 || pgrep -x "stunnel4" >/dev/null || pgr
     pad1=$(( BOX_WIDTH - ${#raw_l1} ))
     pad2=$(( BOX_WIDTH - ${#raw_l2} ))
     
-    printf "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado con éxito.%*s ${D}║${N}\n" "$pad1" ""
-    printf "${D}║${N} Puertos activos: ${Y}443 (SSL->WS)${N} | ${Y}444 (SSL->SSH)${N}%*s ${D}║${N}\n" "$pad2" ""
+    printf "${D}║${N} Status: ${G}[ONLINE]${N} - Puerto ${Y}443${N} asignado con éxito.%*s  ${D}║${N}\n" "$pad1" ""
+    printf "${D}║${N} Puertos activos: ${Y}443 (SSL->WS)${N} | ${Y}444 (SSL->SSH)${N}%*s  ${D}║${N}\n" "$pad2" ""
 else
     raw_err=" Status: [ERROR] - Fallo al iniciar el puerto 443."
     pad_err=$(( BOX_WIDTH - ${#raw_err} ))

@@ -18,7 +18,7 @@ draw_mid()    { echo -e "${D}╠════════════════
 draw_bot()    { echo -e "${D}╚═══════════════════════════════════════════════════════════════════════╝${N}"; }
 
 draw_title()  {
-    printf "${D}║${M} %-${BOX_WIDTH}s   ${D}║${N}\n" "           ⚡ MÓDULO PROXY PYTHON ( HTTP / WS )"
+    printf "${D}║${M} %-${BOX_WIDTH}s ${D}║${N}\n" "           ⚡ MÓDULO PROXY PYTHON ( HTTP / WS )"
 }
 
 draw_step_line() {
@@ -247,15 +247,15 @@ while true; do
 
     r_st=" Estado del Servicio: $st_text"
     p_st=$(( BOX_WIDTH - ${#r_st} ))
-    printf "${D}║${N} ${W}Estado del Servicio:${N} ${st_color}%s${N}%*s  ${D}║${N}\n" "$st_text" "$p_st" ""
+    printf "${D}║${N} ${W}Estado del Servicio:${N} ${st_color}%s${N}%*s ${D}║${N}\n" "$st_text" "$p_st" ""
 
     r_dom=" Dominio enlazado   : $DOMAIN"
     p_dom=$(( BOX_WIDTH - ${#r_dom} ))
-    printf "${D}║${N} ${W}Dominio enlazado   :${N} ${C}%s${N}%*s  ${D}║${N}\n" "$DOMAIN" "$p_dom" ""
+    printf "${D}║${N} ${W}Dominio enlazado   :${N} ${C}%s${N}%*s ${D}║${N}\n" "$DOMAIN" "$p_dom" ""
 
     r_prt=" Puertos de escucha : $PORTS"
     p_prt=$(( BOX_WIDTH - ${#r_prt} ))
-    printf "${D}║${N} ${W}Puertos de escucha :${N} ${Y}%s${N}%*s  ${D}║${N}\n" "$PORTS" "$p_prt" ""
+    printf "${D}║${N} ${W}Puertos de escucha :${N} ${Y}%s${N}%*s ${D}║${N}\n" "$PORTS" "$p_prt" ""
 
     draw_mid
 
@@ -271,7 +271,7 @@ while true; do
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt5"
     printf "${D}║${N} ${W}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt3"
     printf "${D}║${N} ${C}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt4"
-    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N}  ${D}║${N}\n" "$opt0"
+    printf "${D}║${N} ${R}%-${BOX_WIDTH}s${N} ${D}║${N}\n" "$opt0"
 
     draw_bot
     echo ""
@@ -290,24 +290,20 @@ while true; do
             prompt_p=" Ingresa el nuevo puerto:"
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
             draw_bot
-            echo -ne " ${Y}➤ ${N}"
+            echo ""
+            echo -ne " ${Y}➤ Puerto:${N} "
             read P
-            P=$(echo "$P" | xargs) # Limpiar espacios accidentales
+            P=$(echo "$P" | xargs)
 
             if ! [[ "$P" =~ ^[0-9]+$ ]]; then
-                err_p=" ✘ Puerto inválido. Solo números."
-                pad_ep=$(( BOX_WIDTH - ${#err_p} ))
-                printf "\033[1A\033[K${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_p" "$pad_ep" ""
+                echo -e "\n ${R}✘ Puerto inválido. Solo números.${N}"
                 sleep 2
                 continue
             fi
 
-            # Validar si el puerto ya está en uso por OTRO servicio del sistema (Apache, Nginx, SSH, etc.)
             if ss -tlnp | grep -qw ":$P " || netstat -tlnp 2>/dev/null | grep -qw ":$P "; then
                 if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
-                    err_occ=" ⚠ El puerto $P está ocupado por otro servicio."
-                    pad_occ=$(( BOX_WIDTH - ${#err_occ} ))
-                    printf "\033[1A\033[K${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_occ" "$pad_occ" ""
+                    echo -e "\n ${R}⚠ El puerto $P está ocupado por otro servicio.${N}"
                     sleep 2
                     continue
                 fi
@@ -315,18 +311,15 @@ while true; do
 
             touch $PORT_FILE
             if grep -qw "$P" $PORT_FILE 2>/dev/null; then
-                exist_p=" ⚠ El puerto ya se encuentra registrado."
-                pad_exp=$(( BOX_WIDTH - ${#exist_p} ))
-                printf "\033[1A\033[K${D}║${N} ${Y}%s${N}%*s ${D}║${N}\n" "$exist_p" "$pad_exp" ""
+                echo -e "\n ${Y}⚠ El puerto ya se encuentra registrado.${N}"
                 sleep 2
                 continue
             fi
 
             echo "$P" >> $PORT_FILE
-            
-            # Aplicar de forma limpia y silenciosa sin saltos de línea colgados
             apply_proxy_silent
             
+            clear
             draw_top
             draw_title
             draw_mid
@@ -336,7 +329,6 @@ while true; do
             draw_bot
             sleep 2
             ;;
-       
         3)
             reset_all
             ;;
@@ -352,40 +344,36 @@ while true; do
             draw_title
             draw_mid
 
-            # Mostrar puertos limpios en pantalla
             PORTS_CLEAN=$(cat $PORT_FILE 2>/dev/null | xargs)
             prompt_p=" Puertos actuales: $PORTS_CLEAN"
             printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
             prompt_p2=" Ingresa el puerto que deseas eliminar:"
-            printf "${D}║${N} %-${BOX_WIDTH}s            ${D}║${N}" "$prompt_p2"
-            echo -ne "${D}║${N} ${Y}➤ ${N}"
+            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p2"
+            draw_bot
+            echo ""
+            echo -ne " ${Y}➤ Puerto a eliminar:${N} "
             read P
-            P=$(echo "$P" | xargs) # Limpiar espacios
+            P=$(echo "$P" | xargs)
 
             if ! grep -qw "$P" $PORT_FILE 2>/dev/null; then
-                err_p=" ✘ El puerto no existe en la lista."
-                pad_ep=$(( BOX_WIDTH - ${#err_p} ))
-                printf "\033[1A\033[K${D}║${N} ${R}%s${N}%*s ${D}║${N}\n" "$err_p" "$pad_ep" ""
+                echo -e "\n ${R}✘ El puerto no existe en la lista.${N}"
                 sleep 2
                 continue
             fi
 
-            # Método robusto: Reescribir el archivo ignorando exactamente el puerto indicado y limpiando espacios
             awk -v port="$P" '{for(i=1;i<=NF;i++) if($i != port) printf "%s ", $i; print ""}' $PORT_FILE > "${PORT_FILE}.tmp"
             tr -s ' ' '\n' < "${PORT_FILE}.tmp" | grep -v '^[[:space:]]*$' > $PORT_FILE
             rm -f "${PORT_FILE}.tmp"
 
-            # Si el archivo queda vacío, asignar puerto 80 por defecto
             if [ ! -s "$PORT_FILE" ]; then
                 echo "80" > $PORT_FILE
             else
-                # Reorganizar en una sola línea limpia separados por espacio
                 echo $(cat $PORT_FILE) > $PORT_FILE
             fi
 
-            # Aplicar cambios de forma limpia y silenciosa
             apply_proxy_silent
 
+            clear
             draw_top
             draw_title
             draw_mid

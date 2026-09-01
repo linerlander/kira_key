@@ -288,8 +288,12 @@ while true; do
             draw_mid
             
             prompt_p=" Ingresa el nuevo puerto:"
-            printf "${D}║${N} %-${BOX_WIDTH}s             ${D}║${N}" "$prompt_p"
-            echo -ne "${D}║${N} ${Y}➤ ${N}"
+            # Se añade el espacio antes del borde y el salto de línea \n
+            printf "${D}║${N} %-${BOX_WIDTH}s ${D}║${N}\n" "$prompt_p"
+            draw_bot
+            echo ""
+            # Se lee la variable fuera de la caja para que el cursor no rompa el diseño
+            echo -ne " ${Y}➤ ${N}"
             read P
             P=$(echo "$P" | xargs) # Limpiar espacios accidentales
 

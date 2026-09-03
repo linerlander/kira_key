@@ -14,11 +14,9 @@ CONFIG="/etc/ssh/sshd_config"
 BACKUP="/etc/ssh/sshd_config.bak"
 
 get_ports() {
-    # Busca puertos descomentados en sshd_config
     local ports
     ports=$(grep -E "^[[:space:]]*Port " "$CONFIG" | awk '{print $2}')
     
-    # Si no encuentra ninguno (viene comentado por defecto), devuelve el 22
     if [ -z "$ports" ]; then
         echo "22"
     else
@@ -27,11 +25,19 @@ get_ports() {
 }
 
 port_in_use() {
-    ss -tuln | grep -q ":$1 "
+    ss -tuln | grep -E -q "(:$1\b|\[::\]:$1\b)"
 }
 
 backup_config() {
     cp "$CONFIG" "$BACKUP"
+}
+
+restart_ssh_service() {
+    if systemctl list-units --full -all | grep -Fq "ssh.service"; then
+        systemctl restart ssh
+    else
+        systemctl restart sshd
+    fi
 }
 
 open_firewall() {
@@ -47,7 +53,7 @@ while true; do
 
     # ========= BANNER ESTILIZADO =========
     echo -e "${C}╔═════════════════════════════════════════════════════╗${N}"
-    echo -e "${C}║${W}                🔐 SSH SECURITY PANEL                ${C}║${N}"
+    echo -e "${C}║${W}                    🔐 SSH SECURITY PANEL            ${C}║${N}"
     echo -e "${C}╚═════════════════════════════════════════════════════╝${N}"
     echo ""
     
@@ -62,7 +68,7 @@ while true; do
     PORTS=$(get_ports)
 
     for p in $PORTS; do
-        if ss -tuln | grep -q ":$p "; then
+        if ss -tuln | grep -E -q "(:$p\b|\[::\]:$p\b)"; then
             STATUS="${G}● ACTIVO${N}"
         else
             STATUS="${R}● INACTIVO${N}"
@@ -111,14 +117,13 @@ while true; do
 
             backup_config
             
-            # Si el puerto 22 estaba implícito (comentado) y añaden otro, aseguramos que el 22 quede escrito explícitamente antes de agregar el nuevo
             if ! grep -q -E "^[[:space:]]*Port " "$CONFIG"; then
                 echo "Port 22" >> "$CONFIG"
             fi
 
             echo "Port $PORT" >> "$CONFIG"
             open_firewall "$PORT"
-            systemctl restart ssh
+            restart_ssh_service
 
             echo -e "${G} ✔ Puerto agregado correctamente.${N}"
             read -p " Presiona Enter para continuar..."
@@ -134,7 +139,6 @@ while true; do
                 continue
             fi
 
-            # Si el 22 está por defecto (sin línea escrita) y quieren borrar el 22 teóricamente
             if ! grep -q -E "^[[:space:]]*Port $PORT" "$CONFIG"; then
                 echo -e "${R} ✘ El puerto especificado no existe en la configuración.${N}"
                 read -p " Presiona Enter para continuar..."
@@ -150,13 +154,13 @@ while true; do
             fi
 
             backup_config
-            # Si el 22 no estaba escrito de forma explícita, lo escribimos antes de borrar el otro para no romper la config
+            
             if ! grep -q -E "^[[:space:]]*Port 22" "$CONFIG"; then
                 echo "Port 22" >> "$CONFIG"
             fi
 
             sed -i -E "/^[[:space:]]*Port $PORT/d" "$CONFIG"
-            systemctl restart ssh
+            restart_ssh_service
 
             echo -e "${G} ✔ Puerto eliminado correctamente.${N}"
             read -p " Presiona Enter para continuar..."

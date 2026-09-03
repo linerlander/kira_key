@@ -50,7 +50,7 @@ install_all() {
 
     draw_step_line "[2/2] Creando servidor WebSocket nativo (Python)..."
 
-    cat > /usr/local/bin/ws_server.py << 'EOF'
+   cat > /usr/local/bin/ws_server.py << 'EOF'
 import socket
 import threading
 import select
@@ -118,11 +118,11 @@ def handle_client(client_socket):
 
         sockets = [client_socket, target_socket]
         while True:
-            r, _, _ = select.select(sockets, [], [], 60)
+            r, _, _ = select.select(sockets, [], [], 300)
             if not r:
                 break
             for s in r:
-                data = s.recv(8192)
+                data = s.recv(32768)
                 if not data:
                     break
                 if s is client_socket:

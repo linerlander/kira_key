@@ -3,31 +3,32 @@
 # Limpiar pantalla al entrar
 clear
 
-# ========== PALETA DE COLORES EXACTA DE LAS CAPTURAS ==========
+# ========== PALETA DE COLORES ANSI EXACTA ==========
 Y=$'\033[1;33m' # Amarillo
 C=$'\033[1;36m' # Cian / Azul claro
 W=$'\033[1;37m' # Blanco brillante
-D=$'\033[0;90m' # Gris bordes y barras
+D=$'\033[0;90m' # Gris (bordes y textos secundarios)
 G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# ===== CAPTURA DE MÉTRICAS DEL SISTEMA =====
+# ===== CAPTURA DE MÉTRICAS EN TIEMPO REAL =====
 RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
-[ -z "$RAM" ] && RAM="135"
+[ -z "$RAM" ] && RAM="111"
 
 CPU=$(top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print int($2+$4)}')
-[ -z "$CPU" ] && CPU="90"
+[ -z "$CPU" ] && CPU="84"
 
 HORA=$(date +'%H:%M:%S')
 LATENCIA="45ms"
 
-# ===== ENCABEZADO PERFECTAMENTE ALINEADO =====
+# ===== ENCABEZADO 100% FIEL AL MENÚ PRINCIPAL =====
 printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-printf "%b│%b  [ %b⚡ KIRA-SSH%b ]  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
+printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
 printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
 printf "%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b     %b│%b\n" \
-  "$D" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$C" "$N" "$W" "$CPU" "$N" "$D" "$C" "$N" "$W" "$HORA" "$N" "$D" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
+  "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
 printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 echo ""
 

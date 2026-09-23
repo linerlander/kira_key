@@ -45,7 +45,7 @@ while true; do
     echo ""
 
     # Opciones del menú
-    printf " [%b01%b] ⚡ GENERAR CUENTA DEMO                        ⚡ %b(TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
+    printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                          🚀 %b(TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
     printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       %b🙋‍♂️ (OFICIAL)%b\033[K\n" "$Y" "$N" "$G" "$N"
     echo ""
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"

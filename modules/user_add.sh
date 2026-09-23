@@ -57,6 +57,9 @@ while true; do
     if [ -n "$opcion_sub" ]; then
         case $opcion_sub in
             1|01)
+                # =========================================================
+                # 1. FLUJO GENERAR CUENTA DEMO
+                # =========================================================
                 clear
                 dibujar_encabezado
 
@@ -64,18 +67,18 @@ while true; do
                 user="Kira-2025$rand"
                 pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-                # Muestra directa del usuario autogenerado
+                # Muestra directa sin título intermedio
                 echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
 
-                # Validación con opción de cancelar/regresar (ingresando 0)
+                # Duración demo
                 while true; do
                     read -p " ► Tiempo de duración (Ej: 30m / 2h / 1d) [0 para Cancelar]: " tiempo
                     
                     if [[ "$tiempo" == "0" ]]; then
-                        echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                        echo -e "\n ${R}❌ Operación cancelada.${N}"
                         sleep 1
                         clear
-                        continue 2 # Vuelve directamente al menú principal
+                        continue 2
                     fi
 
                     if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
@@ -85,9 +88,10 @@ while true; do
                     fi
                 done
 
+                # Límite de conexiones demo
                 read -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
                 if [[ "$limit" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                    echo -e "\n ${R}❌ Operación cancelada.${N}"
                     sleep 1
                     clear
                     continue
@@ -119,6 +123,7 @@ while true; do
                 echo "$pass" > /etc/kira/pass/$user
 
                 IP=$(curl -s ifconfig.me)
+                [ -z "$IP" ] && IP="127.0.0.1"
                 PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
                 [ -z "$PORT" ] && PORT=22
 
@@ -152,8 +157,125 @@ while true; do
                 ;;
 
             2|02)
-                echo -e "\n${G}[+] Generando usuario Oficial...${N}"
-                sleep 2
+                # =========================================================
+                # 2. FLUJO CREAR USUARIO NORMAL (OFICIAL)
+                # =========================================================
+                clear
+                dibujar_encabezado
+
+                echo -e " ${G}┌──────────────────────────────────────────────┐${N}"
+                echo -e " ${G}│         🙋‍♂️ CREAR USUARIO OFICIAL             │${N}"
+                echo -e " ${G}└──────────────────────────────────────────────┘${N}\n"
+
+                # 1. Nombre de Usuario
+                while true; do
+                    read -p " ► Nombre de usuario [0 para Cancelar]: " user
+
+                    if [[ "$user" == "0" ]]; then
+                        echo -e "\n ${R}❌ Operación cancelada.${N}"
+                        sleep 1
+                        clear
+                        continue 2
+                    fi
+
+                    if [[ -z "$user" ]]; then
+                        echo -e " ${R}❌ El usuario no puede estar vacío.${N}"
+                    elif id "$user" &>/dev/null; then
+                        echo -e " ${R}❌ El usuario '$user' ya existe en el sistema.${N}"
+                    elif [[ ! "$user" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+                        echo -e " ${R}❌ Nombre inválido. Usa solo letras, números, _ o -.${N}"
+                    else
+                        break
+                    fi
+                done
+
+                # 2. Contraseña
+                read -p " ► Contraseña (Enter para generar automática) [0 para Cancelar]: " pass
+                if [[ "$pass" == "0" ]]; then
+                    echo -e "\n ${R}❌ Operación cancelada.${N}"
+                    sleep 1
+                    clear
+                    continue
+                fi
+
+                if [[ -z "$pass" ]]; then
+                    pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
+                    echo -e " ${C}▶ Contraseña autogenerada:${N} ${W}$pass${N}"
+                fi
+
+                # 3. Días de Validez
+                while true; do
+                    read -p " ► Días de validez (Ej: 30) [0 para Cancelar]: " dias
+
+                    if [[ "$dias" == "0" ]]; then
+                        echo -e "\n ${R}❌ Operación cancelada.${N}"
+                        sleep 1
+                        clear
+                        continue 2
+                    fi
+
+                    if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -gt 0 ]; then
+                        break
+                    else
+                        echo -e " ${R}❌ Ingresa un número entero de días mayor a 0.${N}"
+                    fi
+                done
+
+                # 4. Límite de conexiones
+                read -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
+                if [[ "$limit" == "0" ]]; then
+                    echo -e "\n ${R}❌ Operación cancelada.${N}"
+                    sleep 1
+                    clear
+                    continue
+                fi
+                [ -z "$limit" ] && limit=1
+
+                # Procesamiento de fechas y creación
+                exp_date=$(date -d "+$dias days" +%Y-%m-%d)
+                useradd -M -s /bin/false "$user" 2>/dev/null
+                echo "$user:$pass" | chpasswd 2>/dev/null
+                passwd -u "$user" &>/dev/null
+                chage -E "$exp_date" "$user" 2>/dev/null
+
+                # Almacenar credenciales en el sistema Kira
+                mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
+                echo "$limit" > /etc/kira/limits/$user
+                echo "$exp_date" > /etc/kira/expire/$user
+                echo "$pass" > /etc/kira/pass/$user
+
+                # Obtención de IP y Puerto SSH
+                IP=$(curl -s ifconfig.me)
+                [ -z "$IP" ] && IP="127.0.0.1"
+                PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+                [ -z "$PORT" ] && PORT=22
+
+                directo="${IP}:${PORT}@${user}:${pass}"
+                proxy="${IP}:80@${user}:${pass}"
+
+                clear
+                dibujar_encabezado
+
+                echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
+                echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO OFICIAL 🙋‍♂️        ${D}║${N}"
+                echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
+                printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
+                printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
+                printf "${D}║${N} ${R}🔑 Contraseña  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
+                printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
+                printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit conex."
+                printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$dias días (Expira: $exp_date)"
+                echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
+                echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+                echo -e "${D}║${N}                                                  ${D}║${N}"
+                printf "${D}║${N} 🔗 Direc: ${Y}%-38s${N} ${D}║${N}\n" "$directo"
+                printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"
+                echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
+
+                echo "$user $pass OFICIAL $limit $(date)" >> /etc/kira/users.log
+
+                echo ""
+                read -p "Presiona Enter para continuar..."
                 clear
                 ;;
 

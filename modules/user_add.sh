@@ -9,34 +9,27 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Función para calcular métricas en tiempo real
-obtener_metricas() {
-    # RAM Libre
+# ===== BUCLE CONTINUO EN TIEMPO REAL =====
+while true; do
+    # Captura de métricas en Vivo
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
 
-    # Uso de CPU real (%)
     CPU=$(top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print int($2+$4)}')
     [ -z "$CPU" ] && CPU="0"
 
-    # Hora actual dinámica
     HORA=$(date +'%H:%M:%S')
 
-    # Latencia real haciendo ping a DNS de Cloudflare
+    # Medición rápida de latencia
     PING_RES=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
     if [ -n "$PING_RES" ]; then
         LATENCIA="${PING_RES%.*}ms"
     else
         LATENCIA="N/A"
     fi
-}
 
-# ===== BUCLE DEL MENÚ =====
-while true; do
+    # Limpiar e imprimir interfaz
     clear
-    obtener_metricas
-
-    # ===== ENCABEZADO 100% FIEL AL MENÚ PRINCIPAL =====
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -46,7 +39,7 @@ while true; do
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
 
-    # ===== OPCIONES DEL MÓDULO =====
+    # Opciones del menú
     printf " [%b01%b] ⚡ GENERAR CUENTA DEMO                        %b⚡ (TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
     printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       %b🙋‍♂️ (OFICIAL)%b\n" "$Y" "$N" "$G" "$N"
     echo ""
@@ -55,24 +48,27 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
-    # ===== CAPTURA DE OPCIÓN =====
-    read -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+    # Captura de opción con tiempo de espera de 1 segundo (-t 1)
+    read -t 1 -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
 
-    case $opcion_sub in
-        1|01)
-            echo -e "\n${G}[+] Generando cuenta Demo...${N}"
-            sleep 2
-            ;;
-        2|02)
-            echo -e "\n${G}[+] Generando usuario Oficial...${N}"
-            sleep 2
-            ;;
-        0)
-            break
-            ;;
-        *)
-            echo -e "\n${R}[!] Opción no válida.${N}"
-            sleep 1
-            ;;
-    esac
+    # Si el usuario ingresa una opción, procesarla
+    if [ -n "$opcion_sub" ]; then
+        case $opcion_sub in
+            1|01)
+                echo -e "\n${G}[+] Generando cuenta Demo...${N}"
+                sleep 2
+                ;;
+            2|02)
+                echo -e "\n${G}[+] Generando usuario Oficial...${N}"
+                sleep 2
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "\n${R}[!] Opción no válida.${N}"
+                sleep 1
+                ;;
+        esac
+    fi
 done

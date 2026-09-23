@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Limpiar pantalla al entrar
-clear
-
 # ========== PALETA DE COLORES ANSI EXACTA ==========
 Y=$'\033[1;33m' # Amarillo
 C=$'\033[1;36m' # Cian / Azul claro
@@ -12,52 +9,70 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# ===== CAPTURA DE MÉTRICAS EN TIEMPO REAL =====
-RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
-[ -z "$RAM" ] && RAM="111"
+# Función para calcular métricas en tiempo real
+obtener_metricas() {
+    # RAM Libre
+    RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
+    [ -z "$RAM" ] && RAM="0"
 
-CPU=$(top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print int($2+$4)}')
-[ -z "$CPU" ] && CPU="84"
+    # Uso de CPU real (%)
+    CPU=$(top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print int($2+$4)}')
+    [ -z "$CPU" ] && CPU="0"
 
-HORA=$(date +'%H:%M:%S')
-LATENCIA="45ms"
+    # Hora actual dinámica
+    HORA=$(date +'%H:%M:%S')
 
-# ===== ENCABEZADO 100% FIEL AL MENÚ PRINCIPAL =====
-printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
-printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
-printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
-printf "%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b     %b│%b\n" \
-  "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
-printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
-echo ""
+    # Latencia real haciendo ping a DNS de Cloudflare
+    PING_RES=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
+    if [ -n "$PING_RES" ]; then
+        LATENCIA="${PING_RES%.*}ms"
+    else
+        LATENCIA="N/A"
+    fi
+}
 
-# ===== OPCIONES DEL MÓDULO =====
-printf " [%b01%b] ⚡ GENERAR CUENTA DEMO                        %b⚡ (TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
-printf " [%b02%b] 👤 CREAR USUARIO NORMAL                       %b👤 (OFICIAL)%b\n" "$Y" "$N" "$G" "$N"
-echo ""
-printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
-printf " [%b0%b] %b►%b [ REGRESAR ]                                 %bÚLTIMO REFRESH: %s%b\n" "$R" "$N" "$R" "$N" "$D" "$HORA" "$N"
-printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
-echo ""
+# ===== BUCLE DEL MENÚ =====
+while true; do
+    clear
+    obtener_metricas
 
-# ===== CAPTURA DE OPCIÓN =====
-read -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+    # ===== ENCABEZADO 100% FIEL AL MENÚ PRINCIPAL =====
+    printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+    printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
+    printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
+    printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+    printf "%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b     %b│%b\n" \
+      "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
+    printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
+    echo ""
 
-case $opcion_sub in
-    1|01)
-        echo -e "\n${G}[+] Generando cuenta Demo...${N}"
-        sleep 2
-        ;;
-    2|02)
-        echo -e "\n${G}[+] Generando usuario Oficial...${N}"
-        sleep 2
-        ;;
-    0)
-        exit 0
-        ;;
-    *)
-        echo -e "\n${R}[!] Opción no válida.${N}"
-        sleep 1.5
-        ;;
-esac
+    # ===== OPCIONES DEL MÓDULO =====
+    printf " [%b01%b] ⚡ GENERAR CUENTA DEMO                        %b⚡ (TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
+    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       %b🙋‍♂️ (OFICIAL)%b\n" "$Y" "$N" "$G" "$N"
+    echo ""
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
+    printf " [%b0%b] %b►%b [ REGRESAR ]                                 %bÚLTIMO REFRESH: %s%b\n" "$R" "$N" "$R" "$N" "$D" "$HORA" "$N"
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
+    echo ""
+
+    # ===== CAPTURA DE OPCIÓN =====
+    read -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+
+    case $opcion_sub in
+        1|01)
+            echo -e "\n${G}[+] Generando cuenta Demo...${N}"
+            sleep 2
+            ;;
+        2|02)
+            echo -e "\n${G}[+] Generando usuario Oficial...${N}"
+            sleep 2
+            ;;
+        0)
+            break
+            ;;
+        *)
+            echo -e "\n${R}[!] Opción no válida.${N}"
+            sleep 1
+            ;;
+    esac
+done

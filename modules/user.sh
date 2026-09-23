@@ -27,6 +27,7 @@ RAM=$(free -m | awk '/Mem:/ {print $4}')
 CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print int($2+$4)}')
 HORA=$(date +'%H:%M:%S')
 LATENCIA="45ms"
+ULTIMO_REFRESH=$(date +'%H:%M:%S')
 
 printf "%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\n" \
   "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
@@ -49,7 +50,7 @@ printf " %b[13]%b 🔌 CHECKUSER                  %-4s %b🔌 (INACTIVO)%b\n" "$
 printf " %b[14]%b 💥 CONTROL MULTILOGIN\n" "$Y" "$N"
 
 printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
-printf " %b[0]%b %b►%b %b[ REGRESAR ]%b                                        %bÚLTIMO REFRESH%b\n" "$R" "$N" "$R" "$N" "$W" "$N" "$D" "$N"
+printf " %b[0]%b %b►%b %b[ REGRESAR ]%b                             %bÚLTIMO REFRESH: %s%b\n" "$R" "$N" "$R" "$N" "$W" "$N" "$D" "$ULTIMO_REFRESH" "$N"
 printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
 
 printf " %b( CONTADOR: %bON%b | KILL MULTISESSION: %bOFF%b )%b    %b🔘 ESTADO DEL SERVICIO%b\n" "$D" "$G" "$D" "$R" "$D" "$N" "$D" "$N"

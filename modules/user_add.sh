@@ -59,11 +59,24 @@ while true; do
     # Si el usuario ingresa una opción, procesarla
     if [ -n "$opcion_sub" ]; then
         case $opcion_sub in
-            1|01)
-                echo -e "\n${G}[+] Generando cuenta Demo...${N}"
+           1|01)
+            echo -e "\n${G}[+] Cargando módulo Demo...${N}"
+            sleep 1
+
+            # Verificar la ubicación del script user_demo.sh y ejecutarlo
+            if [ -f "./user_demo.sh" ]; then
+                bash ./user_demo.sh
+            elif [ -f "./modules/user_demo.sh" ]; then
+                bash ./modules/user_demo.sh
+            elif [ -f "/etc/kira/modules/user_demo.sh" ]; then
+                bash /etc/kira/modules/user_demo.sh
+            else
+                echo -e " ${R}❌ Error: No se encontró el archivo user_demo.sh${N}"
                 sleep 2
-                clear
-                ;;
+            fi
+
+            clear
+            ;;
             2|02)
                 echo -e "\n${G}[+] Generando usuario Oficial...${N}"
                 sleep 2

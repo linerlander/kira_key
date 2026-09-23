@@ -9,12 +9,8 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Limpiar pantalla solo UNA VEZ al iniciar
-clear
-
-# ===== BUCLE CONTINUO SIN PARPADEO =====
-while true; do
-    # Captura de métricas en vivo
+# Función para imprimir el encabezado superior
+dibujar_encabezado() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
 
@@ -23,7 +19,6 @@ while true; do
 
     HORA=$(date +'%H:%M:%S')
 
-    # Medición rápida de latencia
     PING_RES=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
     if [ -n "$PING_RES" ]; then
         LATENCIA="${PING_RES%.*}ms"
@@ -31,10 +26,7 @@ while true; do
         LATENCIA="N/A"
     fi
 
-    # Reposicionar cursor arriba sin limpiar la pantalla (Evita el parpadeo)
     printf "\033[1;1H"
-
-    # Redibujar interfaz del encabezado
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -43,8 +35,15 @@ while true; do
       "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
+}
 
-    # Opciones del menú
+clear
+
+# ===== BUCLE PRINCIPAL =====
+while true; do
+    # Redibujar menú principal
+    dibujar_encabezado
+
     printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
     printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️ %b(OFICIAL)%b\033[K\n" "$Y" "$N" "$G" "$N"
     echo ""
@@ -53,25 +52,27 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
     echo ""
 
-    # Captura de opción con refresco de 1 segundo
     read -t 1 -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}\033[K")" opcion_sub
 
     if [ -n "$opcion_sub" ]; then
         case $opcion_sub in
             1|01)
                 clear
-                echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-                echo -e " ${Y}⚡ CREAR CUENTA DEMO TEMPORAL${N}"
-                echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+                # 1. Mantener la barra superior dibujada
+                dibujar_encabezado
 
-                # Autogeneración de usuario y contraseña
+                # 2. Dibujar la barra de título del módulo Demo (Como en la Imagen 1)
+                echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+                echo -e " ${Y}⚡ CREAR CUENTA DEMO TEMPORAL${N}"
+                echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+
                 rand=$(shuf -i 100-999 -n 1)
                 user="Kira-2025$rand"
                 pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
+                # 3. Mostrar el usuario autogenerado y pedir datos
                 echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
 
-                # Validación de tiempo ingresado
                 while true; do
                     read -p " ► Tiempo de duración (Ej: 30m / 2h / 1d): " tiempo
                     if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
@@ -84,7 +85,7 @@ while true; do
                 read -p " ► Límite de conexiones (Default 1): " limit
                 [ -z "$limit" ] && limit=1
 
-                # Conversión de tiempo para date
+                # Conversión de tiempo
                 cantidad=$(echo "$tiempo" | grep -oE '[0-9]+')
                 unidad=$(echo "$tiempo" | grep -oE '[smhd]')
 
@@ -95,20 +96,19 @@ while true; do
                     *) tipo_tiempo="1 days" ;;
                 esac
 
-                # Creación en sistema operativo
+                # Creación en el sistema
                 exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d)
                 useradd -M -s /bin/false "$user" 2>/dev/null
                 echo "$user:$pass" | chpasswd 2>/dev/null
                 passwd -u "$user" &>/dev/null
                 chage -E "$exp_date" "$user" 2>/dev/null
 
-                # Persistencia en base de datos KIRA
+                # Guardar en rutas de Kira
                 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
                 echo "$limit" > /etc/kira/limits/$user
                 echo "$exp_date" > /etc/kira/expire/$user
                 echo "$pass" > /etc/kira/pass/$user
 
-                # Obtención de IP y Puerto SSH
                 IP=$(curl -s ifconfig.me)
                 PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
                 [ -z "$PORT" ] && PORT=22
@@ -117,6 +117,8 @@ while true; do
                 proxy="${IP}:80@${user}:${pass}"
 
                 clear
+                dibujar_encabezado
+
                 echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
                 echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
                 echo -e "${D}╠══════════════════════════════════════════════════╣${N}"

@@ -1,59 +1,70 @@
 #!/bin/bash
 
-# ========= COLORES =========
-W='\033[1;37m'
-D='\033[38;5;108m'
-Y='\033[38;5;220m'
-P='\033[38;5;196m'
-C='\033[38;5;51m'
-G='\033[38;5;82m'
-N='\033[0m'
-R='\033[38;5;147m'
+# Evita cierres accidentales por señales
+trap '' INT TERM
+
+# ========= COLORES ANSI DE TU MENÚ PRINCIPAL =========
+W=$'\033[1;37m'
+D=$'\033[0;90m'
+Y=$'\033[1;33m'
+R=$'\033[1;31m'
+C=$'\033[1;36m'
+G=$'\033[1;32m'
+B=$'\033[1;34m'
+N=$'\033[0m'
 
 while true; do
 clear
 
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}🔐 CREADOR DE CUENTAS SSH | KIRA VIP${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+# ===== ENCABEZADO RECTANGULAR PRINCIPAL (ANCHO: 77) =====
+printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b🔐 CREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+printf "%b│%b %bSELECCIONA EL TIPO DE CUENTA A GENERAR EN EL SISTEMA%b                        %b│%b\n" "$D" "$N" "$W" "$N" "$D" "$N"
+printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 
-printf " ${Y}[01]${N} %-36s ${D}%-12s${N} %s\n" "➤ GENERAR CUENTA DEMO" "(TEMPORAL)" "⚡"
-printf " ${Y}[02]${N} %-36s ${D}%-12s${N} %s\n" "➤ CREAR USUARIO NORMAL" "(OFICIAL)" "👤"
+# ===== OPCIONES DEL MENÚ =====
+printf " %b[01]%b ⚡ GENERAR CUENTA DEMO             %-4s %b⚡ (TEMPORAL)%b\n" "$Y" "$N" "" "$C" "$N"
+printf " %b[02]%b 👤 CREAR USUARIO NORMAL           %-4s %b👤 (OFICIAL)%b\n" "$Y" "$N" "" "$G" "$N"
 
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${P}[0]${N} ➤ ${W}[ REGRESAR ]${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
+printf " %b[0]%b %b►%b %b[ REGRESAR ]%b\n" "$R" "$N" "$R" "$N" "$W" "$N"
+printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
+echo ""
+printf " %bKIRA@Servidor:~/Usuarios$%b %b► Opción: %b " "$C" "$N" "$W" "$N"
 
-read -p " ► Opción: " op
+read op
 
 case $op in
 
-# ================= DEMO =================
+# ================= 01: CUENTA DEMO =================
 1|01)
 clear
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}⚡ CREAR CUENTA DEMO TEMPORAL${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b⚡ CREAR CUENTA DEMO TEMPORAL%b                         %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 
 rand=$(shuf -i 100-999 -n 1)
-user="Kira-2025$rand"
+user="Kira-2026$rand"
 pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
+printf "\n %b▶ Usuario autogenerado:%b %b%s%b\n\n" "$C" "$N" "$W" "$user" "$N"
 
 while true; do
-    read -p " ► Tiempo de duración (Ej: 30m / 2h / 1d): " tiempo
+    printf " %b► Tiempo de duración (Ej: 30m / 2h / 1d):%b " "$W" "$N"
+    read tiempo
     if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
         break
     else
-        echo -e " ${R}❌ Formato inválido. Usa m (minutos), h (horas), d (días).${N}"
+        printf " %b❌ Formato inválido. Usa m (minutos), h (horas), d (días).%b\n" "$R" "$N"
     fi
 done
 
-read -p " ► Límite de conexiones (Default 1): " limit
+printf " %b► Límite de conexiones (Default 1):%b " "$W" "$N"
+read limit
 [ -z "$limit" ] && limit=1
 
-# CONVERTIR EL TIEMPO DEMO (m, h, d) A FORMATO COMPATIBLE PARA DATE
+# PROCESAMIENTO DE TIEMPO
 cantidad=$(echo "$tiempo" | grep -oE '[0-9]+')
 unidad=$(echo "$tiempo" | grep -oE '[smhd]')
 
@@ -64,81 +75,84 @@ case "$unidad" in
     *) tipo_tiempo="1 days" ;;
 esac
 
-# CREACIÓN EN SISTEMA Y FECHA EXACTA DE EXPIRACIÓN (Formato plano YYYY-MM-DD para evitar fallos en el bot)
 exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d)
 useradd -M -s /bin/false "$user" 2>/dev/null
 echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -E "$exp_date" "$user" 2>/dev/null
 
-# GUARDADO BASE DE DATOS KIRA (Compatible con Telegram)
+# GUARDADO EN BASE DE DATOS
 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
 echo "$exp_date" > /etc/kira/expire/$user
 echo "$pass" > /etc/kira/pass/$user
 
-# OBTENER DATOS DE CONEXIÓN
 IP=$(curl -s ifconfig.me)
 PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
 
+directo="${IP}:${PORT}@${user}:${pass}"
+proxy="${IP}:80@${user}:${pass}"
+
 clear
-echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
-echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
-printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
-printf "${D}║${N} ${R}🔑 Contraseña  :${N} %-31s ${D}║${N}\n" "$pass"
-printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
-printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo..."
-printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$tiempo (Expira: $exp_date)"
-echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
-echo -e "${D}║${N}                                                  ${D}║${N}"
-echo -e "${D}║${N}🔗 Direc:${N} ${Y}${IP}:${PORT}@${user}:${pass}  ${D}║${N}"
-echo -e "${D}║${N}🖥️ Proxy:${N} ${Y}${IP}:80@${user}:${pass}  ${D}║${N}"
-echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
+printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b⚡ DETALLES DE CUENTA DEMO CREADA%b                   %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+printf "%b│%b %b🖥️ Ip Server    :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$IP" "$N" "$D" "$N"
+printf "%b│%b %b👤 Usuario      :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$Y" "$user" "$N" "$D" "$N"
+printf "%b│%b %b🔑 Contraseña   :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$pass" "$N" "$D" "$N"
+printf "%b│%b %b📡 Puerto SSH   :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$PORT" "$N" "$D" "$N"
+printf "%b│%b %b📊 Límite SSH   :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$limit dispositivos" "$N" "$D" "$N"
+printf "%b│%b %b⏳ Validez      :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$tiempo (Expira: $exp_date)" "$N" "$D" "$N"
+printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+printf "%b│%b %b📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):%b                            %b│%b\n" "$D" "$N" "$G" "$N" "$D" "$N"
+printf "%b│%b %b🔗 Direc: %b%-60s%b %b│%b\n" "$D" "$N" "$Y" "$directo" "$N" "$D" "$N"
+printf "%b│%b %b🖥️ Proxy: %b%-60s%b %b│%b\n" "$D" "$N" "$Y" "$proxy" "$N" "$D" "$N"
+printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 
 echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
 
 echo ""
-read -p "Presiona Enter para continuar..."
+printf " %bPresiona Enter para continuar...%b " "$W" "$N"
+read
 ;;
 
-# ================= NORMAL =================
+# ================= 02: USUARIO NORMAL =================
 2|02)
 clear
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${Y}👤 CREAR CUENTA SSH ESTÁNDAR${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b👤 CREAR USUARIO SSH ESTÁNDAR%b                        %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 
-read -p " ► Nombre de usuario: " user
+printf " %b► Nombre de usuario:%b " "$W" "$N"
+read user
 
 if id "$user" &>/dev/null; then
-    echo -e " ${R}❌ El usuario '$user' ya existe en el servidor.${N}"
+    printf "\n %b❌ El usuario '%s' ya existe en el servidor.%b\n" "$R" "$user" "$N"
     sleep 2
     continue
 fi
 
-read -p " ► Contraseña: " pass
-read -p " ► Días de validez: " dias
-read -p " ► Límite de conexiones (Default 1): " limit
+printf " %b► Contraseña:%b " "$W" "$N"
+read pass
+printf " %b► Días de validez:%b " "$W" "$N"
+read dias
+printf " %b► Límite de conexiones (Default 1):%b " "$W" "$N"
+read limit
 [ -z "$limit" ] && limit=1
 
 if ! [[ "$dias" =~ ^[0-9]+$ ]]; then
-    echo -e " ${R}❌ Cantidad de días inválida.${N}"
+    printf "\n %b❌ Cantidad de días inválida.%b\n" "$R" "$N"
     sleep 2
     continue
 fi
 
-# CREACIÓN EN SISTEMA Y FECHA EXACTA YYYY-MM-DD
 exp_date=$(date -d "+$dias days" +%Y-%m-%d)
 useradd -M -s /bin/false "$user" 2>/dev/null
 echo "$user:$pass" | chpasswd 2>/dev/null
 passwd -u "$user" &>/dev/null
 chage -E "$exp_date" "$user" 2>/dev/null
 
-# GUARDADO BASE DE DATOS KIRA (Sincronizado correctamente para Telegram)
 mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
 echo "$limit" > /etc/kira/limits/$user
 echo "$exp_date" > /etc/kira/expire/$user
@@ -149,31 +163,30 @@ PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
 [ -z "$PORT" ] && PORT=22
 expira_format=$(date -d "$exp_date" +"%d/%m/%Y" 2>/dev/null || echo "$exp_date")
 
-# ================= NORMAL (Resumen Alineado) =================
 directo="${IP}:${PORT}@${user}:${pass}"
 proxy="${IP}:80@${user}:${pass}"
 
 clear
-echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-echo -e "${D}║${Y}        👑 KIRA PANEL - CUENTA SSH VIP 👑         ${D}║${N}"
-echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
-printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
-printf "${D}║${N} ${R}🔑 Contraseña  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
-printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
-printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo."
-printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$expira_format ($dias d)"
-echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
-echo -e "${D}║${N}                                                 ${D} ║${N}"
-printf "${D}║${N} 🔗 Direc: ${Y}%-38s${N} ${D}║${N}\n" "$directo"
-printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"
-echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
+printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b👑 DETALLES DE CUENTA SSH VIP CREADA%b                 %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+printf "%b│%b %b🖥️ Ip Server    :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$IP" "$N" "$D" "$N"
+printf "%b│%b %b👤 Usuario      :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$Y" "$user" "$N" "$D" "$N"
+printf "%b│%b %b🔑 Contraseña   :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$pass" "$N" "$D" "$N"
+printf "%b│%b %b📡 Puerto SSH   :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$PORT" "$N" "$D" "$N"
+printf "%b│%b %b📊 Límite SSH   :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$limit dispositivos" "$N" "$D" "$N"
+printf "%b│%b %b⏳ Validez      :%b %b%-52s%b %b│%b\n" "$D" "$N" "$R" "$N" "$W" "$expira_format ($dias días)" "$N" "$D" "$N"
+printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+printf "%b│%b %b📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):%b                            %b│%b\n" "$D" "$N" "$G" "$N" "$D" "$N"
+printf "%b│%b %b🔗 Direc: %b%-60s%b %b│%b\n" "$D" "$N" "$Y" "$directo" "$N" "$D" "$N"
+printf "%b│%b %b🖥️ Proxy: %b%-60s%b %b│%b\n" "$D" "$N" "$Y" "$proxy" "$N" "$D" "$N"
+printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 
 echo "$user $pass ${dias}d $limit $(date)" >> /etc/kira/users.log
 
 echo ""
-read -p "Presiona Enter para continuar..."
+printf " %bPresiona Enter para continuar...%b " "$W" "$N"
+read
 ;;
 
 0|00)
@@ -181,7 +194,7 @@ exit 0
 ;;
 
 *)
-echo -e " ${R}Opción inválida${N}"
+printf " %bOpción inválida%b\n" "$R" "$N"
 sleep 1
 ;;
 

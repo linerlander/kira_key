@@ -58,23 +58,26 @@ while true; do
         case $opcion_sub in
             1|01)
                 clear
-                # 1. Mantener la barra superior dibujada
                 dibujar_encabezado
-
-                # 2. Dibujar la barra de título del módulo Demo (Como en la Imagen 1)
-                echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-                echo -e " ${Y}⚡ CREAR CUENTA DEMO TEMPORAL${N}"
-                echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
                 rand=$(shuf -i 100-999 -n 1)
                 user="Kira-2025$rand"
                 pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-                # 3. Mostrar el usuario autogenerado y pedir datos
+                # Muestra directa del usuario autogenerado
                 echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
 
+                # Validación con opción de cancelar/regresar (ingresando 0)
                 while true; do
-                    read -p " ► Tiempo de duración (Ej: 30m / 2h / 1d): " tiempo
+                    read -p " ► Tiempo de duración (Ej: 30m / 2h / 1d) [0 para Cancelar]: " tiempo
+                    
+                    if [[ "$tiempo" == "0" ]]; then
+                        echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                        sleep 1
+                        clear
+                        continue 2 # Vuelve directamente al menú principal
+                    fi
+
                     if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
                         break
                     else
@@ -82,7 +85,13 @@ while true; do
                     fi
                 done
 
-                read -p " ► Límite de conexiones (Default 1): " limit
+                read -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
+                if [[ "$limit" == "0" ]]; then
+                    echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                    sleep 1
+                    clear
+                    continue
+                fi
                 [ -z "$limit" ] && limit=1
 
                 # Conversión de tiempo

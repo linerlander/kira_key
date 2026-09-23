@@ -49,12 +49,12 @@ printf " %b[13]%b 🔌 CHECKUSER                  %-4s %b🔌 (INACTIVO)%b\n" "$
 printf " %b[14]%b 💥 CONTROL MULTILOGIN\n" "$Y" "$N"
 
 printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
-printf " %b[0]%b %b►%b %b[ REGRESAR ]%b                                           %bÚLTIMO REFRESH%b\n" "$R" "$N" "$R" "$N" "$W" "$N" "$D" "$N"
+printf " %b[0]%b %b►%b %b[ REGRESAR ]%b                                        %bÚLTIMO REFRESH%b\n" "$R" "$N" "$R" "$N" "$W" "$N" "$D" "$N"
 printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
 
 printf " %b( CONTADOR: %bON%b | KILL MULTISESSION: %bOFF%b )%b    %b🔘 ESTADO DEL SERVICIO%b\n" "$D" "$G" "$D" "$R" "$D" "$N" "$D" "$N"
 echo ""
-printf " %bKIRA@Servidor:~/Administrador$%b %b► Opción [%b " "$C" "$N" "$W" "$N"
+printf " %bKIRA@Servidor:~/Administrador$%b %b► Opción: %b " "$C" "$N" "$W" "$N"
 read op
 
 case $op in

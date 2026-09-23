@@ -9,9 +9,12 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# ===== BUCLE CONTINUO EN TIEMPO REAL =====
+# Limpiar pantalla solo UNA VEZ al iniciar
+clear
+
+# ===== BUCLE CONTINUO SIN PARPADEO =====
 while true; do
-    # Captura de métricas en Vivo
+    # Captura de métricas en vivo
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
 
@@ -28,8 +31,10 @@ while true; do
         LATENCIA="N/A"
     fi
 
-    # Limpiar e imprimir interfaz
-    clear
+    # Reposicionar cursor arriba sin limpiar la pantalla (Evita el parpadeo)
+    printf "\033[1;1H"
+
+    # Redibujar interfaz
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                  %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -40,16 +45,16 @@ while true; do
     echo ""
 
     # Opciones del menú
-    printf " [%b01%b] ⚡ GENERAR CUENTA DEMO                        %b⚡ (TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
-    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       %b🙋‍♂️ (OFICIAL)%b\n" "$Y" "$N" "$G" "$N"
+    printf " [%b01%b] ⚡ GENERAR CUENTA DEMO                        %b⚡ (TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
+    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       %b🙋‍♂️ (OFICIAL)%b\033[K\n" "$Y" "$N" "$G" "$N"
     echo ""
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
-    printf " [%b0%b] %b►%b [ REGRESAR ]                                 %bÚLTIMO REFRESH: %s%b\n" "$R" "$N" "$R" "$N" "$D" "$HORA" "$N"
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
+    printf " [%b0%b] %b►%b [ REGRESAR ]                                 %bÚLTIMO REFRESH: %s%b\033[K\n" "$R" "$N" "$R" "$N" "$D" "$HORA" "$N"
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
     echo ""
 
-    # Captura de opción con tiempo de espera de 1 segundo (-t 1)
-    read -t 1 -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+    # Captura de opción con refresco de 1 segundo
+    read -t 1 -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}\033[K")" opcion_sub
 
     # Si el usuario ingresa una opción, procesarla
     if [ -n "$opcion_sub" ]; then
@@ -57,19 +62,22 @@ while true; do
             1|01)
                 echo -e "\n${G}[+] Generando cuenta Demo...${N}"
                 sleep 2
+                clear
                 ;;
             2|02)
                 echo -e "\n${G}[+] Generando usuario Oficial...${N}"
                 sleep 2
+                clear
                 ;;
             0)
+                clear
                 break
                 ;;
             *)
                 echo -e "\n${R}[!] Opción no válida.${N}"
                 sleep 1
+                clear
                 ;;
         esac
     fi
-    
 done

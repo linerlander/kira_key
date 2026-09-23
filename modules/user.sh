@@ -18,7 +18,7 @@ clear
 
 # ===== ENCABEZADO RECTANGULAR PERFECCIONADO (ANCHO: 77) =====
 printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b🔐 ADMINISTRADOR DE USUARIOS SSH | KIRA%b                  %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+printf "%b│%b  %b[ ⚡ KIRA-SSH ]%b  %b🔐 ADMINISTRADOR DE USUARIOS SSH | KIRA%b                 %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
 printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
 printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
 

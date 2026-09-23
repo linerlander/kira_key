@@ -4,32 +4,34 @@
 trap '' INT TERM
 
 # ========= COLORES ANSI =========
-W='\033[1;37m'
-D='\033[0;90m'
-Y='\033[1;33m'
-R='\033[1;31m'
-C='\033[1;36m'
-G='\033[1;32m'
-B='\033[1;34m'
-N='\033[0m'
+W='\e[1;37m'
+D='\e[0;90m'
+Y='\e[1;33m'
+R='\e[1;31m'
+C='\e[1;36m'
+G='\e[1;32m'
+B='\e[1;34m'
+N='\e[0m'
 
 while true; do
 clear
 
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " 🔐 ${Y}ADMINISTRADOR DE USUARIOS SSH | KIRA${N}"
-echo -e " ${D}VERSIÓN 2.5 (Premium) | LICENCIA: ${G}ACTIVA${N} ${D}(Expiración: 2024-12-31)${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+# ===== ENCABEZADO CON MARCO TIPO CAJA =====
+echo -e "${D}┌───────────────────────────────────────────────────────────────┐${N}"
+echo -e "${D}│${N}  ${C}[ ⚡ KIRA-SSH ]${N}  ${Y}🔐 ADMINISTRADOR DE USUARIOS SSH | KIRA${N}    ${D}│${N}"
+echo -e "${D}│${N}  ${D}VERSIÓN 2.5 (Premium) | LICENCIA: ${G}ACTIVA${N} ${D}(Expiración: 2026-12-31)${N} ${D}│${N}"
+echo -e "${D}├───────────────────────────────────────────────────────────────┤${N}"
 
-# ===== STATS =====
+# ===== STATS CON HORA DINÁMICA DE HOY =====
 RAM=$(free -m | awk '/Mem:/ {print $4}')
 CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print int($2+$4)}')
+HORA=$(date +'%H:%M:%S')
 LATENCIA="45ms"
 
-echo -e " ${C}▶ M LIBRE:${N} ${W}${RAM}M${N} ${D}|${N} ${C}▶ CPU:${N} ${W}${CPU}%${N} ${D}|${N} ${C}▶ LATENCIA:${N} ${W}${LATENCIA}${N}"
-echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${D}│${N} ${C}▶ M LIBRE:${N} ${W}${RAM}M${N} ${D}|${N} ${C}▶ CPU:${N} ${W}${CPU}%${N} ${D}|${N} ${C}▶ HORA:${N} ${W}${HORA}${N} ${D}|${N} ${C}▶ LATENCIA:${N} ${W}${LATENCIA}${N} ${D}│${N}"
+echo -e "${D}└───────────────────────────────────────────────────────────────┘${N}"
 
-# ===== MENU EN COLUMNAS IMPRESO CON ECHO =====
+# ===== MENÚ Y ESTADOS EN COLUMNAS ALINEADAS =====
 echo -e " ${Y}[01]${N} 📝 AGREGAR USUARIO"
 echo -e " ${Y}[02]${N} 🗑️  BORRAR USUARIO(S)"
 echo -e " ${Y}[03]${N} 🔄 EDITAR / RENOVAR"
@@ -37,19 +39,19 @@ echo -e " ${Y}[04]${N} 📋 USUARIOS REGISTRADOS"
 echo -e " ${Y}[05]${N} 👥 USUARIOS CONECTADOS"
 echo -e " ${Y}[06]${N} 📢 BANNER SSH"
 echo -e " ${Y}[07]${N} 📊 LOG DE CONSUMO"
-echo -e " ${Y}[08]${N} 🔒 BLOQUEAR USUARIO           ${R}🔒 (ESTADO: BLOQUEADO)${N}"
-echo -e " ${Y}[09]${N} 💾 BACKUP USUARIOS            ${W}⚙️  (OFICIAL★CERTIFICADO)${N}"
-echo -e " ${Y}[10]${N} ⚙️  MENU SSR/SS               ${W}⚙️  (CERTIFICADO)${N}"
-echo -e " ${Y}[11]${N} 🤖 BOT TELEGRAM               ${Y}🤖 (VERSIÓN BETA)${N}"
-echo -e " ${Y}[12]${N} 🧪 VERIFICADOR                ${B}🧪 (MODO INDIVIDUAL)${N}"
-echo -e " ${Y}[13]${N} 📡 CHECKUSER                  ${R}📡 (INACTIVO)${N}"
+echo -e " ${Y}[08]${N} 🔒 BLOQUEAR USUARIO            ${R}🔒 (ESTADO: BLOQUEADO)${N}"
+echo -e " ${Y}[09]${N} 💾 BACKUP USUARIOS             ${W}⚙️  (OFICIAL★CERTIFICADO)${N}"
+echo -e " ${Y}[10]${N} 👤 MENU SSR/SS                ${W}⚙️  (CERTIFICADO)${N}"
+echo -e " ${Y}[11]${N} 🤖 BOT TELEGRAM                ${Y}🤖 (VERSIÓN BETA)${N}"
+echo -e " ${Y}[12]${N} 🧪 VERIFICADOR                 ${B}🧪 (MODO INDIVIDUAL)${N}"
+echo -e " ${Y}[13]${N} 🔌 CHECKUSER                   ${R}🔌 (INACTIVO)${N}"
 echo -e " ${Y}[14]${N} 💥 CONTROL MULTILOGIN"
 
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-echo -e " ${R}[0]${N} ${R}►${N} ${W}[ REGRESAR ]${N}                                ${D}ÚLTIMO REFRF${N}"
+echo -e " ${R}[0]${N} ${R}►${N} ${W}[ REGRESAR ]${N}                                 ${D}ÚLTIMO REFRF${N}"
 echo -e "${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 
-echo -e " ${D}( CONTADOR: ${G}ON${D} | KILL MULTISESSION: ${R}OFF${D} )${N}   ${D}🔘 ESTADO DEL SERVICIO${N}"
+echo -e " ${D}( CONTADOR: ${G}ON${D} | KILL MULTISESSION: ${R}OFF${D} )${N}    ${D}🔘 ESTADO DEL SERVICIO${N}"
 echo ""
 echo -ne " ${C}KIRA@Servidor:~/Administrador $${N} ${W}► Opción [_ ]${N} "
 read op

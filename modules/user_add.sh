@@ -12,7 +12,16 @@ N=$'\033[0m'    # Reset
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
 BG_PID=""
 
-trap '' INT TERM TSTP
+# Limpiar proceso en segundo plano al salir
+detener_reloj_live() {
+    if [ -n "$BG_PID" ]; then
+        kill "$BG_PID" 2>/dev/null
+        wait "$BG_PID" 2>/dev/null
+        BG_PID=""
+    fi
+}
+
+trap 'detener_reloj_live; exit' EXIT INT TERM
 
 obtener_ip() {
     IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -27,20 +36,30 @@ obtener_puerto() {
 }
 
 obtener_metricas() {
-    RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4; exit}')
+    # RAM Libre en MB
+    RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM=0
 
-    read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
-    total1=$((user + nice + system + idle + iowait + irq + softirq + steal))
-    idle1=$((idle + iowait))
-    sleep 0.05
-    read -r _ user2 nice2 system2 idle2 iowait2 irq2 softirq2 steal2 _ < /proc/stat
-    total2=$((user2 + nice2 + system2 + idle2 + iowait2 + irq2 + softirq2 + steal2))
-    idle2=$((idle2 + iowait2))
-    diff_total=$((total2 - total1))
-    diff_idle=$((idle2 - idle1))
-    if [ "$diff_total" -gt 0 ]; then
-        CPU=$((100 * (diff_total - diff_idle) / diff_total))
+    # CPU rápido usando /proc/stat
+    if [ -f /proc/stat ]; then
+        read -r _ u1 n1 s1 i1 io1 ir1 sir1 st1 _ < /proc/stat
+        tot1=$((u1 + n1 + s1 + i1 + io1 + ir1 + sir1 + st1))
+        idl1=$((i1 + io1))
+        
+        sleep 0.2
+        
+        read -r _ u2 n2 s2 i2 io2 ir2 sir2 st2 _ < /proc/stat
+        tot2=$((u2 + n2 + s2 + i2 + io2 + ir2 + sir2 + st2))
+        idl2=$((i2 + io2))
+        
+        dtot=$((tot2 - tot1))
+        didl=$((idl2 - idl1))
+        
+        if [ "$dtot" -gt 0 ]; then
+            CPU=$((100 * (dtot - didl) / dtot))
+        else
+            CPU=0
+        fi
     else
         CPU=0
     fi
@@ -48,7 +67,10 @@ obtener_metricas() {
     [ "$CPU" -gt 100 ] && CPU=100
 
     HORA=$(date +'%H:%M:%S')
-    LATENCIA="N/A"
+
+    # Latencia rápida hacia 1.1.1.1 (timeout de 1 segundo para que no se trabe)
+    LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
+    [ -z "$LATENCIA" ] && LATENCIA="N/A"
 }
 
 dibujar_encabezado() {
@@ -56,7 +78,7 @@ dibujar_encabezado() {
     obtener_metricas
 
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-    printf "%b│%b %b[ ⚡ KIRA-SSH ]%b  🔐 %bADMINISTRADOR DE USUARIOS SSH | KIRA%b                 %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+    printf "%b│%b %b[ ⚡ KIRA-SSH ]%b  🔐 %bADMINISTRADOR DE USUARIOS SSH | KIRA%b                  %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b %bVERSIÓN 2.5 (Premium)%b | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b      %b│%b\n" "$D" "$N" "$D" "$N" "$G" "$N" "$D" "$N" "$D" "$N"
     printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
     printf "%b│%b %b▶ RAM LIBRE:%b %b%-6s%b %b│%b %b▶ CPU:%b %b%-4s%b %b│%b %b▶ HORA:%b %b%-8s%b %b│%b %b▶ LAT:%b %b%-6s%b %b│%b\n" \
@@ -66,6 +88,21 @@ dibujar_encabezado() {
         "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     printf "\n"
+}
+
+# Hilo en segundo plano que refresca SOLAMENTE la línea de estadísticas cada 1 segundo
+iniciar_reloj_live() {
+    detener_reloj_live
+    (
+        while true; do
+            sleep 1
+            obtener_metricas
+            # Guarda cursor (\033[s), se posiciona en la línea 5, pinta los datos actualizados y restaura el cursor (\033[u)
+            printf "\033[s\033[5;3H${C}▶ RAM LIBRE:${N} %b%-6s%b ${D}│${N} ${C}▶ CPU:${N} %b%-4s%b ${D}│${N} ${C}▶ HORA:${N} %b%-8s%b ${D}│${N} ${C}▶ LAT:${N} %b%-6s%b\033[u" \
+                "$W" "${RAM}MB" "$N" "$W" "${CPU}%" "$N" "$W" "$HORA" "$N" "$W" "$LATENCIA" "$N"
+        done
+    ) &
+    BG_PID=$!
 }
 
 # ===== BUCLE PRINCIPAL =====
@@ -80,9 +117,15 @@ while true; do
     echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     echo ""
 
-    # Solicitar opción
+    # Arrancar el reloj en tiempo real justo antes de leer la opción del usuario
+    iniciar_reloj_live
+
+    # Solicitar opción (el usuario escribe y presiona Enter con total normalidad)
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
+
+    # Detener el reloj en vivo inmediatamente al presionar Enter para procesar la opción sin interferencias
+    detener_reloj_live
 
     case "$opcion_sub" in
         1|01)
@@ -285,6 +328,7 @@ while true; do
             ;;
 
         0)
+            detener_reloj_live
             clear
             break
             ;;

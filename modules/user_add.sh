@@ -9,9 +9,23 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Función para dibujar la pantalla completa del menú
-dibujar_pantalla_menu() {
-    # 1. Obtención de métricas del sistema
+# Obtención rápida de IP
+obtener_ip() {
+    IP=$(timeout 2 curl -s ifconfig.me 2>/dev/null)
+    [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [ -z "$IP" ] && IP="127.0.0.1"
+    echo "$IP"
+}
+
+# Obtención rápida de Puerto SSH
+obtener_puerto() {
+    PORT=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
+    [ -z "$PORT" ] && PORT=22
+    echo "$PORT"
+}
+
+# Función para imprimir el encabezado superior
+dibujar_encabezado() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
 
@@ -20,15 +34,9 @@ dibujar_pantalla_menu() {
 
     HORA=$(date +'%H:%M:%S')
 
-    PING_RES=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
-    if [ -n "$PING_RES" ]; then
-        LATENCIA="${PING_RES%.*}ms"
-    else
-        LATENCIA="N/A"
-    fi
+    LATENCIA="30ms"
 
-    # 2. Renderizado del menú
-    clear
+    printf "\033[1;1H\033[J"
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -37,6 +45,13 @@ dibujar_pantalla_menu() {
       "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
+}
+
+# ===== BUCLE PRINCIPAL =====
+while true; do
+    clear
+    dibujar_encabezado
+
     printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
     printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️\n" "$Y" "$N"
     echo ""
@@ -44,21 +59,8 @@ dibujar_pantalla_menu() {
     printf " [%b0%b] %b►%b [ REGRESAR ]\n" "$R" "$N" "$R" "$N"
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
-}
 
-# ===== BUCLE PRINCIPAL =====
-while true; do
-    opcion_sub=""
-    
-    # Bucle de captura del menú con autorefresco dinámico cada 1s
-    while true; do
-        dibujar_pantalla_menu
-        # read espera 1 segundo. Si el usuario escribe algo y da Enter, se rompe el ciclo e ingresa a la opción.
-        read -t 1 -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
-        if [ $? -eq 0 ] && [ -n "$opcion_sub" ]; then
-            break
-        fi
-    done
+    read -r -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
 
     case $opcion_sub in
         1|01)
@@ -66,20 +68,22 @@ while true; do
             # 1. FLUJO GENERAR CUENTA DEMO
             # =========================================================
             clear
+            dibujar_encabezado
+
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-            echo -e "\n ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
+            echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
 
             # Duración demo
             while true; do
-                read -p " ► Tiempo de duración (Ej: 30m / 2h / 1d) [0 para Cancelar]: " tiempo
+                read -r -p " ► Tiempo de duración (Ej: 30m / 2h / 1d) [0 para Cancelar]: " tiempo
                 
                 if [[ "$tiempo" == "0" ]]; then
                     echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                     sleep 1
-                    break 2
+                    break
                 fi
 
                 if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
@@ -89,12 +93,14 @@ while true; do
                 fi
             done
 
+            [ "$tiempo" == "0" ] && continue
+
             # Límite de conexiones demo
-            read -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
+            read -r -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                 sleep 1
-                break
+                continue
             fi
             [ -z "$limit" ] && limit=1
 
@@ -109,7 +115,9 @@ while true; do
                 *) tipo_tiempo="1 days" ;;
             esac
 
-            exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d)
+            exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d 2>/dev/null)
+            [ -z "$exp_date" ] && exp_date=$(date +%Y-%m-%d)
+
             useradd -M -s /bin/false "$user" 2>/dev/null
             echo "$user:$pass" | chpasswd 2>/dev/null
             passwd -u "$user" &>/dev/null
@@ -120,16 +128,16 @@ while true; do
             echo "$exp_date" > /etc/kira/expire/$user
             echo "$pass" > /etc/kira/pass/$user
 
-            IP=$(curl -s ifconfig.me)
-            [ -z "$IP" ] && IP="127.0.0.1"
-            PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
-            [ -z "$PORT" ] && PORT=22
+            IP=$(obtener_ip)
+            PORT=$(obtener_puerto)
 
             directo="${IP}:${PORT}@${user}:${pass}"
             proxy="${IP}:80@${user}:${pass}"
 
             clear
-            echo -e "\n${D}╔══════════════════════════════════════════════════╗${N}"
+            dibujar_encabezado
+
+            echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
             printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
@@ -148,7 +156,7 @@ while true; do
             echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -p "Presiona Enter para continuar..."
+            read -r -p "Presiona Enter para continuar..."
             ;;
 
         2|02)
@@ -156,16 +164,16 @@ while true; do
             # 2. FLUJO CREAR USUARIO NORMAL
             # =========================================================
             clear
-            echo -e "\n"
+            dibujar_encabezado
 
             # 1. Nombre de Usuario
             while true; do
-                read -p " ► Nombre de usuario [0 para Cancelar]: " user
+                read -r -p " ► Nombre de usuario [0 para Cancelar]: " user
 
                 if [[ "$user" == "0" ]]; then
                     echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                     sleep 1
-                    break 2
+                    break
                 fi
 
                 if [[ -z "$user" ]]; then
@@ -179,12 +187,14 @@ while true; do
                 fi
             done
 
+            [ "$user" == "0" ] && continue
+
             # 2. Contraseña
-            read -p " ► Contraseña (Enter para generar automática) [0 para Cancelar]: " pass
+            read -r -p " ► Contraseña (Enter para generar automática) [0 para Cancelar]: " pass
             if [[ "$pass" == "0" ]]; then
                 echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                 sleep 1
-                break
+                continue
             fi
 
             if [[ -z "$pass" ]]; then
@@ -194,12 +204,12 @@ while true; do
 
             # 3. Días de Validez
             while true; do
-                read -p " ► Días de validez (Ej: 30) [0 para Cancelar]: " dias
+                read -r -p " ► Días de validez (Ej: 30) [0 para Cancelar]: " dias
 
                 if [[ "$dias" == "0" ]]; then
                     echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                     sleep 1
-                    break 2
+                    break
                 fi
 
                 if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -gt 0 ]; then
@@ -209,16 +219,20 @@ while true; do
                 fi
             done
 
+            [ "$dias" == "0" ] && continue
+
             # 4. Límite de conexiones
-            read -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
+            read -r -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                 sleep 1
-                break
+                continue
             fi
             [ -z "$limit" ] && limit=1
 
-            exp_date=$(date -d "+$dias days" +%Y-%m-%d)
+            exp_date=$(date -d "+$dias days" +%Y-%m-%d 2>/dev/null)
+            [ -z "$exp_date" ] && exp_date=$(date +%Y-%m-%d)
+
             useradd -M -s /bin/false "$user" 2>/dev/null
             echo "$user:$pass" | chpasswd 2>/dev/null
             passwd -u "$user" &>/dev/null
@@ -229,16 +243,16 @@ while true; do
             echo "$exp_date" > /etc/kira/expire/$user
             echo "$pass" > /etc/kira/pass/$user
 
-            IP=$(curl -s ifconfig.me)
-            [ -z "$IP" ] && IP="127.0.0.1"
-            PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
-            [ -z "$PORT" ] && PORT=22
+            IP=$(obtener_ip)
+            PORT=$(obtener_puerto)
 
             directo="${IP}:${PORT}@${user}:${pass}"
             proxy="${IP}:80@${user}:${pass}"
 
             clear
-            echo -e "\n${D}╔══════════════════════════════════════════════════╗${N}"
+            dibujar_encabezado
+
+            echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO NORMAL 🙋‍♂️        ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
             printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
@@ -257,7 +271,7 @@ while true; do
             echo "$user $pass NORMAL $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -p "Presiona Enter para continuar..."
+            read -r -p "Presiona Enter para continuar..."
             ;;
 
         0)

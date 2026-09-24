@@ -72,14 +72,14 @@ dibujar_encabezado() {
     echo ""
 }
 
-# Actualizador en vivo que guarda posición y regresa a la fila de entrada de opción (fila 13)
+# Actualizador en vivo exclusivo para el menú de opciones principales
 iniciar_reloj_live() {
     detener_reloj_live
     (
         while true; do
             sleep 1
             obtener_metricas
-            # Mueve el cursor a la fila 5 para actualizar métricas y luego regresa a la fila 13 (Opción)
+            # Mueve el cursor a la fila 5 para actualizar métricas e inmediatamente regresa al punto del prompt
             printf "\033[5;1H%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\033[13;35H" \
               "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
         done
@@ -99,14 +99,14 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
-    # Iniciar la actualización en vivo
+    # Iniciar la actualización en vivo únicamente para la espera de opción
     iniciar_reloj_live
 
     # Fila 13: Solicitar opción
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
 
-    # Detener inmediatamente el hilo dinámico para evitar bloqueos
+    # Detener el hilo inmediatamente para permitir que los subprompts respondan fluida y limpiamente
     detener_reloj_live
 
     case $opcion_sub in

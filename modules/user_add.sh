@@ -1,17 +1,20 @@
 #!/bin/bash
 
-# ========== PALETA DE COLORES ANSI EXACTA ==========
+# ========== PALETA DE COLORES ANSI EXALTA ==========
 Y=$'\033[1;33m' # Amarillo
-C=$'\033[1;36m' # Cian / Azul claro
+C=$'\033[1;36m' # Cian
 W=$'\033[1;37m' # Blanco brillante
-D=$'\033[0;90m' # Gris (bordes y textos secundarios)
+D=$'\033[0;90m' # Gris (bordes)
 G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Obtención rápida de IP sin bloqueos
+# Prompt reutilizable con la misma sintaxis visual
+PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
+
+# Obtención rápida de IP (con tiempo límite de 1s para evitar congelamientos)
 obtener_ip() {
-    IP=$(timeout 2 curl -s ifconfig.me 2>/dev/null)
+    IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
     [ -z "$IP" ] && IP="127.0.0.1"
     echo "$IP"
@@ -24,7 +27,7 @@ obtener_puerto() {
     echo "$PORT"
 }
 
-# Encabezado principal del sistema
+# Dibujar cabecera principal
 dibujar_encabezado() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
@@ -59,33 +62,26 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
-    read -r -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+    read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Opción: ${N}")" opcion_sub
 
     case $opcion_sub in
         1|01)
             # =========================================================
-            # 1. FLUJO GENERAR CUENTA DEMO
+            # 1. GENERAR CUENTA DEMO
             # =========================================================
             clear
             dibujar_encabezado
-
-            echo -e "${D}┌─────────────────────────────────────────────────────────┐${N}"
-            echo -e "${D}│${Y}                🚀 GENERAR CUENTA DEMO                   ${D}│${N}"
-            echo -e "${D}└─────────────────────────────────────────────────────────┘${N}"
-            echo -e " ${D}(Presiona 0 para cancelar en cualquier momento)${N}\n"
 
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-            echo -e " ${C}👤 Usuario autogenerado:${N} ${W}$user${N}\n"
-
-            # Duración demo
+            # 1. Tiempo de duración
             while true; do
-                read -r -p "$(echo -e " ${C}⏳ Tiempo de duración (Ej: 30m / 2h / 1d):${N} ")" tiempo
+                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d): ${N}")" tiempo
                 
                 if [[ "$tiempo" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada.${N}"
+                    echo -e "\n ${R}[!] Cancelado.${N}"
                     sleep 1
                     break
                 fi
@@ -93,16 +89,16 @@ while true; do
                 if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
                     break
                 else
-                    echo -e " ${R}❌ Usa m (minutos), h (horas) o d (días).${N}"
+                    echo -e " ${R}[!] Formato inválido. Usa m (minutos), h (horas) o d (días).${N}\n"
                 fi
             done
 
             [ "$tiempo" == "0" ] && continue
 
-            # Límite de conexiones demo
-            read -r -p "$(echo -e " ${C}📊 Límite de conexiones (Por defecto 1):${N} ")" limit
+            # 2. Límite de conexiones
+            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}")" limit
             if [[ "$limit" == "0" ]]; then
-                echo -e "\n ${R}❌ Operación cancelada.${N}"
+                echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
                 continue
             fi
@@ -160,37 +156,32 @@ while true; do
             echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -r -p "Presiona Enter para continuar..."
+            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}")"
             ;;
 
         2|02)
             # =========================================================
-            # 2. FLUJO CREAR USUARIO NORMAL
+            # 2. CREAR USUARIO NORMAL
             # =========================================================
             clear
             dibujar_encabezado
 
-            echo -e "${D}┌─────────────────────────────────────────────────────────┐${N}"
-            echo -e "${D}│${G}                🙋‍♂️ CREAR USUARIO NORMAL                   ${D}│${N}"
-            echo -e "${D}└─────────────────────────────────────────────────────────┘${N}"
-            echo -e " ${D}(Presiona 0 para cancelar en cualquier momento)${N}\n"
-
             # 1. Nombre de Usuario
             while true; do
-                read -r -p "$(echo -e " ${C}👤 Nombre de usuario:${N} ")" user
+                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}")" user
 
                 if [[ "$user" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada.${N}"
+                    echo -e "\n ${R}[!] Cancelado.${N}"
                     sleep 1
                     break
                 fi
 
                 if [[ -z "$user" ]]; then
-                    echo -e " ${R}❌ El usuario no puede estar vacío.${N}"
+                    echo -e " ${R}[!] El usuario no puede estar vacío.${N}\n"
                 elif id "$user" &>/dev/null; then
-                    echo -e " ${R}❌ El usuario '$user' ya existe en el sistema.${N}"
+                    echo -e " ${R}[!] El usuario '$user' ya existe.${N}\n"
                 elif [[ ! "$user" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-                    echo -e " ${R}❌ Nombre inválido. Usa letras, números, _ o -.${N}"
+                    echo -e " ${R}[!] Nombre inválido. Usa letras y números.${N}\n"
                 else
                     break
                 fi
@@ -199,24 +190,23 @@ while true; do
             [ "$user" == "0" ] && continue
 
             # 2. Contraseña
-            read -r -p "$(echo -e " ${C}🔑 Contraseña (Enter = autogenerar):${N} ")" pass
+            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Contraseña (Enter = autogenerar): ${N}")" pass
             if [[ "$pass" == "0" ]]; then
-                echo -e "\n ${R}❌ Operación cancelada.${N}"
+                echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
                 continue
             fi
 
             if [[ -z "$pass" ]]; then
                 pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
-                echo -e " ${C}▶ Contraseña generada:${N} ${W}$pass${N}"
             fi
 
             # 3. Días de Validez
             while true; do
-                read -r -p "$(echo -e " ${C}⏳ Días de validez (Ej: 30):${N} ")" dias
+                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Días de validez (Ej: 30): ${N}")" dias
 
                 if [[ "$dias" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada.${N}"
+                    echo -e "\n ${R}[!] Cancelado.${N}"
                     sleep 1
                     break
                 fi
@@ -224,16 +214,16 @@ while true; do
                 if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -gt 0 ]; then
                     break
                 else
-                    echo -e " ${R}❌ Ingresa un número de días válido.${N}"
+                    echo -e " ${R}[!] Ingresa un número de días válido.${N}\n"
                 fi
             done
 
             [ "$dias" == "0" ] && continue
 
             # 4. Límite de conexiones
-            read -r -p "$(echo -e " ${C}📊 Límite de conexiones (Por defecto 1):${N} ")" limit
+            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}")" limit
             if [[ "$limit" == "0" ]]; then
-                echo -e "\n ${R}❌ Operación cancelada.${N}"
+                echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
                 continue
             fi
@@ -280,7 +270,7 @@ while true; do
             echo "$user $pass NORMAL $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -r -p "Presiona Enter para continuar..."
+            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}")"
             ;;
 
         0)

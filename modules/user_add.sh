@@ -9,8 +9,9 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Función para redibujar SOLO la caja del encabezado superior sin tocar el resto de la pantalla
-actualizar_encabezado() {
+# Función para dibujar la pantalla completa del menú
+dibujar_pantalla_menu() {
+    # 1. Obtención de métricas del sistema
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
 
@@ -26,12 +27,8 @@ actualizar_encabezado() {
         LATENCIA="N/A"
     fi
 
-    # Guardar posición actual del cursor
-    tput sc
-
-    # Posicionar cursor en fila 1, columna 1
-    tput cup 0 0
-
+    # 2. Renderizado del menú
+    clear
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -39,50 +36,29 @@ actualizar_encabezado() {
     printf "%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\n" \
       "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
-
-    # Restaurar posición original del cursor
-    tput rc
-}
-
-# Función para renderizar el cuerpo del menú estático
-mostrar_menu_cuerpo() {
-    tput cup 6 0
-    printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
-    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️ %b(OFICIAL)%b\033[K\n" "$Y" "$N" "$G" "$N"
     echo ""
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
-    printf " [%b0%b] %b►%b [ REGRESAR ]                                 \033[K\n" "$R" "$N" "$R" "$N"
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
+    printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
+    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️\n" "$Y" "$N"
+    echo ""
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
+    printf " [%b0%b] %b►%b [ REGRESAR ]\n" "$R" "$N" "$R" "$N"
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 }
-
-clear
 
 # ===== BUCLE PRINCIPAL =====
 while true; do
-    clear
-    actualizar_encabezado
-    mostrar_menu_cuerpo
-
-    # Hilo secundario para actualizar datos del encabezado en vivo mientras espera input
-    (
-        while true; do
-            sleep 1
-            actualizar_encabezado
-        done
-    ) &
-    PID_MONITOR=$!
-
-    # Detener el hilo al salir o recibir señal
-    trap "kill $PID_MONITOR 2>/dev/null" EXIT
-
-    # Captura limpia en la posición del prompt
-    tput cup 13 0
-    read -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}\033[K")" opcion_sub
-
-    # Matar monitor secundario para evitar sobreposición en las pantallas de creación
-    kill $PID_MONITOR 2>/dev/null
-    wait $PID_MONITOR 2>/dev/null
+    opcion_sub=""
+    
+    # Bucle de captura del menú con autorefresco dinámico cada 1s
+    while true; do
+        dibujar_pantalla_menu
+        # read espera 1 segundo. Si el usuario escribe algo y da Enter, se rompe el ciclo e ingresa a la opción.
+        read -t 1 -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+        if [ $? -eq 0 ] && [ -n "$opcion_sub" ]; then
+            break
+        fi
+    done
 
     case $opcion_sub in
         1|01)
@@ -90,14 +66,11 @@ while true; do
             # 1. FLUJO GENERAR CUENTA DEMO
             # =========================================================
             clear
-            actualizar_encabezado
-
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-            tput cup 7 0
-            echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
+            echo -e "\n ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
 
             # Duración demo
             while true; do
@@ -106,8 +79,7 @@ while true; do
                 if [[ "$tiempo" == "0" ]]; then
                     echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                     sleep 1
-                    clear
-                    continue 2
+                    break 2
                 fi
 
                 if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
@@ -122,8 +94,7 @@ while true; do
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                 sleep 1
-                clear
-                continue
+                break
             fi
             [ -z "$limit" ] && limit=1
 
@@ -158,10 +129,7 @@ while true; do
             proxy="${IP}:80@${user}:${pass}"
 
             clear
-            actualizar_encabezado
-
-            tput cup 7 0
-            echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
+            echo -e "\n${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
             printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
@@ -181,7 +149,6 @@ while true; do
 
             echo ""
             read -p "Presiona Enter para continuar..."
-            clear
             ;;
 
         2|02)
@@ -189,9 +156,7 @@ while true; do
             # 2. FLUJO CREAR USUARIO NORMAL
             # =========================================================
             clear
-            actualizar_encabezado
-
-            tput cup 7 0
+            echo -e "\n"
 
             # 1. Nombre de Usuario
             while true; do
@@ -200,8 +165,7 @@ while true; do
                 if [[ "$user" == "0" ]]; then
                     echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                     sleep 1
-                    clear
-                    continue 2
+                    break 2
                 fi
 
                 if [[ -z "$user" ]]; then
@@ -220,8 +184,7 @@ while true; do
             if [[ "$pass" == "0" ]]; then
                 echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                 sleep 1
-                clear
-                continue
+                break
             fi
 
             if [[ -z "$pass" ]]; then
@@ -236,8 +199,7 @@ while true; do
                 if [[ "$dias" == "0" ]]; then
                     echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                     sleep 1
-                    clear
-                    continue 2
+                    break 2
                 fi
 
                 if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -gt 0 ]; then
@@ -252,8 +214,7 @@ while true; do
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
                 sleep 1
-                clear
-                continue
+                break
             fi
             [ -z "$limit" ] && limit=1
 
@@ -277,10 +238,7 @@ while true; do
             proxy="${IP}:80@${user}:${pass}"
 
             clear
-            actualizar_encabezado
-
-            tput cup 7 0
-            echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
+            echo -e "\n${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO NORMAL 🙋‍♂️        ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
             printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
@@ -300,7 +258,6 @@ while true; do
 
             echo ""
             read -p "Presiona Enter para continuar..."
-            clear
             ;;
 
         0)
@@ -311,7 +268,6 @@ while true; do
         *)
             echo -e "\n${R}[!] Opción no válida.${N}"
             sleep 1
-            clear
             ;;
     esac
 done

@@ -10,17 +10,6 @@ R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
-BG_PID=""
-
-detener_reloj_live() {
-    if [ -n "$BG_PID" ]; then
-        kill "$BG_PID" 2>/dev/null
-        wait "$BG_PID" 2>/dev/null
-        BG_PID=""
-    fi
-}
-
-trap 'detener_reloj_live; exit' EXIT INT TERM
 
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
@@ -41,11 +30,6 @@ obtener_metricas() {
     [ -z "$RAM" ] && RAM="0"
 
     CPU=$(top -bn1 2>/dev/null | awk '/Cpu\(s\):/ {printf "%.0f", $2 + $4}')
-    if [ -z "$CPU" ]; then
-        CORES=$(nproc 2>/dev/null || echo 1)
-        LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
-        CPU=$(awk -v l="$LOAD" -v c="$CORES" 'BEGIN { printf "%.0f", (l/c)*100 }' 2>/dev/null)
-    fi
     [ -z "$CPU" ] && CPU="0"
     [ "$CPU" -gt 100 ] && CPU=100
 
@@ -53,38 +37,24 @@ obtener_metricas() {
 
     LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
     [ -z "$LATENCIA" ] && LATENCIA="N/A"
-
-    ONLINE=$(ps aux | grep -i sshd: | grep -v root | grep -v grep | wc -l 2>/dev/null)
-    [ -z "$ONLINE" ] && ONLINE="0"
 }
 
 dibujar_encabezado() {
     clear
     obtener_metricas
 
-    printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-    printf "%b│%b   [ %b⚡ KIRA-SSH%b ]   🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                 %b│%b\n" "$D" "$C" "$D" "$Y" "$D" "$N" "$D" "$N"
-    printf "%b│%b   VERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b      %b│%b\n" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
-    printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
-    printf "%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\n" \
-      "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
-    printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
+    # Rellenamos variables con formato limpio
+    str_ram="${RAM}MB"
+    str_cpu="${CPU}%%"
+    
+    echo -e "${D}┌───────────────────────────────────────────────────────────────────────────┐${N}"
+    echo -e "${D}│${N}   [ ${C}⚡ KIRA-SSH${N} ]   🔐 ${Y}CREADOR DE CUENTAS SSH | KIRA VIP${N}                 ${D}│${N}"
+    echo -e "${D}│${N}   VERSIÓN 2.5 (Premium) | LICENCIA: ${G}ACTIVA${N} ${D}(Expiración: 2026-12-31)${N}      ${D}│${N}"
+    echo -e "${D}├───────────────────────────────────────────────────────────────────────────┤${N}"
+    printf "${D}│${N} ${C}▶ RAM LIBRE:${N} %-8s ${D}│${N} ${C}▶ CPU:${N} %-5s ${D}│${N} ${C}▶ HORA:${N} %-8s ${D}│${N} ${C}▶ LAT:${N} %-6s ${D}│${N}\n" \
+      "$str_ram" "$str_cpu" "$HORA" "$LATENCIA"
+    echo -e "${D}└───────────────────────────────────────────────────────────────────────────┘${N}"
     echo ""
-}
-
-# Actualizador en vivo exclusivo para el menú de opciones principales
-iniciar_reloj_live() {
-    detener_reloj_live
-    (
-        while true; do
-            sleep 1
-            obtener_metricas
-            # Mueve el cursor a la fila 5 para actualizar métricas e inmediatamente regresa al punto del prompt
-            printf "\033[5;1H%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\033[13;35H" \
-              "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
-        done
-    ) &
-    BG_PID=$!
 }
 
 # ===== BUCLE PRINCIPAL =====
@@ -94,20 +64,14 @@ while true; do
     printf " [%b01%b] GENERAR CUENTA DEMO (TEMPORAL)\n" "$Y" "$N"
     printf " [%b02%b] CREAR USUARIO NORMAL\n" "$Y" "$N"
     echo ""
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
+    echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     printf " [%b0%b] %b►%b [ REGRESAR ]\n" "$R" "$N" "$R" "$N"
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
+    echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     echo ""
 
-    # Iniciar la actualización en vivo únicamente para la espera de opción
-    iniciar_reloj_live
-
-    # Fila 13: Solicitar opción
+    # Solicitar opción limpia
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
-
-    # Detener el hilo inmediatamente para permitir que los subprompts respondan fluida y limpiamente
-    detener_reloj_live
 
     case $opcion_sub in
         1|01)
@@ -296,7 +260,7 @@ while true; do
             printf "${D}║${N} ${R}Límite Ssh  :${N} %-35s ${D}║${N}\n" "$limit conex."
             printf "${D}║${N} ${R}Validez     :${N} %-35s ${D}║${N}\n" "$dias días (Expira: $exp_date)"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-            echo -e "${D}║${N} ${G}DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}          ${D}║${N}"
+            echo -e "${D}║${G}DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}          ${D}║${N}"
             echo -e "${D}║${N}                                                  ${D}║${N}"
             printf "${D}║${N} Direc: ${Y}%-42s${N} ${D}║${N}\n" "$directo"
             printf "${D}║${N} Proxy: ${Y}%-42s${N} ${D}║${N}\n" "$proxy"
@@ -310,13 +274,12 @@ while true; do
             ;;
 
         0)
-            detener_reloj_live
             clear
             break
             ;;
 
         *)
-            echo -e "\n${R}[!] Opción no válida.${N}"
+            echo -e "\n ${R}[!] Opción no válida.${N}"
             sleep 1
             ;;
     esac

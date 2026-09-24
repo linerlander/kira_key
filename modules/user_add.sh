@@ -10,6 +10,17 @@ R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
+BG_PID=""
+
+detener_reloj_live() {
+    if [ -n "$BG_PID" ]; then
+        kill "$BG_PID" 2>/dev/null
+        wait "$BG_PID" 2>/dev/null
+        BG_PID=""
+    fi
+}
+
+trap 'detener_reloj_live; exit' EXIT INT TERM
 
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
@@ -43,9 +54,8 @@ dibujar_encabezado() {
     clear
     obtener_metricas
 
-    # Rellenamos variables con formato limpio
     str_ram="${RAM}MB"
-    str_cpu="${CPU}%%"
+    str_cpu="${CPU}%"
     
     echo -e "${D}┌───────────────────────────────────────────────────────────────────────────┐${N}"
     echo -e "${D}│${N}   [ ${C}⚡ KIRA-SSH${N} ]   🔐 ${Y}CREADOR DE CUENTAS SSH | KIRA VIP${N}                 ${D}│${N}"
@@ -55,6 +65,23 @@ dibujar_encabezado() {
       "$str_ram" "$str_cpu" "$HORA" "$LATENCIA"
     echo -e "${D}└───────────────────────────────────────────────────────────────────────────┘${N}"
     echo ""
+}
+
+# Actualizador en tiempo real seguro (preserva la posición del cursor del usuario)
+iniciar_reloj_live() {
+    detener_reloj_live
+    (
+        while true; do
+            sleep 1
+            obtener_metricas
+            str_ram="${RAM}MB"
+            str_cpu="${CPU}%"
+            # Guarda cursor actual (\033[s), salta a la línea 5, pinta métricas y restaura cursor (\033[u)
+            printf "\033[s\033[5;1H${D}│${N} ${C}▶ RAM LIBRE:${N} %-8s ${D}│${N} ${C}▶ CPU:${N} %-5s ${D}│${N} ${C}▶ HORA:${N} %-8s ${D}│${N} ${C}▶ LAT:${N} %-6s ${D}│${N}\033[u" \
+              "$str_ram" "$str_cpu" "$HORA" "$LATENCIA"
+        done
+    ) &
+    BG_PID=$!
 }
 
 # ===== BUCLE PRINCIPAL =====
@@ -69,9 +96,15 @@ while true; do
     echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     echo ""
 
-    # Solicitar opción limpia
+    # Iniciar reloj en vivo justo antes de esperar la entrada
+    iniciar_reloj_live
+
+    # Solicitar opción
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
+
+    # Detener el reloj en vivo al presionar Enter para procesar la opción con fluidez
+    detener_reloj_live
 
     case $opcion_sub in
         1|01)
@@ -274,6 +307,7 @@ while true; do
             ;;
 
         0)
+            detener_reloj_live
             clear
             break
             ;;

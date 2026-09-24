@@ -10,8 +10,21 @@ R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
+BG_PID=""
 
-# Obtención ultra rápida de IP
+# Detener hilo de refresco en vivo
+detener_reloj_live() {
+    if [ -n "$BG_PID" ]; then
+        kill "$BG_PID" 2>/dev/null
+        wait "$BG_PID" 2>/dev/null
+        BG_PID=""
+    fi
+}
+
+# Manejo de salida limpia para prevenir procesos fantasma
+trap 'detener_reloj_live; exit' EXIT INT TERM
+
+# Obtención rápida de IP
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -26,16 +39,12 @@ obtener_puerto() {
     echo "$PORT"
 }
 
-# Encabezado dinámico en tiempo real
-dibujar_encabezado() {
-    clear
-
-    # 1. RAM disponible real
+# Cálculo instantáneo de métricas del sistema
+obtener_metricas() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $7}')
     [ -z "$RAM" ] && RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
     [ -z "$RAM" ] && RAM="0"
 
-    # 2. Uso de CPU real
     CPU=$(top -bn1 2>/dev/null | awk '/Cpu\(s\):/ {printf "%.0f", $2 + $4}')
     if [ -z "$CPU" ]; then
         CORES=$(nproc 2>/dev/null || echo 1)
@@ -45,18 +54,20 @@ dibujar_encabezado() {
     [ -z "$CPU" ] && CPU="0"
     [ "$CPU" -gt 100 ] && CPU=100
 
-    # 3. Hora actual del servidor
     HORA=$(date +'%H:%M:%S')
 
-    # 4. Latencia real (Ping hacia 1.1.1.1)
     LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
     [ -z "$LATENCIA" ] && LATENCIA="N/A"
 
-    # 5. Usuarios SSH activos/online
     ONLINE=$(ps aux | grep -i sshd: | grep -v root | grep -v grep | wc -l 2>/dev/null)
     [ -z "$ONLINE" ] && ONLINE="0"
+}
 
-    # Dibujo del panel
+# Renderizado inicial del marco
+dibujar_encabezado() {
+    clear
+    obtener_metricas
+
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b   [ KIRA-SSH ]   CREADOR DE CUENTAS SSH | KIRA VIP                       %b│%b\n" "$D" "$N" "$D" "$N"
     printf "%b│%b   VERSION 2.5 (Premium) | ONLINE: %-3s | HORA: %-8s                      %b│%b\n" "$D" "$N" "$ONLINE" "$HORA" "$D" "$N"
@@ -65,6 +76,25 @@ dibujar_encabezado() {
       "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
+}
+
+# Hilo en segundo plano que actualiza las métricas cada 1 segundo
+iniciar_reloj_live() {
+    detener_reloj_live
+    (
+        while true; do
+            sleep 1
+            obtener_metricas
+            # \033[s (Guarda posición del cursor en 'Opción:')
+            # \033[3;1H (Va a fila 3), actualiza Hora/Online
+            # \033[5;1H (Va a fila 5), actualiza RAM/CPU/Hora/Latencia
+            # \033[u (Restaura el cursor exactamente donde escribes)
+            printf "\033[s\033[3;1H%b│%b   VERSION 2.5 (Premium) | ONLINE: %-3s | HORA: %-8s                      %b│%b\033[5;1H%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\033[u" \
+              "$D" "$N" "$ONLINE" "$HORA" "$D" "$N" \
+              "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
+        done
+    ) &
+    BG_PID=$!
 }
 
 # ===== BUCLE PRINCIPAL =====
@@ -79,8 +109,14 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
+    # Inicia el refresco dinámico en vivo
+    iniciar_reloj_live
+
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
+
+    # Detiene el hilo para responder los submenús sin interrupciones
+    detener_reloj_live
 
     case $opcion_sub in
         1|01)
@@ -285,6 +321,7 @@ while true; do
             ;;
 
         0)
+            detener_reloj_live
             clear
             break
             ;;

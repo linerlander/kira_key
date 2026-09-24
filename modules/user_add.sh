@@ -11,7 +11,7 @@ N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
 
-# Obtención ultra rápida de IP (sin bloqueos)
+# Obtención ultra rápida de IP
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -26,25 +26,21 @@ obtener_puerto() {
     echo "$PORT"
 }
 
-# Encabezado principal (Calcula estadísticas reales al instante sin duplicar líneas)
+# Encabezado limpio
 dibujar_encabezado() {
-    # Memoria Libre Real
+    clear
     RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
     [ -z "$RAM" ] && RAM="0"
 
-    # CPU Real
     CORES=$(nproc 2>/dev/null || echo 1)
     LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
     CPU=$(awk -v l="$LOAD" -v c="$CORES" 'BEGIN { printf "%.0f", (l/c)*100 }' 2>/dev/null)
     [ -z "$CPU" ] && CPU="0"
     [ "$CPU" -gt 100 ] && CPU=100
 
-    # Hora actual y Latencia
     HORA=$(date +'%H:%M:%S')
     LATENCIA="30ms"
 
-    # Dibujo único sin solapamientos
-    clear
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -67,7 +63,8 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
-    read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Opción: ${N}")" opcion_sub
+    echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
+    read -r opcion_sub
 
     case $opcion_sub in
         1|01)
@@ -81,7 +78,8 @@ while true; do
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
             while true; do
-                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d): ${N}")" tiempo
+                echo -ne " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d): ${N}"
+                read -r tiempo
                 
                 if [[ "$tiempo" == "0" ]]; then
                     echo -e "\n ${R}[!] Cancelado.${N}"
@@ -98,7 +96,8 @@ while true; do
 
             [ "$tiempo" == "0" ] && continue
 
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}")" limit
+            echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}"
+            read -r limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
@@ -156,7 +155,8 @@ while true; do
             echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}")"
+            echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
+            read -r
             ;;
 
         2|02)
@@ -166,7 +166,8 @@ while true; do
             dibujar_encabezado
 
             while true; do
-                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}")" user
+                echo -ne " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}"
+                read -r user
 
                 if [[ "$user" == "0" ]]; then
                     echo -e "\n ${R}[!] Cancelado.${N}"
@@ -187,7 +188,8 @@ while true; do
 
             [ "$user" == "0" ] && continue
 
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Contraseña (Enter = autogenerar): ${N}")" pass
+            echo -ne " ${PROMPT_BASE} ${W}Contraseña (Enter = autogenerar): ${N}"
+            read -r pass
             if [[ "$pass" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
@@ -199,7 +201,8 @@ while true; do
             fi
 
             while true; do
-                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Días de validez (Ej: 30): ${N}")" dias
+                echo -ne " ${PROMPT_BASE} ${W}Días de validez (Ej: 30): ${N}"
+                read -r dias
 
                 if [[ "$dias" == "0" ]]; then
                     echo -e "\n ${R}[!] Cancelado.${N}"
@@ -216,7 +219,8 @@ while true; do
 
             [ "$dias" == "0" ] && continue
 
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}")" limit
+            echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}"
+            read -r limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
@@ -264,7 +268,8 @@ while true; do
             echo "$user $pass NORMAL $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}")"
+            echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
+            read -r
             ;;
 
         0)

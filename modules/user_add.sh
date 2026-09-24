@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ========== PALETA DE COLORES ANSI EXACTA ==========
+# ========== PALETA DE COLORES ANSI EXALTA ==========
 Y=$'\033[1;33m' # Amarillo
 C=$'\033[1;36m' # Cian
 W=$'\033[1;37m' # Blanco brillante
@@ -9,9 +9,10 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
+# Prompt unificado exacto
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
 
-# Obtención ultra rápida de IP
+# Obtención de IP
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -19,14 +20,14 @@ obtener_ip() {
     echo "$IP"
 }
 
-# Obtención rápida de Puerto SSH
+# Obtención de Puerto SSH
 obtener_puerto() {
     PORT=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
     [ -z "$PORT" ] && PORT=22
     echo "$PORT"
 }
 
-# Encabezado limpio
+# Encabezado corregido a 73 columnas internas fijas
 dibujar_encabezado() {
     clear
     RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
@@ -41,13 +42,13 @@ dibujar_encabezado() {
     HORA=$(date +'%H:%M:%S')
     LATENCIA="30ms"
 
-    printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-    printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
-    printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
-    printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
-    printf "%b│%b %b▶ M LIBRE:%b %b%-5s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\n" \
-      "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
-    printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
+    printf "%b┌─────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+    printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                 %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
+    printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b      %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
+    printf "%b├─────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+    printf "%b│%b %b▶ M LIBRE:%b %b%-5s%b %b|%b %b▶ CPU:%b %b%-4s%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LAT:%b %b%-5s%b     %b│%b\n" \
+      "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "${CPU}%%" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
+    printf "%b└─────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
 }
 

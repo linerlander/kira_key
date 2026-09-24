@@ -10,18 +10,10 @@ R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
-PID_RELOJ=""
 
-# Detener el hilo del reloj al salir
-limpiar_al_salir() {
-    [ -n "$PID_RELOJ" ] && kill "$PID_RELOJ" 2>/dev/null
-    exit 0
-}
-trap limpiar_al_salir SIGINT SIGTERM EXIT
-
-# Obtención ultra rápida de IP (0.5s timeout)
+# Obtención ultra rápida de IP (sin bloqueos)
 obtener_ip() {
-    IP=$(timeout 0.5 curl -s ifconfig.me 2>/dev/null)
+    IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
     [ -z "$IP" ] && IP="127.0.0.1"
     echo "$IP"
@@ -34,59 +26,38 @@ obtener_puerto() {
     echo "$PORT"
 }
 
-# Actualizador en tiempo real (solo edita la fila 4 en pantalla)
-actualizar_linea_stats() {
-    RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo "0")
+# Encabezado principal (Calcula estadísticas reales al instante sin duplicar líneas)
+dibujar_encabezado() {
+    # Memoria Libre Real
+    RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
+    [ -z "$RAM" ] && RAM="0"
+
+    # CPU Real
     CORES=$(nproc 2>/dev/null || echo 1)
     LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
-    CPU=$(awk -v l="$LOAD" -v c="$CORES" 'BEGIN { printf "%.0f", (l/c)*100 }')
+    CPU=$(awk -v l="$LOAD" -v c="$CORES" 'BEGIN { printf "%.0f", (l/c)*100 }' 2>/dev/null)
+    [ -z "$CPU" ] && CPU="0"
     [ "$CPU" -gt 100 ] && CPU=100
+
+    # Hora actual y Latencia
     HORA=$(date +'%H:%M:%S')
     LATENCIA="30ms"
 
-    # \033[s = Guardar cursor | \033[4;1H = Ir a fila 4 | \033[u = Restaurar cursor
-    printf "\033[s\033[4;1H%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\033[u" \
-      "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
-}
-
-# Iniciar hilo de actualización en vivo
-iniciar_reloj_vivo() {
-    detener_reloj_vivo
-    (
-        while true; do
-            actualizar_linea_stats
-            sleep 1
-        done
-    ) &
-    PID_RELOJ=$!
-}
-
-# Detener hilo de actualización
-detener_reloj_vivo() {
-    if [ -n "$PID_RELOJ" ]; then
-        kill "$PID_RELOJ" 2>/dev/null
-        PID_RELOJ=""
-    fi
-}
-
-# Dibujar estructura de cabecera fija
-dibujar_encabezado() {
-    printf "\033[1;1H\033[J"
+    # Dibujo único sin solapamientos
+    clear
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
     printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
-    printf "%b│%b %b▶ M LIBRE:%b %b0M   %b|%b %b▶ CPU:%b %b0%%  %b|%b %b▶ HORA:%b %b00:00:00%b %b|%b %b▶ LATENCIA:%b %b30ms  %b      %b│%b\n" "$D" "$N" "$C" "$N" "$W" "$N" "$D" "$N" "$C" "$N" "$W" "$N" "$D" "$N" "$C" "$N" "$W" "$N" "$D" "$N" "$C" "$N" "$W" "$N" "$D" "$N"
+    printf "%b│%b %b▶ M LIBRE:%b %b%-5s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\n" \
+      "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
 }
 
 # ===== BUCLE PRINCIPAL =====
 while true; do
-    clear
     dibujar_encabezado
-    actualizar_linea_stats
-    iniciar_reloj_vivo
 
     printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
     printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️\n" "$Y" "$N"
@@ -103,9 +74,7 @@ while true; do
             # =========================================================
             # 1. GENERAR CUENTA DEMO
             # =========================================================
-            clear
             dibujar_encabezado
-            actualizar_linea_stats
 
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
@@ -166,9 +135,7 @@ while true; do
             directo="${IP}:${PORT}@${user}:${pass}"
             proxy="${IP}:80@${user}:${pass}"
 
-            clear
             dibujar_encabezado
-            actualizar_linea_stats
 
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
@@ -196,9 +163,7 @@ while true; do
             # =========================================================
             # 2. CREAR USUARIO NORMAL
             # =========================================================
-            clear
             dibujar_encabezado
-            actualizar_linea_stats
 
             while true; do
                 read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}")" user
@@ -278,9 +243,7 @@ while true; do
             directo="${IP}:${PORT}@${user}:${pass}"
             proxy="${IP}:80@${user}:${pass}"
 
-            clear
             dibujar_encabezado
-            actualizar_linea_stats
 
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO NORMAL 🙋‍♂️        ${D}║${N}"
@@ -305,7 +268,6 @@ while true; do
             ;;
 
         0)
-            detener_reloj_vivo
             clear
             break
             ;;

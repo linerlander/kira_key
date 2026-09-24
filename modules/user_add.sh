@@ -58,7 +58,7 @@ obtener_metricas() {
     [ "$CPU" -gt 100 ] && CPU=100
 
     HORA=$(date +'%H:%M:%S')
-    ULTIMO_REFRESH=$(date +'%H:%M:%S')
+    ULTIMO_REFRESH="$HORA"
 
     LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
     [ -z "$LATENCIA" ] && LATENCIA="N/A"
@@ -78,43 +78,57 @@ dibujar_header() {
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 }
 
-# Actualiza SOLO la línea de métricas (línea 5 del header) sin tocar el resto
-# Se asume que el cursor está al inicio del header (tput rc lo coloca ahí)
-actualizar_linea_metricas() {
-    tput rc                       # restaura al inicio del header
-    tput cud 4                    # baja 4 líneas → queda en la fila de métricas
-    printf "\r%b│%b %b▶ RAM LIBRE:%b %b%-6s%b %b│%b %b▶ CPU:%b %b%-4s%b %b│%b %b▶ HORA:%b %b%-8s%b %b│%b %b▶ LAT:%b %b%-6s%b %b│%b" \
+# ========== POSICIÓN FIJA DE LA LÍNEA DE MÉTRICAS ==========
+# El header ocupa 5 líneas (0 borde, 1 título, 2 versión, 3 separador, 4 métricas, 5 borde inferior)
+# Si empezamos a dibujar en la fila 1 de la terminal, la fila de métricas es la 5.
+FILA_METRICAS=5
+COL_INICIO=1
+
+# Guarda la posición actual del cursor para volver a ella
+CURSOR_GUARDADO=""
+
+guardar_cursor() {
+    printf "\033[s"
+}
+
+restaurar_cursor() {
+    printf "\033[u"
+}
+
+# Redibuja SOLO la línea de métricas en su posición exacta
+refrescar_metricas() {
+    # Mueve el cursor a la fila de métricas, columna 1
+    printf "\033[${FILA_METRICAS};${COL_INICIO}H"
+    # Limpia toda la línea
+    printf "\033[K"
+    # Redibuja la línea
+    printf "%b│%b %b▶ RAM LIBRE:%b %b%-6s%b %b│%b %b▶ CPU:%b %b%-4s%b %b│%b %b▶ HORA:%b %b%-8s%b %b│%b %b▶ LAT:%b %b%-6s%b %b│%b" \
         "$D" "$N" "$C" "$N" "$W" "${RAM}MB" "$N" "$D" "$N" \
         "$C" "$N" "$W" "${CPU}%" "$N" "$D" "$N" \
         "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" \
         "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
-    tput rc                       # vuelve a guardar la posición
-    printf "\033[K"               # limpia el resto de la línea por si acaso
+    # Restaura la posición donde estaba el cursor del usuario
+    restaurar_cursor
 }
 
 # ========== READ EN VIVO ==========
-# Lee una línea del usuario PERO refresca métricas cada segundo sin parpadear.
-# Uso: read_en_vivo VARIABLE
 read_en_vivo() {
     local __var="$1"
     local __input=""
     local __char
 
-    # Guarda la posición justo donde está el cursor (inicio del prompt)
-    tput sc
+    # Guarda la posición actual (justo después del prompt)
+    guardar_cursor
 
     while true; do
-        # Lee 1 byte con timeout de 1s
         IFS= read -r -n1 -t 1 __char
         local __rc=$?
 
         if [ $__rc -eq 0 ]; then
             if [[ "$__char" == $'\n' || "$__char" == "" ]]; then
-                # Enter presionado
                 printf "\n"
                 break
             elif [[ "$__char" == $'\177' || "$__char" == $'\b' ]]; then
-                # Backspace
                 if [ -n "$__input" ]; then
                     __input="${__input%?}"
                     printf "\b \b"
@@ -124,17 +138,12 @@ read_en_vivo() {
                 printf "%s" "$__char"
             fi
         else
-            # Timeout: refresca métricas sin tocar la línea actual
+            # Timeout → refresca SOLO métricas en su fila exacta
             obtener_metricas
-            tput sc          # guarda posición actual (donde está el cursor escribiendo)
-            actualizar_linea_metricas
-            tput rc          # restaura posición de escritura
-            # Recoloca el cursor al final del texto que el usuario lleva escrito
-            printf "\r%b%b%s" "$PROMPT_BASE" " " "$__input"
+            refrescar_metricas
         fi
     done
 
-    # Devuelve el valor
     printf -v "$__var" "%s" "$__input"
 }
 
@@ -173,13 +182,14 @@ menu_principal() {
 submenu_demo() {
     clear
     obtener_metricas
+    # Mueve cursor a 1,1 y dibuja header
+    printf "\033[H"
     dibujar_header
-    tput sc     # guarda posición del header para refrescos en vivo
+    # Ahora el cursor está en la línea 6 (debajo del header)
     echo ""
     echo -e " ${D}──── CREAR CUENTA DEMO ────${N}"
     echo ""
 
-    # --- Tiempo ---
     while true; do
         echo -ne " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d) [0=Cancelar]: ${N}"
         read_en_vivo demo_tiempo
@@ -197,7 +207,6 @@ submenu_demo() {
         fi
     done
 
-    # --- Límite ---
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1] [0=Cancelar]: ${N}"
     read_en_vivo demo_limit
@@ -268,13 +277,12 @@ submenu_demo() {
 submenu_normal() {
     clear
     obtener_metricas
+    printf "\033[H"
     dibujar_header
-    tput sc
     echo ""
     echo -e " ${D}──── CREAR USUARIO NORMAL ────${N}"
     echo ""
 
-    # --- Usuario ---
     while true; do
         echo -ne " ${PROMPT_BASE} ${W}Nombre de usuario [0=Cancelar]: ${N}"
         read_en_vivo new_user
@@ -296,7 +304,6 @@ submenu_normal() {
         fi
     done
 
-    # --- Contraseña ---
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Contraseña (Enter=auto) [0=Cancelar]: ${N}"
     read_en_vivo new_pass
@@ -307,7 +314,6 @@ submenu_normal() {
     fi
     [ -z "$new_pass" ] && new_pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-    # --- Días ---
     while true; do
         echo ""
         echo -ne " ${PROMPT_BASE} ${W}Días de validez (Ej: 30) [0=Cancelar]: ${N}"
@@ -326,7 +332,6 @@ submenu_normal() {
         fi
     done
 
-    # --- Límite ---
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1] [0=Cancelar]: ${N}"
     read_en_vivo new_limit
@@ -337,7 +342,6 @@ submenu_normal() {
     fi
     [ -z "$new_limit" ] && new_limit=1
 
-    # --- Crear ---
     exp_date=$(date -d "+$new_dias days" +%Y-%m-%d 2>/dev/null)
     [ -z "$exp_date" ] && exp_date=$(date +%Y-%m-%d)
 

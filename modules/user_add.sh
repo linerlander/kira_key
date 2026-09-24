@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Evita que señales externas cierren el script por error
+trap '' INT TERM
+
 # ========== PALETA DE COLORES ANSI ==========
 Y=$'\033[1;33m' # Amarillo
 C=$'\033[1;36m' # Cian
@@ -10,18 +13,6 @@ R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
-BG_PID=""
-
-# Limpiar proceso en segundo plano al salir
-detener_reloj_live() {
-    if [ -n "$BG_PID" ]; then
-        kill "$BG_PID" 2>/dev/null
-        wait "$BG_PID" 2>/dev/null
-        BG_PID=""
-    fi
-}
-
-trap 'detener_reloj_live; exit' EXIT INT TERM
 
 obtener_ip() {
     IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -36,11 +27,9 @@ obtener_puerto() {
 }
 
 obtener_metricas() {
-    # RAM Libre en MB
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM=0
 
-    # CPU rápido usando /proc/stat
     if [ -f /proc/stat ]; then
         read -r _ u1 n1 s1 i1 io1 ir1 sir1 st1 _ < /proc/stat
         tot1=$((u1 + n1 + s1 + i1 + io1 + ir1 + sir1 + st1))
@@ -68,14 +57,19 @@ obtener_metricas() {
 
     HORA=$(date +'%H:%M:%S')
 
-    # Latencia rápida hacia 1.1.1.1 (timeout de 1 segundo para que no se trabe)
     LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
     [ -z "$LATENCIA" ] && LATENCIA="N/A"
 }
 
-dibujar_encabezado() {
-    clear
+# Limpiamos pantalla una vez al iniciar
+clear
+
+# ===== BUCLE PRINCIPAL CON RELOJ EN TIEMPO REAL (SIN HILOS CONGELANTES) =====
+while true; do
     obtener_metricas
+
+    # Coloca el cursor en la esquina superior izquierda sin parpadeos molestos de pantalla completa
+    printf "\033[H"
 
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b %b[ ⚡ KIRA-SSH ]%b  🔐 %bADMINISTRADOR DE USUARIOS SSH | KIRA%b                  %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
@@ -88,25 +82,6 @@ dibujar_encabezado() {
         "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     printf "\n"
-}
-
-# Hilo en segundo plano que refresca SOLAMENTE la línea 5 de estadísticas cada 1 segundo en tiempo real
-iniciar_reloj_live() {
-    detener_reloj_live
-    (
-        while true; do
-            sleep 1
-            obtener_metricas
-            printf "\033[s\033[5;3H${C}▶ RAM LIBRE:${N} %b%-6s%b ${D}│${N} ${C}▶ CPU:${N} %b%-4s%b ${D}│${N} ${C}▶ HORA:${N} %b%-8s%b ${D}│${N} ${C}▶ LAT:${N} %b%-6s%b\033[u" \
-                "$W" "${RAM}MB" "$N" "$W" "${CPU}%" "$N" "$W" "$HORA" "$N" "$W" "$LATENCIA" "$N"
-        done
-    ) &
-    BG_PID=$!
-}
-
-# ===== BUCLE PRINCIPAL =====
-while true; do
-    dibujar_encabezado
 
     printf " [%b01%b] GENERAR CUENTA DEMO (TEMPORAL)\n" "$Y" "$N"
     printf " [%b02%b] CREAR USUARIO NORMAL\n" "$Y" "$N"
@@ -116,17 +91,17 @@ while true; do
     echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     echo ""
 
-    iniciar_reloj_live
-
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
-    read -r opcion_sub
-
-    detener_reloj_live
+    
+    # Lee con un timeout de 1 segundo exacto. Si no escribes nada, el bucle se repite solo actualizando la hora y métricas en vivo.
+    read -t 1 opcion_sub
+    if [ $? -ne 0 ]; then
+        continue
+    fi
 
     case "$opcion_sub" in
         1|01)
-            dibujar_encabezado
-
+            clear
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
@@ -148,13 +123,14 @@ while true; do
                 fi
             done
 
-            [ "$tiempo" == "0" ] && continue
+            [ "$tiempo" == "0" ] && { clear; continue; }
 
             echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}"
             read -r limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
+                clear
                 continue
             fi
             [ -z "$limit" ] && limit=1
@@ -188,8 +164,7 @@ while true; do
             directo="${IP}:${PORT}@${user}:${pass}"
             proxy="${IP}:80@${user}:${pass}"
 
-            dibujar_encabezado
-
+            clear
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${Y}         KIRA PANEL - CUENTA DEMO                 ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
@@ -211,11 +186,11 @@ while true; do
             echo ""
             echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
             read -r
+            clear
             ;;
 
         2|02)
-            dibujar_encabezado
-
+            clear
             while true; do
                 echo -ne " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}"
                 read -r user
@@ -237,13 +212,14 @@ while true; do
                 fi
             done
 
-            [ "$user" == "0" ] && continue
+            [ "$user" == "0" ] && { clear; continue; }
 
             echo -ne " ${PROMPT_BASE} ${W}Contraseña (Enter = autogenerar): ${N}"
             read -r pass
             if [[ "$pass" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
+                clear
                 continue
             fi
 
@@ -268,13 +244,14 @@ while true; do
                 fi
             done
 
-            [ "$dias" == "0" ] && continue
+            [ "$dias" == "0" ] && { clear; continue; }
 
             echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}"
             read -r limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
+                clear
                 continue
             fi
             [ -z "$limit" ] && limit=1
@@ -298,8 +275,7 @@ while true; do
             directo="${IP}:${PORT}@${user}:${pass}"
             proxy="${IP}:80@${user}:${pass}"
 
-            dibujar_encabezado
-
+            clear
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${G}        KIRA PANEL - USUARIO NORMAL               ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
@@ -321,10 +297,10 @@ while true; do
             echo ""
             echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
             read -r
+            clear
             ;;
 
         0)
-            detener_reloj_live
             clear
             exit 0
             ;;
@@ -332,6 +308,7 @@ while true; do
         *)
             echo -e "\n ${R}[!] Opción no válida.${N}"
             sleep 1
+            clear
             ;;
     esac
 done

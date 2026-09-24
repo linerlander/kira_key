@@ -12,15 +12,7 @@ N=$'\033[0m'    # Reset
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
 BG_PID=""
 
-detener_reloj_live() {
-    if [ -n "$BG_PID" ]; then
-        kill "$BG_PID" 2>/dev/null
-        wait "$BG_PID" 2>/dev/null
-        BG_PID=""
-    fi
-}
-
-trap 'detener_reloj_live; exit' EXIT INT TERM
+trap '' INT TERM TSTP
 
 obtener_ip() {
     IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -35,16 +27,27 @@ obtener_puerto() {
 }
 
 obtener_metricas() {
-    RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $7}')
-    [ -z "$RAM" ] && RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
-    [ -z "$RAM" ] && RAM="0"
+    RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4; exit}')
+    [ -z "$RAM" ] && RAM=0
 
-    CPU=$(top -bn1 2>/dev/null | awk '/Cpu\(s\):/ {printf "%.0f", $2 + $4}')
-    [ -z "$CPU" ] && CPU="0"
+    read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+    total1=$((user + nice + system + idle + iowait + irq + softirq + steal))
+    idle1=$((idle + iowait))
+    sleep 0.05
+    read -r _ user2 nice2 system2 idle2 iowait2 irq2 softirq2 steal2 _ < /proc/stat
+    total2=$((user2 + nice2 + system2 + idle2 + iowait2 + irq2 + softirq2 + steal2))
+    idle2=$((idle2 + iowait2))
+    diff_total=$((total2 - total1))
+    diff_idle=$((idle2 - idle1))
+    if [ "$diff_total" -gt 0 ]; then
+        CPU=$((100 * (diff_total - diff_idle) / diff_total))
+    else
+        CPU=0
+    fi
+    [ "$CPU" -lt 0 ] && CPU=0
     [ "$CPU" -gt 100 ] && CPU=100
 
     HORA=$(date +'%H:%M:%S')
-
     LATENCIA="N/A"
 }
 
@@ -52,26 +55,18 @@ dibujar_encabezado() {
     clear
     obtener_metricas
 
-    str_ram="${RAM}MB"
-    str_cpu="${CPU}%"
-    
-    echo -e "${D}┌───────────────────────────────────────────────────────────────────────────┐${N}"
-    echo -e "${D}│${N}   [ ${C}⚡ KIRA-SSH${N} ]   🔐 ${Y}CREADOR DE CUENTAS SSH | KIRA VIP${N}                 ${D}│${N}"
-    echo -e "${D}│${N}   VERSIÓN 2.5 (Premium) | LICENCIA: ${G}ACTIVA${N} ${D}(Expiración: 2026-12-31)${N}      ${D}│${N}"
-    echo -e "${D}├───────────────────────────────────────────────────────────────────────────┤${N}"
-    printf "${D}│${N} ${C}▶ RAM LIBRE:${N} %-8s ${D}│${N} ${C}▶ CPU:${N} %-5s ${D}│${N} ${C}▶ HORA:${N} %-8s ${D}│${N} ${C}▶ LAT:${N} %-6s ${D}│${N}\n" \
-      "$str_ram" "$str_cpu" "$HORA" "$LATENCIA"
-    echo -e "${D}└───────────────────────────────────────────────────────────────────────────┘${N}"
-    echo ""
+    printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
+    printf "%b│%b %b[ ⚡ KIRA-SSH ]%b  🔐 %bADMINISTRADOR DE USUARIOS SSH | KIRA%b                 %b│%b\n" "$D" "$N" "$C" "$N" "$Y" "$N" "$D" "$N"
+    printf "%b│%b %bVERSIÓN 2.5 (Premium)%b | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b      %b│%b\n" "$D" "$N" "$D" "$N" "$G" "$N" "$D" "$N" "$D" "$N"
+    printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
+    printf "%b│%b %b▶ RAM LIBRE:%b %b%-6s%b %b│%b %b▶ CPU:%b %b%-4s%b %b│%b %b▶ HORA:%b %b%-8s%b %b│%b %b▶ LAT:%b %b%-6s%b %b│%b\n" \
+        "$D" "$N" "$C" "$N" "$W" "${RAM}MB" "$N" "$D" "$N" \
+        "$C" "$N" "$W" "${CPU}%" "$N" "$D" "$N" \
+        "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" \
+        "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
+    printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
+    printf "\n"
 }
-
-# Actualizador en tiempo real seguro (preserva la posición del cursor del usuario)
-iniciar_reloj_live() {
-    # Desactivado: el proceso en segundo plano interfería con read y podía dejar
-    # el menú aparentemente bloqueado después de seleccionar una opción.
-    detener_reloj_live
-}
-
 
 # ===== BUCLE PRINCIPAL =====
 while true; do
@@ -89,7 +84,7 @@ while true; do
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
 
-    case $opcion_sub in
+    case "$opcion_sub" in
         1|01)
             dibujar_encabezado
 
@@ -290,7 +285,6 @@ while true; do
             ;;
 
         0)
-            detener_reloj_live
             clear
             break
             ;;

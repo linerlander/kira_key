@@ -9,7 +9,7 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Obtención rápida de IP
+# Obtención rápida de IP sin bloqueos
 obtener_ip() {
     IP=$(timeout 2 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -24,7 +24,7 @@ obtener_puerto() {
     echo "$PORT"
 }
 
-# Función para imprimir el encabezado superior
+# Encabezado principal del sistema
 dibujar_encabezado() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
@@ -33,7 +33,6 @@ dibujar_encabezado() {
     [ -z "$CPU" ] && CPU="0"
 
     HORA=$(date +'%H:%M:%S')
-
     LATENCIA="30ms"
 
     printf "\033[1;1H\033[J"
@@ -70,18 +69,23 @@ while true; do
             clear
             dibujar_encabezado
 
+            echo -e "${D}┌─────────────────────────────────────────────────────────┐${N}"
+            echo -e "${D}│${Y}                🚀 GENERAR CUENTA DEMO                   ${D}│${N}"
+            echo -e "${D}└─────────────────────────────────────────────────────────┘${N}"
+            echo -e " ${D}(Presiona 0 para cancelar en cualquier momento)${N}\n"
+
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
-            echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
+            echo -e " ${C}👤 Usuario autogenerado:${N} ${W}$user${N}\n"
 
             # Duración demo
             while true; do
-                read -r -p " ► Tiempo de duración (Ej: 30m / 2h / 1d) [0 para Cancelar]: " tiempo
+                read -r -p "$(echo -e " ${C}⏳ Tiempo de duración (Ej: 30m / 2h / 1d):${N} ")" tiempo
                 
                 if [[ "$tiempo" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                    echo -e "\n ${R}❌ Operación cancelada.${N}"
                     sleep 1
                     break
                 fi
@@ -89,16 +93,16 @@ while true; do
                 if [[ "$tiempo" =~ ^[0-9]+[smhd]$ ]]; then
                     break
                 else
-                    echo -e " ${R}❌ Formato inválido. Usa m (minutos), h (horas), d (días).${N}"
+                    echo -e " ${R}❌ Usa m (minutos), h (horas) o d (días).${N}"
                 fi
             done
 
             [ "$tiempo" == "0" ] && continue
 
             # Límite de conexiones demo
-            read -r -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
+            read -r -p "$(echo -e " ${C}📊 Límite de conexiones (Por defecto 1):${N} ")" limit
             if [[ "$limit" == "0" ]]; then
-                echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                echo -e "\n ${R}❌ Operación cancelada.${N}"
                 sleep 1
                 continue
             fi
@@ -166,12 +170,17 @@ while true; do
             clear
             dibujar_encabezado
 
+            echo -e "${D}┌─────────────────────────────────────────────────────────┐${N}"
+            echo -e "${D}│${G}                🙋‍♂️ CREAR USUARIO NORMAL                   ${D}│${N}"
+            echo -e "${D}└─────────────────────────────────────────────────────────┘${N}"
+            echo -e " ${D}(Presiona 0 para cancelar en cualquier momento)${N}\n"
+
             # 1. Nombre de Usuario
             while true; do
-                read -r -p " ► Nombre de usuario [0 para Cancelar]: " user
+                read -r -p "$(echo -e " ${C}👤 Nombre de usuario:${N} ")" user
 
                 if [[ "$user" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                    echo -e "\n ${R}❌ Operación cancelada.${N}"
                     sleep 1
                     break
                 fi
@@ -181,7 +190,7 @@ while true; do
                 elif id "$user" &>/dev/null; then
                     echo -e " ${R}❌ El usuario '$user' ya existe en el sistema.${N}"
                 elif [[ ! "$user" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-                    echo -e " ${R}❌ Nombre inválido. Usa solo letras, números, _ o -.${N}"
+                    echo -e " ${R}❌ Nombre inválido. Usa letras, números, _ o -.${N}"
                 else
                     break
                 fi
@@ -190,24 +199,24 @@ while true; do
             [ "$user" == "0" ] && continue
 
             # 2. Contraseña
-            read -r -p " ► Contraseña (Enter para generar automática) [0 para Cancelar]: " pass
+            read -r -p "$(echo -e " ${C}🔑 Contraseña (Enter = autogenerar):${N} ")" pass
             if [[ "$pass" == "0" ]]; then
-                echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                echo -e "\n ${R}❌ Operación cancelada.${N}"
                 sleep 1
                 continue
             fi
 
             if [[ -z "$pass" ]]; then
                 pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
-                echo -e " ${C}▶ Contraseña autogenerada:${N} ${W}$pass${N}"
+                echo -e " ${C}▶ Contraseña generada:${N} ${W}$pass${N}"
             fi
 
             # 3. Días de Validez
             while true; do
-                read -r -p " ► Días de validez (Ej: 30) [0 para Cancelar]: " dias
+                read -r -p "$(echo -e " ${C}⏳ Días de validez (Ej: 30):${N} ")" dias
 
                 if [[ "$dias" == "0" ]]; then
-                    echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                    echo -e "\n ${R}❌ Operación cancelada.${N}"
                     sleep 1
                     break
                 fi
@@ -215,16 +224,16 @@ while true; do
                 if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -gt 0 ]; then
                     break
                 else
-                    echo -e " ${R}❌ Ingresa un número entero de días mayor a 0.${N}"
+                    echo -e " ${R}❌ Ingresa un número de días válido.${N}"
                 fi
             done
 
             [ "$dias" == "0" ] && continue
 
             # 4. Límite de conexiones
-            read -r -p " ► Límite de conexiones (Default 1) [0 para Cancelar]: " limit
+            read -r -p "$(echo -e " ${C}📊 Límite de conexiones (Por defecto 1):${N} ")" limit
             if [[ "$limit" == "0" ]]; then
-                echo -e "\n ${R}❌ Operación cancelada por el usuario.${N}"
+                echo -e "\n ${R}❌ Operación cancelada.${N}"
                 sleep 1
                 continue
             fi

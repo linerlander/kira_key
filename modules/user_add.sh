@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ========== PALETA DE COLORES ANSI EXACTA ==========
+# ========== PALETA DE COLORES ANSI ==========
 Y=$'\033[1;33m' # Amarillo
 C=$'\033[1;36m' # Cian
 W=$'\033[1;37m' # Blanco brillante
@@ -11,7 +11,7 @@ N=$'\033[0m'    # Reset
 
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
 
-# Obtención ultra rápida de IP (sin bloqueos)
+# Obtención ultra rápida de IP
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -19,38 +19,50 @@ obtener_ip() {
     echo "$IP"
 }
 
-# Obtención rápida de Puerto SSH
+# Obtención de Puerto SSH
 obtener_puerto() {
     PORT=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
     [ -z "$PORT" ] && PORT=22
     echo "$PORT"
 }
 
-# Encabezado principal (Calcula estadísticas reales al instante sin duplicar líneas)
+# Encabezado dinámico en tiempo real
 dibujar_encabezado() {
-    # Memoria Libre Real
-    RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
+    clear
+
+    # 1. RAM disponible real
+    RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $7}')
+    [ -z "$RAM" ] && RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
     [ -z "$RAM" ] && RAM="0"
 
-    # CPU Real
-    CORES=$(nproc 2>/dev/null || echo 1)
-    LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
-    CPU=$(awk -v l="$LOAD" -v c="$CORES" 'BEGIN { printf "%.0f", (l/c)*100 }' 2>/dev/null)
+    # 2. Uso de CPU real
+    CPU=$(top -bn1 2>/dev/null | awk '/Cpu\(s\):/ {printf "%.0f", $2 + $4}')
+    if [ -z "$CPU" ]; then
+        CORES=$(nproc 2>/dev/null || echo 1)
+        LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
+        CPU=$(awk -v l="$LOAD" -v c="$CORES" 'BEGIN { printf "%.0f", (l/c)*100 }' 2>/dev/null)
+    fi
     [ -z "$CPU" ] && CPU="0"
     [ "$CPU" -gt 100 ] && CPU=100
 
-    # Hora actual y Latencia
+    # 3. Hora actual del servidor
     HORA=$(date +'%H:%M:%S')
-    LATENCIA="30ms"
 
-    # Dibujo único sin solapamientos
-    clear
+    # 4. Latencia real (Ping hacia 1.1.1.1)
+    LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
+    [ -z "$LATENCIA" ] && LATENCIA="N/A"
+
+    # 5. Usuarios SSH activos/online
+    ONLINE=$(ps aux | grep -i sshd: | grep -v root | grep -v grep | wc -l 2>/dev/null)
+    [ -z "$ONLINE" ] && ONLINE="0"
+
+    # Dibujo del panel
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-    printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
-    printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
+    printf "%b│%b   [ KIRA-SSH ]   CREADOR DE CUENTAS SSH | KIRA VIP                       %b│%b\n" "$D" "$N" "$D" "$N"
+    printf "%b│%b   VERSION 2.5 (Premium) | ONLINE: %-3s | HORA: %-8s                      %b│%b\n" "$D" "$N" "$ONLINE" "$HORA" "$D" "$N"
     printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
-    printf "%b│%b %b▶ M LIBRE:%b %b%-5s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\n" \
-      "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
+    printf "%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\n" \
+      "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
     echo ""
 }
@@ -59,21 +71,20 @@ dibujar_encabezado() {
 while true; do
     dibujar_encabezado
 
-    printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\n" "$Y" "$N" "$C" "$N"
-    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️\n" "$Y" "$N"
+    printf " [%b01%b] GENERAR CUENTA DEMO (TEMPORAL)\n" "$Y" "$N"
+    printf " [%b02%b] CREAR USUARIO NORMAL\n" "$Y" "$N"
     echo ""
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     printf " [%b0%b] %b►%b [ REGRESAR ]\n" "$R" "$N" "$R" "$N"
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
-    read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Opción: ${N}")" opcion_sub
+    echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
+    read -r opcion_sub
 
     case $opcion_sub in
         1|01)
-            # =========================================================
             # 1. GENERAR CUENTA DEMO
-            # =========================================================
             dibujar_encabezado
 
             rand=$(shuf -i 100-999 -n 1)
@@ -81,7 +92,8 @@ while true; do
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
             while true; do
-                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d): ${N}")" tiempo
+                echo -ne " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d): ${N}"
+                read -r tiempo
                 
                 if [[ "$tiempo" == "0" ]]; then
                     echo -e "\n ${R}[!] Cancelado.${N}"
@@ -98,7 +110,8 @@ while true; do
 
             [ "$tiempo" == "0" ] && continue
 
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}")" limit
+            echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}"
+            read -r limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
@@ -138,35 +151,35 @@ while true; do
             dibujar_encabezado
 
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-            echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
+            echo -e "${D}║${Y}          KIRA PANEL - CUENTA DEMO               ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-            printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
-            printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
-            printf "${D}║${N} ${R}🔑 Contraseña  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
-            printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
-            printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit dispo..."
-            printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$tiempo (Expira: $exp_date)"
+            printf "${D}║${N} ${R}Ip Server   :${N} %-35s ${D}║${N}\n" "$IP"
+            printf "${D}║${N} ${R}Usuario     :${N} %-35s ${D}║${N}\n" "$user"
+            printf "${D}║${N} ${R}Contraseña  :${N} ${W}%-35s${N} ${D}║${N}\n" "$pass"
+            printf "${D}║${N} ${R}Puerto Ssh  :${N} %-35s ${D}║${N}\n" "$PORT"
+            printf "${D}║${N} ${R}Límite Ssh  :${N} %-35s ${D}║${N}\n" "$limit dispo..."
+            printf "${D}║${N} ${R}Validez     :${N} %-35s ${D}║${N}\n" "$tiempo (Expira: $exp_date)"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-            echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+            echo -e "${D}║${N} ${G}DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}          ${D}║${N}"
             echo -e "${D}║${N}                                                  ${D}║${N}"
-            printf "${D}║${N} 🔗 Direc: ${Y}%-38s${N} ${D}║${N}\n" "$directo"
-            printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"
+            printf "${D}║${N} Direc: ${Y}%-42s${N} ${D}║${N}\n" "$directo"
+            printf "${D}║${N} Proxy: ${Y}%-42s${N} ${D}║${N}\n" "$proxy"
             echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
             echo "$user $pass DEMO $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}")"
+            echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
+            read -r
             ;;
 
         2|02)
-            # =========================================================
             # 2. CREAR USUARIO NORMAL
-            # =========================================================
             dibujar_encabezado
 
             while true; do
-                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}")" user
+                echo -ne " ${PROMPT_BASE} ${W}Nombre de usuario: ${N}"
+                read -r user
 
                 if [[ "$user" == "0" ]]; then
                     echo -e "\n ${R}[!] Cancelado.${N}"
@@ -187,7 +200,8 @@ while true; do
 
             [ "$user" == "0" ] && continue
 
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Contraseña (Enter = autogenerar): ${N}")" pass
+            echo -ne " ${PROMPT_BASE} ${W}Contraseña (Enter = autogenerar): ${N}"
+            read -r pass
             if [[ "$pass" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
@@ -199,7 +213,8 @@ while true; do
             fi
 
             while true; do
-                read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Días de validez (Ej: 30): ${N}")" dias
+                echo -ne " ${PROMPT_BASE} ${W}Días de validez (Ej: 30): ${N}"
+                read -r dias
 
                 if [[ "$dias" == "0" ]]; then
                     echo -e "\n ${R}[!] Cancelado.${N}"
@@ -216,7 +231,8 @@ while true; do
 
             [ "$dias" == "0" ] && continue
 
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}")" limit
+            echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1]: ${N}"
+            read -r limit
             if [[ "$limit" == "0" ]]; then
                 echo -e "\n ${R}[!] Cancelado.${N}"
                 sleep 1
@@ -246,25 +262,26 @@ while true; do
             dibujar_encabezado
 
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-            echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO NORMAL 🙋‍♂️        ${D}║${N}"
+            echo -e "${D}║${G}        KIRA PANEL - USUARIO NORMAL              ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-            printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
-            printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
-            printf "${D}║${N} ${R}🔑 Contraseña  :${N} ${W}%-31s${N} ${D}║${N}\n" "$pass"
-            printf "${D}║${N} ${R}📡 Puerto Ssh  :${N} %-31s ${D}║${N}\n" "$PORT"
-            printf "${D}║${N} ${R}📊 Límite Ssh  :${N} %-31s ${D}║${N}\n" "$limit conex."
-            printf "${D}║${N} ${R}⏳ Validez     :${N} %-31s ${D}║${N}\n" "$dias días (Expira: $exp_date)"
+            printf "${D}║${N} ${R}Ip Server   :${N} %-35s ${D}║${N}\n" "$IP"
+            printf "${D}║${N} ${R}Usuario     :${N} %-35s ${D}║${N}\n" "$user"
+            printf "${D}║${N} ${R}Contraseña  :${N} ${W}%-35s${N} ${D}║${N}\n" "$pass"
+            printf "${D}║${N} ${R}Puerto Ssh  :${N} %-35s ${D}║${N}\n" "$PORT"
+            printf "${D}║${N} ${R}Límite Ssh  :${N} %-35s ${D}║${N}\n" "$limit conex."
+            printf "${D}║${N} ${R}Validez     :${N} %-35s ${D}║${N}\n" "$dias días (Expira: $exp_date)"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
-            echo -e "${D}║${N} ${G}📋 DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}       ${D}║${N}"
+            echo -e "${D}║${N} ${G}DATOS DE CONEXIÓN RÁPIDA (PAYLOAD/SSH):${N}          ${D}║${N}"
             echo -e "${D}║${N}                                                  ${D}║${N}"
-            printf "${D}║${N} 🔗 Direc: ${Y}%-38s${N} ${D}║${N}\n" "$directo"
-            printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"
+            printf "${D}║${N} Direc: ${Y}%-42s${N} ${D}║${N}\n" "$directo"
+            printf "${D}║${N} Proxy: ${Y}%-42s${N} ${D}║${N}\n" "$proxy"
             echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
             echo "$user $pass NORMAL $limit $(date)" >> /etc/kira/users.log
 
             echo ""
-            read -r -p "$(echo -e " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}")"
+            echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
+            read -r
             ;;
 
         0)

@@ -9,8 +9,8 @@ G=$'\033[1;32m' # Verde
 R=$'\033[1;31m' # Rojo
 N=$'\033[0m'    # Reset
 
-# Función para imprimir el encabezado superior actualizado al instante
-dibujar_encabezado() {
+# Función para redibujar SOLO la caja del encabezado superior sin tocar el resto de la pantalla
+actualizar_encabezado() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $4}')
     [ -z "$RAM" ] && RAM="0"
 
@@ -26,7 +26,12 @@ dibujar_encabezado() {
         LATENCIA="N/A"
     fi
 
-    printf "\033[1;1H"
+    # Guardar posición actual del cursor
+    tput sc
+
+    # Posicionar cursor en fila 1, columna 1
+    tput cup 0 0
+
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
     printf "%b│%b  %b[ %b⚡ KIRA-SSH%b ]%b  🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                    %b│%b\n" "$D" "$N" "$D" "$C" "$D" "$N" "$Y" "$N" "$D" "$N"
     printf "%b│%b  %bVERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b        %b│%b\n" "$D" "$N" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
@@ -34,6 +39,20 @@ dibujar_encabezado() {
     printf "%b│%b %b▶ M LIBRE:%b %b%-4s%b %b|%b %b▶ CPU:%b %b%-3s%%%b %b|%b %b▶ HORA:%b %b%-8s%b %b|%b %b▶ LATENCIA:%b %b%-5s%b      %b│%b\n" \
       "$D" "$N" "$C" "$N" "$W" "${RAM}M" "$N" "$D" "$N" "$C" "$N" "$W" "$CPU" "$N" "$D" "$N" "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
+
+    # Restaurar posición original del cursor
+    tput rc
+}
+
+# Función para renderizar el cuerpo del menú estático
+mostrar_menu_cuerpo() {
+    tput cup 6 0
+    printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
+    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️ %b(OFICIAL)%b\033[K\n" "$Y" "$N" "$G" "$N"
+    echo ""
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
+    printf " [%b0%b] %b►%b [ REGRESAR ]                                 \033[K\n" "$R" "$N" "$R" "$N"
+    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
     echo ""
 }
 
@@ -41,19 +60,29 @@ clear
 
 # ===== BUCLE PRINCIPAL =====
 while true; do
-    # Dibujar encabezado e interfaz del menú
-    dibujar_encabezado
+    clear
+    actualizar_encabezado
+    mostrar_menu_cuerpo
 
-    printf " [%b01%b] 🚀 GENERAR CUENTA DEMO                        🚀 %b(TEMPORAL)%b\033[K\n" "$Y" "$N" "$C" "$N"
-    printf " [%b02%b] 🙋‍♂️ CREAR USUARIO NORMAL                       🙋‍♂️ %b(OFICIAL)%b\033[K\n" "$Y" "$N" "$G" "$N"
-    echo ""
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
-    printf " [%b0%b] %b►%b [ REGRESAR ]                                 %bÚLTIMO REFRESH: %s%b\033[K\n" "$R" "$N" "$R" "$N" "$D" "$HORA" "$N"
-    printf "%b─────────────────────────────────────────────────────────────────────────────%b\033[K\n" "$D" "$N"
-    echo ""
+    # Hilo secundario para actualizar datos del encabezado en vivo mientras espera input
+    (
+        while true; do
+            sleep 1
+            actualizar_encabezado
+        done
+    ) &
+    PID_MONITOR=$!
 
-    # Captura limpia de la opción sin tiempo límite intermitente
-    read -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}")" opcion_sub
+    # Detener el hilo al salir o recibir señal
+    trap "kill $PID_MONITOR 2>/dev/null" EXIT
+
+    # Captura limpia en la posición del prompt
+    tput cup 13 0
+    read -p "$(echo -e " ${C}KIRA@Servidor:~/Usuarios$ ${N}${W}► Opción: ${N}\033[K")" opcion_sub
+
+    # Matar monitor secundario para evitar sobreposición en las pantallas de creación
+    kill $PID_MONITOR 2>/dev/null
+    wait $PID_MONITOR 2>/dev/null
 
     case $opcion_sub in
         1|01)
@@ -61,12 +90,13 @@ while true; do
             # 1. FLUJO GENERAR CUENTA DEMO
             # =========================================================
             clear
-            dibujar_encabezado
+            actualizar_encabezado
 
             rand=$(shuf -i 100-999 -n 1)
             user="Kira-2025$rand"
             pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c8)
 
+            tput cup 7 0
             echo -e " ${C}▶ Usuario autogenerado:${N} ${W}$user${N}\n"
 
             # Duración demo
@@ -108,14 +138,12 @@ while true; do
                 *) tipo_tiempo="1 days" ;;
             esac
 
-            # Creación en el sistema
             exp_date=$(date -d "+$tipo_tiempo" +%Y-%m-%d)
             useradd -M -s /bin/false "$user" 2>/dev/null
             echo "$user:$pass" | chpasswd 2>/dev/null
             passwd -u "$user" &>/dev/null
             chage -E "$exp_date" "$user" 2>/dev/null
 
-            # Guardar en rutas de Kira
             mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
             echo "$limit" > /etc/kira/limits/$user
             echo "$exp_date" > /etc/kira/expire/$user
@@ -130,8 +158,9 @@ while true; do
             proxy="${IP}:80@${user}:${pass}"
 
             clear
-            dibujar_encabezado
+            actualizar_encabezado
 
+            tput cup 7 0
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
             echo -e "${D}║${Y}          ⚡ KIRA PANEL - CUENTA DEMO ⚡          ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
@@ -157,14 +186,12 @@ while true; do
 
         2|02)
             # =========================================================
-            # 2. FLUJO CREAR USUARIO NORMAL (OFICIAL)
+            # 2. FLUJO CREAR USUARIO NORMAL
             # =========================================================
             clear
-            dibujar_encabezado
+            actualizar_encabezado
 
-            echo -e " ${G}┌──────────────────────────────────────────────┐${N}"
-            echo -e " ${G}│         🙋‍♂️ CREAR USUARIO OFICIAL             │${N}"
-            echo -e " ${G}└──────────────────────────────────────────────┘${N}\n"
+            tput cup 7 0
 
             # 1. Nombre de Usuario
             while true; do
@@ -230,20 +257,17 @@ while true; do
             fi
             [ -z "$limit" ] && limit=1
 
-            # Procesamiento de fechas y creación
             exp_date=$(date -d "+$dias days" +%Y-%m-%d)
             useradd -M -s /bin/false "$user" 2>/dev/null
             echo "$user:$pass" | chpasswd 2>/dev/null
             passwd -u "$user" &>/dev/null
             chage -E "$exp_date" "$user" 2>/dev/null
 
-            # Almacenar credenciales en el sistema Kira
             mkdir -p /etc/kira/limits /etc/kira/expire /etc/kira/pass
             echo "$limit" > /etc/kira/limits/$user
             echo "$exp_date" > /etc/kira/expire/$user
             echo "$pass" > /etc/kira/pass/$user
 
-            # Obtención de IP y Puerto SSH
             IP=$(curl -s ifconfig.me)
             [ -z "$IP" ] && IP="127.0.0.1"
             PORT=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
@@ -253,10 +277,11 @@ while true; do
             proxy="${IP}:80@${user}:${pass}"
 
             clear
-            dibujar_encabezado
+            actualizar_encabezado
 
+            tput cup 7 0
             echo -e "${D}╔══════════════════════════════════════════════════╗${N}"
-            echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO OFICIAL 🙋‍♂️        ${D}║${N}"
+            echo -e "${D}║${G}        🙋‍♂️ KIRA PANEL - USUARIO NORMAL 🙋‍♂️        ${D}║${N}"
             echo -e "${D}╠══════════════════════════════════════════════════╣${N}"
             printf "${D}║${N} ${R}🖥️ Ip Server   :${N} %-31s ${D}║${N}\n" "$IP"
             printf "${D}║${N} ${R}👤 Usuario     :${N} %-31s ${D}║${N}\n" "$user"
@@ -271,7 +296,7 @@ while true; do
             printf "${D}║${N} 🖥️ Proxy: ${Y}%-38s${N} ${D}║${N}\n" "$proxy"
             echo -e "${D}╚══════════════════════════════════════════════════╝${N}"
 
-            echo "$user $pass OFICIAL $limit $(date)" >> /etc/kira/users.log
+            echo "$user $pass NORMAL $limit $(date)" >> /etc/kira/users.log
 
             echo ""
             read -p "Presiona Enter para continuar..."

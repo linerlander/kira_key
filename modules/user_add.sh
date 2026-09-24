@@ -97,7 +97,6 @@ iniciar_reloj_live() {
         while true; do
             sleep 1
             obtener_metricas
-            # Guarda cursor (\033[s), salta exacto a la línea 5 columna 3, pinta los datos y restaura el cursor (\033[u)
             printf "\033[s\033[5;3H${C}▶ RAM LIBRE:${N} %b%-6s%b ${D}│${N} ${C}▶ CPU:${N} %b%-4s%b ${D}│${N} ${C}▶ HORA:${N} %b%-8s%b ${D}│${N} ${C}▶ LAT:${N} %b%-6s%b\033[u" \
                 "$W" "${RAM}MB" "$N" "$W" "${CPU}%" "$N" "$W" "$HORA" "$N" "$W" "$LATENCIA" "$N"
         done
@@ -117,14 +116,11 @@ while true; do
     echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     echo ""
 
-    # Arrancar el reloj en tiempo real justo antes de leer la opción del usuario
     iniciar_reloj_live
 
-    # Solicitar opción (el usuario escribe y presiona Enter con total normalidad)
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
 
-    # Detener el reloj en vivo inmediatamente al presionar Enter para procesar sin interferencias
     detener_reloj_live
 
     case "$opcion_sub" in

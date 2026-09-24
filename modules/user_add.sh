@@ -23,8 +23,7 @@ detener_reloj_live() {
 trap 'detener_reloj_live; exit' EXIT INT TERM
 
 obtener_ip() {
-    IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
-    [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    IP=$(hostname -I 2>/dev/null | awk '{print $1}')
     [ -z "$IP" ] && IP="127.0.0.1"
     echo "$IP"
 }
@@ -46,8 +45,7 @@ obtener_metricas() {
 
     HORA=$(date +'%H:%M:%S')
 
-    LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
-    [ -z "$LATENCIA" ] && LATENCIA="N/A"
+    LATENCIA="N/A"
 }
 
 dibujar_encabezado() {
@@ -69,20 +67,11 @@ dibujar_encabezado() {
 
 # Actualizador en tiempo real seguro (preserva la posición del cursor del usuario)
 iniciar_reloj_live() {
+    # Desactivado: el proceso en segundo plano interfería con read y podía dejar
+    # el menú aparentemente bloqueado después de seleccionar una opción.
     detener_reloj_live
-    (
-        while true; do
-            sleep 1
-            obtener_metricas
-            str_ram="${RAM}MB"
-            str_cpu="${CPU}%"
-            # Guarda cursor actual (\033[s), salta a la línea 5, pinta métricas y restaura cursor (\033[u)
-            printf "\033[s\033[5;1H${D}│${N} ${C}▶ RAM LIBRE:${N} %-8s ${D}│${N} ${C}▶ CPU:${N} %-5s ${D}│${N} ${C}▶ HORA:${N} %-8s ${D}│${N} ${C}▶ LAT:${N} %-6s ${D}│${N}\033[u" \
-              "$str_ram" "$str_cpu" "$HORA" "$LATENCIA"
-        done
-    ) &
-    BG_PID=$!
 }
+
 
 # ===== BUCLE PRINCIPAL =====
 while true; do
@@ -96,15 +85,9 @@ while true; do
     echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
     echo ""
 
-    # Iniciar reloj en vivo justo antes de esperar la entrada
-    iniciar_reloj_live
-
     # Solicitar opción
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
-
-    # Detener el reloj en vivo al presionar Enter para procesar la opción con fluidez
-    detener_reloj_live
 
     case $opcion_sub in
         1|01)

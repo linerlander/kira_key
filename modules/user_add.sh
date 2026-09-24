@@ -18,6 +18,7 @@ RAM=0
 CPU=0
 HORA=""
 LATENCIA="N/A"
+ULTIMO_REFRESH="--:--:--"
 
 obtener_ip() {
     IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -57,6 +58,8 @@ obtener_metricas() {
     [ "$CPU" -gt 100 ] && CPU=100
 
     HORA=$(date +'%H:%M:%S')
+    ULTIMO_REFRESH=$(date +'%H:%M:%S')
+
     LATENCIA=$(ping -c 1 -W 1 1.1.1.1 2>/dev/null | awk -F'/' 'END {printf "%.0fms", $5}')
     [ -z "$LATENCIA" ] && LATENCIA="N/A"
 }
@@ -75,6 +78,66 @@ dibujar_header() {
     printf "%b└───────────────────────────────────────────────────────────────────────────┘%b\n" "$D" "$N"
 }
 
+# Actualiza SOLO la línea de métricas (línea 5 del header) sin tocar el resto
+# Se asume que el cursor está al inicio del header (tput rc lo coloca ahí)
+actualizar_linea_metricas() {
+    tput rc                       # restaura al inicio del header
+    tput cud 4                    # baja 4 líneas → queda en la fila de métricas
+    printf "\r%b│%b %b▶ RAM LIBRE:%b %b%-6s%b %b│%b %b▶ CPU:%b %b%-4s%b %b│%b %b▶ HORA:%b %b%-8s%b %b│%b %b▶ LAT:%b %b%-6s%b %b│%b" \
+        "$D" "$N" "$C" "$N" "$W" "${RAM}MB" "$N" "$D" "$N" \
+        "$C" "$N" "$W" "${CPU}%" "$N" "$D" "$N" \
+        "$C" "$N" "$W" "$HORA" "$N" "$D" "$N" \
+        "$C" "$N" "$W" "$LATENCIA" "$N" "$D" "$N"
+    tput rc                       # vuelve a guardar la posición
+    printf "\033[K"               # limpia el resto de la línea por si acaso
+}
+
+# ========== READ EN VIVO ==========
+# Lee una línea del usuario PERO refresca métricas cada segundo sin parpadear.
+# Uso: read_en_vivo VARIABLE
+read_en_vivo() {
+    local __var="$1"
+    local __input=""
+    local __char
+
+    # Guarda la posición justo donde está el cursor (inicio del prompt)
+    tput sc
+
+    while true; do
+        # Lee 1 byte con timeout de 1s
+        IFS= read -r -n1 -t 1 __char
+        local __rc=$?
+
+        if [ $__rc -eq 0 ]; then
+            if [[ "$__char" == $'\n' || "$__char" == "" ]]; then
+                # Enter presionado
+                printf "\n"
+                break
+            elif [[ "$__char" == $'\177' || "$__char" == $'\b' ]]; then
+                # Backspace
+                if [ -n "$__input" ]; then
+                    __input="${__input%?}"
+                    printf "\b \b"
+                fi
+            else
+                __input+="$__char"
+                printf "%s" "$__char"
+            fi
+        else
+            # Timeout: refresca métricas sin tocar la línea actual
+            obtener_metricas
+            tput sc          # guarda posición actual (donde está el cursor escribiendo)
+            actualizar_linea_metricas
+            tput rc          # restaura posición de escritura
+            # Recoloca el cursor al final del texto que el usuario lleva escrito
+            printf "\r%b%b%s" "$PROMPT_BASE" " " "$__input"
+        fi
+    done
+
+    # Devuelve el valor
+    printf -v "$__var" "%s" "$__input"
+}
+
 # ========== MENÚ PRINCIPAL ==========
 menu_principal() {
     clear
@@ -86,9 +149,9 @@ menu_principal() {
         printf " [%b01%b] GENERAR CUENTA DEMO (TEMPORAL)\n" "$Y" "$N"
         printf " [%b02%b] CREAR USUARIO NORMAL\n" "$Y" "$N"
         echo ""
-        echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
-        printf " [%b0%b] %b►%b [ REGRESAR ]\n" "$R" "$N" "$R" "$N"
-        echo -e "${D}─────────────────────────────────────────────────────────────────────────────${N}"
+        printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
+        printf " %b[0]%b %b►%b %b[ REGRESAR ]%b                             %bÚLTIMO REFRESH: %s%b\n" "$R" "$N" "$R" "$N" "$W" "$N" "$D" "$ULTIMO_REFRESH" "$N"
+        printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "$D" "$N"
         echo ""
         echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
 
@@ -108,10 +171,10 @@ menu_principal() {
 
 # ========== SUBMENÚ DEMO ==========
 submenu_demo() {
-    # Limpiamos UNA SOLA VEZ al entrar. No se vuelve a limpiar hasta salir.
     clear
     obtener_metricas
     dibujar_header
+    tput sc     # guarda posición del header para refrescos en vivo
     echo ""
     echo -e " ${D}──── CREAR CUENTA DEMO ────${N}"
     echo ""
@@ -119,7 +182,7 @@ submenu_demo() {
     # --- Tiempo ---
     while true; do
         echo -ne " ${PROMPT_BASE} ${W}Tiempo de duración (30m/2h/1d) [0=Cancelar]: ${N}"
-        read -r demo_tiempo          # <-- SIN -t: no parpadea, no borra
+        read_en_vivo demo_tiempo
 
         if [[ "$demo_tiempo" == "0" ]]; then
             echo -e "\n ${R}[!] Cancelado.${N}"
@@ -137,7 +200,7 @@ submenu_demo() {
     # --- Límite ---
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1] [0=Cancelar]: ${N}"
-    read -r demo_limit
+    read_en_vivo demo_limit
     if [[ "$demo_limit" == "0" ]]; then
         echo -e "\n ${R}[!] Cancelado.${N}"
         sleep 1
@@ -199,7 +262,6 @@ submenu_demo() {
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Presiona Enter para continuar...${N}"
     read -r
-    # NO hacemos clear aquí: el menú principal ya hace clear al volver
 }
 
 # ========== SUBMENÚ USUARIO NORMAL ==========
@@ -207,6 +269,7 @@ submenu_normal() {
     clear
     obtener_metricas
     dibujar_header
+    tput sc
     echo ""
     echo -e " ${D}──── CREAR USUARIO NORMAL ────${N}"
     echo ""
@@ -214,7 +277,7 @@ submenu_normal() {
     # --- Usuario ---
     while true; do
         echo -ne " ${PROMPT_BASE} ${W}Nombre de usuario [0=Cancelar]: ${N}"
-        read -r new_user
+        read_en_vivo new_user
 
         if [[ "$new_user" == "0" ]]; then
             echo -e "\n ${R}[!] Cancelado.${N}"
@@ -236,7 +299,7 @@ submenu_normal() {
     # --- Contraseña ---
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Contraseña (Enter=auto) [0=Cancelar]: ${N}"
-    read -r new_pass
+    read_en_vivo new_pass
     if [[ "$new_pass" == "0" ]]; then
         echo -e "\n ${R}[!] Cancelado.${N}"
         sleep 1
@@ -248,7 +311,7 @@ submenu_normal() {
     while true; do
         echo ""
         echo -ne " ${PROMPT_BASE} ${W}Días de validez (Ej: 30) [0=Cancelar]: ${N}"
-        read -r new_dias
+        read_en_vivo new_dias
 
         if [[ "$new_dias" == "0" ]]; then
             echo -e "\n ${R}[!] Cancelado.${N}"
@@ -266,7 +329,7 @@ submenu_normal() {
     # --- Límite ---
     echo ""
     echo -ne " ${PROMPT_BASE} ${W}Límite de conexiones [Default 1] [0=Cancelar]: ${N}"
-    read -r new_limit
+    read_en_vivo new_limit
     if [[ "$new_limit" == "0" ]]; then
         echo -e "\n ${R}[!] Cancelado.${N}"
         sleep 1

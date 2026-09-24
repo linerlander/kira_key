@@ -12,7 +12,6 @@ N=$'\033[0m'    # Reset
 PROMPT_BASE="${C}KIRA@Servidor:~/Usuarios$ ${N}${W}►${N}"
 BG_PID=""
 
-# Detener hilo de refresco en vivo
 detener_reloj_live() {
     if [ -n "$BG_PID" ]; then
         kill "$BG_PID" 2>/dev/null
@@ -21,10 +20,8 @@ detener_reloj_live() {
     fi
 }
 
-# Manejo de salida limpia para prevenir procesos fantasma
 trap 'detener_reloj_live; exit' EXIT INT TERM
 
-# Obtención rápida de IP
 obtener_ip() {
     IP=$(timeout 1 curl -s ifconfig.me 2>/dev/null)
     [ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -32,14 +29,12 @@ obtener_ip() {
     echo "$IP"
 }
 
-# Obtención de Puerto SSH
 obtener_puerto() {
     PORT=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
     [ -z "$PORT" ] && PORT=22
     echo "$PORT"
 }
 
-# Cálculo instantáneo de métricas del sistema
 obtener_metricas() {
     RAM=$(free -m 2>/dev/null | awk '/Mem:/ {print $7}')
     [ -z "$RAM" ] && RAM=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
@@ -63,14 +58,13 @@ obtener_metricas() {
     [ -z "$ONLINE" ] && ONLINE="0"
 }
 
-# Renderizado inicial del marco
 dibujar_encabezado() {
     clear
     obtener_metricas
 
     printf "%b┌───────────────────────────────────────────────────────────────────────────┐%b\n" "$D" "$N"
-    printf "%b│%b   [ KIRA-SSH ]   CREADOR DE CUENTAS SSH | KIRA VIP                       %b│%b\n" "$D" "$N" "$D" "$N"
-    printf "%b│%b   VERSION 2.5 (Premium) | ONLINE: %-3s | HORA: %-8s                      %b│%b\n" "$D" "$N" "$ONLINE" "$HORA" "$D" "$N"
+    printf "%b│%b   [ %b⚡ KIRA-SSH%b ]   🔐 %bCREADOR DE CUENTAS SSH | KIRA VIP%b                 %b│%b\n" "$D" "$C" "$D" "$Y" "$D" "$N" "$D" "$N"
+    printf "%b│%b   VERSIÓN 2.5 (Premium) | LICENCIA: %bACTIVA%b %b(Expiración: 2026-12-31)%b      %b│%b\n" "$D" "$G" "$D" "$D" "$N" "$D" "$N"
     printf "%b├───────────────────────────────────────────────────────────────────────────┤%b\n" "$D" "$N"
     printf "%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\n" \
       "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
@@ -78,19 +72,13 @@ dibujar_encabezado() {
     echo ""
 }
 
-# Hilo en segundo plano que actualiza las métricas cada 1 segundo
 iniciar_reloj_live() {
     detener_reloj_live
     (
         while true; do
             sleep 1
             obtener_metricas
-            # \033[s (Guarda posición del cursor en 'Opción:')
-            # \033[3;1H (Va a fila 3), actualiza Hora/Online
-            # \033[5;1H (Va a fila 5), actualiza RAM/CPU/Hora/Latencia
-            # \033[u (Restaura el cursor exactamente donde escribes)
-            printf "\033[s\033[3;1H%b│%b   VERSION 2.5 (Premium) | ONLINE: %-3s | HORA: %-8s                      %b│%b\033[5;1H%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\033[u" \
-              "$D" "$N" "$ONLINE" "$HORA" "$D" "$N" \
+            printf "\033[s\033[5;1H%b│%b %b▶ RAM LIBRE:%b %-6s %b│%b %b▶ CPU:%b %-4s %b│%b %b▶ HORA:%b %-8s %b│%b %b▶ LAT:%b %-6s %b│%b\033[u" \
               "$D" "$N" "$C" "$N" "${RAM}MB" "$D" "$N" "$C" "$N" "${CPU}%%" "$D" "$N" "$C" "$N" "$HORA" "$D" "$N" "$C" "$N" "$LATENCIA" "$D" "$N"
         done
     ) &
@@ -109,18 +97,15 @@ while true; do
     printf "%b─────────────────────────────────────────────────────────────────────────────%b\n" "$D" "$N"
     echo ""
 
-    # Inicia el refresco dinámico en vivo
     iniciar_reloj_live
 
     echo -ne " ${PROMPT_BASE} ${W}Opción: ${N}"
     read -r opcion_sub
 
-    # Detiene el hilo para responder los submenús sin interrupciones
     detener_reloj_live
 
     case $opcion_sub in
         1|01)
-            # 1. GENERAR CUENTA DEMO
             dibujar_encabezado
 
             rand=$(shuf -i 100-999 -n 1)
@@ -210,7 +195,6 @@ while true; do
             ;;
 
         2|02)
-            # 2. CREAR USUARIO NORMAL
             dibujar_encabezado
 
             while true; do

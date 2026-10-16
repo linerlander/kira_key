@@ -56,7 +56,8 @@ AVISO=""; MENSAJE=""
 BUF=""; SEG_ANT=0
 ORIGEN=""; BANNER_FILE=""
 HAY_DROPBEAR=0; DB_LISTO=0
-MODO_APP=1                # 1 = con <br> y color · 0 = texto pelado
+MODO_APP=1                # 1 = con etiquetas y color · 0 = texto pelado
+CENTRADO=1                # 1 = el banner va centrado en la pantalla
 PLANT_SEL=1
 PLANT_N=10
 declare -a LINEAS=()      # lo que hay guardado, tal cual está en el archivo
@@ -77,7 +78,7 @@ E_PINK=$'\e[38;2;255;111;181m'
 declare -A BC=(
   [verde]="00FF00"   [amarillo]="FFFF00" [cian]="00FFFF"
   [rosa]="FF55FF"    [rojo]="FF5555"     [naranja]="FFAA00"
-  [blanco]="FFFFFF"  [violeta]="AA88FF"
+  [blanco]="FFFFFF"  [violeta]="AA88FF"  [azul]="55AAFF"
 )
 ansi_de_hex() { # $1=RRGGBB · el mismo tono, para la vista previa
   local h="$1"
@@ -146,6 +147,8 @@ colorear() { # $1=línea
       /b|/strong) salida="$salida$E_RST$E_TXT" ;;
       i|em)       salida="$salida"$'\e[3m' ;;
       /i|/em)     salida="$salida"$'\e[23m' ;;
+      tt|/tt)     ;;   # la terminal ya es de ancho fijo: no hay nada que hacer
+      div*|/div)  ;;   # el centrado lo resuelve la vista previa, no la etiqueta
     esac
   done
   salida="$salida$resto"
@@ -287,8 +290,14 @@ vista_previa() { # $@ = líneas tal cual van al archivo
       fila_ancha "$(printf '   %s%s   ' "$E_BLD$E_TXT" "$(pad_v "$txt" 68)")"
     else
       pintada="$(colorear "$l")"
-      fila_ancha "$(printf '   %s%s%s%*s   ' "$E_BLD$E_TXT" "$pintada" "$E_RST" \
-                   $(( 68 - ANCHO_V )) '')"
+      # Si el banner va centrado, la vista previa también lo centra: el hueco
+      # que sobra se reparte entre los dos lados en vez de irse todo al de la
+      # derecha. Es la única forma de que lo que ves acá sea lo que vas a ver
+      # en el celular.
+      local izq=0 der
+      if (( CENTRADO )); then izq=$(( (68 - ANCHO_V) / 2 )); fi
+      der=$(( 68 - ANCHO_V - izq ))
+      fila_ancha "$(printf '   %*s%s%s%s%*s   ' "$izq" '' "$E_BLD$E_TXT" "$pintada" "$E_RST" "$der" '')"
     fi
   done
   if (( n == 0 )); then
@@ -331,6 +340,11 @@ fila_color() {
   else                    e="💻"; t="MODO TERMINAL · PuTTY, ssh de la compu"; c="$E_BLD$E_WARN"; fi
   printf '  %s%s%s %s%s%s %s%s%s\n' \
     "$E_BLD$E_P1" "$(pad '88' 2)" "$E_RST" "$E_P2" "$e" "$E_RST" \
+    "$c" "$(pad "$t" 70)" "$E_RST"
+  if (( CENTRADO )); then e="🎯"; t="CENTRADO · el banner va al medio"; c="$E_BLD$E_OK"
+  else                    e="📏"; t="PEGADO A LA IZQUIERDA"; c="$E_BLD$E_WARN"; fi
+  printf '  %s%s%s %s%s%s %s%s%s\n' \
+    "$E_BLD$E_P1" "$(pad '66' 2)" "$E_RST" "$E_P2" "$e" "$E_RST" \
     "$c" "$(pad "$t" 70)" "$E_RST"
 }
 
@@ -498,7 +512,7 @@ render() { local f; f="$(pintar)"; volcar "$f"; }
 # eso los marcos son reglas de arriba y abajo, que siempre salen derechas.
 plant_nombre() { # $1=número
   case "$1" in
-    1)  printf 'PREMIUM VIP' ;;     2)  printf 'NEÓN' ;;
+    1)  printf 'PREMIUM VIP' ;;     2)  printf 'LOGO KIRA' ;;
     3)  printf 'TARJETA DORADA' ;;  4)  printf 'SEGURIDAD' ;;
     5)  printf 'ARCOÍRIS' ;;        6)  printf 'LAS REGLAS' ;;
     7)  printf 'VELOCIDAD' ;;       8)  printf 'MINIMAL' ;;
@@ -507,7 +521,7 @@ plant_nombre() { # $1=número
 }
 plant_emoji() { # $1=número
   case "$1" in
-    1) printf '🚀' ;; 2) printf '🔥' ;; 3) printf '👑' ;; 4) printf '🔐' ;;
+    1) printf '🚀' ;; 2) printf '🔠' ;; 3) printf '👑' ;; 4) printf '🔐' ;;
     5) printf '🌈' ;; 6) printf '📜' ;; 7) printf '📶' ;; 8) printf '📌' ;;
     9) printf '🎉' ;; 10) printf '📊' ;;
   esac
@@ -535,17 +549,19 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
   local ip="${IP_PUB:-tu servidor}"
   case "$1" in
     2)  printf '%s\n' \
-          'cian|n|=====================================' \
-          'rosa|b|            🔥 K I R A   S S H 🔥' \
-          'cian|n|=====================================' \
+          'cian|m|██╗  ██╗██╗██████╗  █████╗' \
+          'cian|m|██║ ██╔╝██║██╔══██╗██╔══██╗' \
+          'azul|m|█████╔╝ ██║██████╔╝███████║' \
+          'violeta|m|██╔═██╗ ██║██╔══██╗██╔══██║' \
+          'violeta|m|██║  ██╗██║██║  ██║██║  ██║' \
+          'rosa|m|╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝' \
+          'blanco|b|ADMINISTRADOR DE VPS · SSH' \
           "verde|n|🌐 Servidor : $ip" \
-          "amarillo|n|💬 Soporte  : $KIRA_SOP" \
-          'blanco|i|Conexion estable las 24 horas' \
-          'cian|n|=====================================' ;;
+          "amarillo|n|💬 Soporte  : $KIRA_SOP" ;;
 
     3)  printf '%s\n' \
           'amarillo|n|*************************************' \
-          'amarillo|b|             👑 K I R A   V I P 👑' \
+          'amarillo|b|👑 K I R A   V I P 👑' \
           'amarillo|n|*************************************' \
           'blanco|b|💎 Acceso premium activado' \
           'verde|b|📶 Alta velocidad, sin cortes' \
@@ -555,7 +571,7 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
 
     4)  printf '%s\n' \
           'verde|n|=====================================' \
-          'verde|b|            🔐 K I R A   S S H 🔐' \
+          'verde|b|🔐 K I R A   S S H 🔐' \
           'verde|n|=====================================' \
           "blanco|n|🌐 Servidor : $ip" \
           "blanco|n|💬 Soporte  : $KIRA_SOP" \
@@ -564,7 +580,7 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
 
     5)  printf '%s\n' \
           'rojo|n|=====================================' \
-          'amarillo|b|              🌈 K I R A   S S H' \
+          'amarillo|b|🌈 K I R A   S S H' \
           'verde|n|=====================================' \
           "cian|n|📡 Servidor : $ip" \
           "violeta|n|🔑 Soporte  : $KIRA_SOP" \
@@ -573,7 +589,7 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
 
     6)  printf '%s\n' \
           'amarillo|n|-------------------------------------' \
-          'cian|b|          📜 K I R A  ·  R E G L A S' \
+          'cian|b|📜 K I R A  ·  R E G L A S' \
           'amarillo|n|-------------------------------------' \
           'blanco|b|🔒 Una sola conexion por cuenta' \
           'rojo|b|🚫 Prohibido revender el acceso' \
@@ -583,7 +599,7 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
 
     7)  printf '%s\n' \
           'cian|n|=====================================' \
-          'verde|b|             🚀 K I R A   S S H' \
+          'verde|b|🚀 K I R A   S S H' \
           'cian|n|=====================================' \
           'verde|b|[############################] 100%' \
           'amarillo|n|📶 Velocidad al maximo' \
@@ -597,15 +613,15 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
 
     9)  printf '%s\n' \
           'rosa|n|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' \
-          'amarillo|b|        🎉 B I E N V E N I D O 🎉' \
-          'cian|b|            K I R A   S S H' \
+          'amarillo|b|🎉 B I E N V E N I D O 🎉' \
+          'cian|b|K I R A   S S H' \
           'rosa|n|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' \
           "verde|n|🌍 Servidor : $ip" \
           "blanco|n|💬 Soporte  : $KIRA_SOP" \
           'cian|i|🙌 Gracias por confiar en nosotros' ;;
 
     10) printf '%s\n' \
-          'cian|b|                💠 K I R A   S S H' \
+          'cian|b|💠 K I R A   S S H' \
           'cian|n|-------------------------------------' \
           "blanco|n|📡 Servidor   : $ip" \
           'verde|b|✅ Estado     : ACTIVO' \
@@ -616,7 +632,7 @@ plant_def() { # $1=número · imprime "color|estilo|texto" por renglón
 
     *)  printf '%s\n' \
           'verde|n|=====================================' \
-          'amarillo|b|       🚀 K I R A   P R E M I U M 🚀' \
+          'amarillo|b|🚀 K I R A   P R E M I U M 🚀' \
           'verde|n|=====================================' \
           'blanco|b|✔ Conexion estable y alta velocidad' \
           'blanco|b|✔ Prohibido Torrent / SPAM / DDOS' \
@@ -642,17 +658,34 @@ plantilla_prueba() {
     '8 el emoji pinta 🔴🔵<br>'
 }
 
-# Le pone la ropa de HTML a un renglón. El <br> es imprescindible: sin él la
-# app junta todos los renglones en un párrafo corrido.
-vestir() { # $1=texto $2=color $3=estilo (n|b|i)
+# Le pone la ropa de HTML a un renglón. Tres cosas pasan acá:
+#
+# · El SALTO DE LÍNEA. Sin él la app junta todo en un párrafo corrido. Con
+#   centrado lo da el <div>, que es un bloque y corta solo; sin centrado, lo
+#   da el <br>. Poner los dos juntos deja un renglón vacío en el medio.
+#
+# · El CENTRADO, con <div align="center">. Lo entiende Android 7 para arriba;
+#   en uno más viejo el <div> igual corta el renglón, nada más que el texto
+#   queda a la izquierda. O sea: nunca se rompe, a lo sumo no centra.
+#
+# · El ANCHO FIJO, con <tt>. Es lo que le faltaba al logo: la tipografía
+#   normal del celular es de ancho variable y deforma cualquier dibujo hecho
+#   con caracteres. <tt> pide la de ancho fijo y las columnas se alinean.
+vestir() { # $1=texto $2=color $3=estilo (n|b|i|m)
   if (( ! MODO_APP )); then printf '%s' "$1"; return; fi
   local ini="" fin=""
   case "$3" in
     b) ini="<b>";  fin="</b>" ;;
     i) ini="<i>";  fin="</i>" ;;
+    m) ini="<tt>"; fin="</tt>" ;;
   esac
-  printf '%s<font color="#%s">%s</font>%s<br>' \
-    "$ini" "${BC[$2]:-00FFFF}" "$1" "$fin"
+  if (( CENTRADO )); then
+    printf '<div align="center">%s<font color="#%s">%s</font>%s</div>' \
+      "$ini" "${BC[$2]:-00FFFF}" "$1" "$fin"
+  else
+    printf '%s<font color="#%s">%s</font>%s<br>' \
+      "$ini" "${BC[$2]:-00FFFF}" "$1" "$fin"
+  fi
 }
 
 plantilla() { # $1=número · las líneas finales, listas para guardar
@@ -822,6 +855,9 @@ ejecutar() {
         88)
           if (( MODO_APP )); then MODO_APP=0; MENSAJE="Color apagado · las plantillas se guardan peladas"
           else MODO_APP=1; MENSAJE="Color encendido · las plantillas se guardan con etiquetas"; fi ;;
+        66)
+          if (( CENTRADO )); then CENTRADO=0; MENSAJE="Ahora queda pegado a la izquierda"
+          else CENTRADO=1; MENSAJE="Ahora va centrado"; fi ;;
         5|05)
           if (( ! HAY_DROPBEAR )); then AVISO="No veo dropbear instalado en esta VPS"
           elif (( DB_LISTO ));     then AVISO="Dropbear ya está usando este banner"
@@ -863,6 +899,9 @@ ejecutar() {
         88)
           if (( MODO_APP )); then MODO_APP=0; MENSAJE="Color apagado"
           else MODO_APP=1; MENSAJE="Color encendido"; fi ;;
+        66)
+          if (( CENTRADO )); then CENTRADO=0; MENSAJE="Ahora queda pegado a la izquierda"
+          else CENTRADO=1; MENSAJE="Ahora va centrado"; fi ;;
         77)
           local -a pr=()
           mapfile -t pr < <(plantilla_prueba)

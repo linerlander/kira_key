@@ -48,7 +48,7 @@ SSHD="/etc/ssh/sshd_config"
 DROPIN="/etc/ssh/sshd_config.d"
 DB_DEFAULT="/etc/default/dropbear"
 MAX_LINEAS=8
-ANCHO_LINEA=48
+ANCHO_LINEA=30
 
 PANTALLA=inicio           # inicio · escribir · plantillas · confirmar
 ACCION=""
@@ -56,7 +56,7 @@ AVISO=""; MENSAJE=""
 BUF=""; SEG_ANT=0
 ORIGEN=""; BANNER_FILE=""
 HAY_DROPBEAR=0; DB_LISTO=0
-COLOR_ON=1                # 1 = se guarda con etiquetas de color
+MODO_APP=1                # 1 = con <br> y color · 0 = texto pelado
 PLANT_SEL=1
 PLANT_N=10
 declare -a LINEAS=()      # lo que hay guardado, tal cual está en el archivo
@@ -263,23 +263,16 @@ prompt() {
 }
 
 # =============================================================== PANTALLA ===
-# El banner se muestra CON SUS COLORES. Lo que se ve en este recuadro es lo
-# que ve tu cliente en el celular.
+# La vista previa muestra el banner COMO LO MUESTRA EL CELULAR: sin etiquetas
+# y sin color en el texto, con los emojis a todo color. Probado contra HTTP
+# Injector: la app saca las etiquetas pero NO pinta el texto, así que pintarlo
+# acá sería mentirte y mandarte a vender algo que se ve distinto.
 vista_previa() { # $@ = líneas tal cual van al archivo
-  local l n=0 txt pintada
+  local l n=0 txt
   for l in "$@"; do
     (( n++ )); (( n > MAX_LINEAS )) && break
     txt="$(sin_etiquetas "$l")"
-    ancho_visual "$txt"
-    if (( ANCHO_V > 68 )); then
-      # Demasiado larga para el recuadro: se muestra recortada y sin color.
-      # Es feo, pero mejor que romper el marco.
-      fila_ancha "$(printf '   %s%s   ' "$E_BLD$E_TXT" "$(pad_v "$txt" 68)")"
-    else
-      pintada="$(colorear "$l")"
-      fila_ancha "$(printf '   %s%s%s%*s   ' "$E_BLD$E_TXT" "$pintada" "$E_RST" \
-                   $(( 68 - ANCHO_V )) '')"
-    fi
+    fila_ancha "$(printf '   %s%s   ' "$E_BLD$E_TXT" "$(pad_v "$txt" 68)")"
   done
   if (( n == 0 )); then
     fila_ancha "$(printf ' %s%s ' "$E_MUT" "$(pad 'Sin banner: el cliente no ve ningún mensaje al conectarse.' 72)")"
@@ -312,11 +305,13 @@ diagnostico() {
   fi
 }
 
-# El interruptor de color, con su estado a la vista.
+# El interruptor, con su estado a la vista. No es "color sí / color no": es
+# para QUÉ cliente se guarda. La app necesita <br> para respetar los renglones;
+# una terminal muestra ese <br> a la vista y no lo necesita.
 fila_color() {
   local e t c
-  if (( COLOR_ON )); then e="🎨"; t="COLOR: ENCENDIDO · para apps de túnel"; c="$E_BLD$E_OK"
-  else                    e="📄"; t="COLOR: APAGADO · texto pelado"; c="$E_BLD$E_WARN"; fi
+  if (( MODO_APP )); then e="📱"; t="MODO APP · HTTP Injector y similares"; c="$E_BLD$E_OK"
+  else                    e="💻"; t="MODO TERMINAL · PuTTY, ssh de la compu"; c="$E_BLD$E_WARN"; fi
   printf '  %s%s%s %s%s%s %s%s%s\n' \
     "$E_BLD$E_P1" "$(pad '88' 2)" "$E_RST" "$E_P2" "$e" "$E_RST" \
     "$c" "$(pad "$t" 70)" "$E_RST"
@@ -404,15 +399,10 @@ pintar_plantillas() {
   vista_previa "${muestra[@]}"
   piso_ancho
   echo
-  if plant_especial "$PLANT_SEL"; then
-    printf '  %s%s%s\n' "$E_BLD$E_WARN" \
-      "$(pad '▸ Usa caracteres de dibujo: hay celulares que los muestran mal.' 76)" "$E_RST"
-  else
-    printf '  %s%s%s\n' "$E_OK" \
-      "$(pad '✔ Sólo emojis y teclado: se ve igual en cualquier celular.' 76)" "$E_RST"
-  fi
+  printf '  %s%s%s\n' "$E_OK" \
+    "$(pad '✔ Renglones cortos y emojis: entra y se ve igual en cualquier celular.' 76)" "$E_RST"
   echo
-  seccion "ELEGÍ UNA · LAS DE ÁMBAR USAN CARACTERES DE DIBUJO" "$E_P1"
+  seccion "ELEGÍ UNA" "$E_P1"
   echo
   printf '  %s  %s\n' "$(opcion_plant 1)" "$(opcion_plant 2)"
   printf '  %s  %s\n' "$(opcion_plant 3)" "$(opcion_plant 4)"
@@ -421,6 +411,9 @@ pintar_plantillas() {
   printf '  %s  %s\n' "$(opcion_plant 9)" "$(opcion_plant 10)"
   echo
   fila_color
+  printf '  %s%s%s %s%s%s %s%s%s\n' \
+    "$E_BLD$E_P1" "$(pad '77' 2)" "$E_RST" "$E_P2" "🧪" "$E_RST" \
+    "$E_BLD$E_TXT" "$(pad 'PROBAR SI TU APP HACE COLOR' 70)" "$E_RST"
   printf '  %s%s%s %s%s%s %s%s%s\n' \
     "$E_BLD$E_OK" "$(pad '99' 2)" "$E_RST" "$E_P2" "💾" "$E_RST" \
     "$E_BLD$E_TXT" "$(pad 'DEJAR ESTA PUESTA' 70)" "$E_RST"
@@ -488,121 +481,161 @@ render() { local f; f="$(pintar)"; volcar "$f"; }
 # eso los marcos son reglas de arriba y abajo, que siempre salen derechas.
 plant_nombre() { # $1=número
   case "$1" in
-    1)  printf 'NEÓN' ;;            2)  printf 'LOGO EN BLOQUES' ;;
-    3)  printf 'TARJETA VIP' ;;     4)  printf 'LÍNEAS DOBLES' ;;
-    5)  printf 'BARRAS' ;;          6)  printf 'LAS REGLAS' ;;
+    1)  printf 'NEÓN' ;;            2)  printf 'DIAMANTE' ;;
+    3)  printf 'TARJETA VIP' ;;     4)  printf 'SEMÁFORO' ;;
+    5)  printf 'ARCOÍRIS' ;;        6)  printf 'LAS REGLAS' ;;
     7)  printf 'VELOCIDAD' ;;       8)  printf 'MINIMAL' ;;
     9)  printf 'BIENVENIDA' ;;      10) printf 'PANEL DE ESTADO' ;;
   esac
 }
 plant_emoji() { # $1=número
   case "$1" in
-    1) printf '🔥' ;; 2) printf '🔳' ;; 3) printf '👑' ;; 4) printf '📦' ;;
-    5) printf '🚀' ;; 6) printf '📜' ;; 7) printf '📶' ;; 8) printf '📌' ;;
+    1) printf '🔥' ;; 2) printf '💎' ;; 3) printf '👑' ;; 4) printf '🚦' ;;
+    5) printf '🌈' ;; 6) printf '📜' ;; 7) printf '📶' ;; 8) printf '📌' ;;
     9) printf '🎉' ;; 10) printf '📊' ;;
   esac
 }
-plant_especial() { # usa caracteres de dibujo (█ ═ ━ ─)
-  case "$1" in 2|4|5|10) return 0 ;; *) return 1 ;; esac
-}
+# Ya no queda ninguna con caracteres de dibujo ni con logos de letras: la app
+# usa tipografía de ancho variable y cualquier dibujo armado con caracteres
+# sale deformado. Se mantiene la función porque el resto de la pantalla la
+# consulta, pero ahora todas las plantillas son parejas.
+plant_especial() { return 1; }
 
+# TRES COSAS QUE SE APRENDIERON MIRANDO LA PANTALLA DEL CELULAR DE VERDAD:
+#
+# 1. La app junta todos los renglones en uno solo. El salto de línea del
+#    archivo no vale: hay que ponerle <br>, que es el salto de HTML. Sin eso
+#    el banner entero sale como un párrafo corrido.
+#
+# 2. La tipografía es de ancho variable, así que NADA de dibujos hechos con
+#    caracteres: los logos de bloques y los marcos salen deformados. Por eso
+#    las reglas ahora son tiras de emojis, que además son las que ponen el
+#    color de verdad.
+#
+# 3. Entran como treinta y pico de caracteres por renglón antes de que la app
+#    lo parta sola. Todo se diseña corto, y aunque se partiera, cada renglón
+#    arranca con su emoji y se sigue leyendo.
 plant_def() { # $1=número · imprime "color|texto" por renglón
   local ip="${IP_PUB:-tu servidor}"
   case "$1" in
     2)  printf '%s\n' \
-          'cian|  ██╗  ██╗██╗██████╗  █████╗' \
-          'cian|  ██║ ██╔╝██║██╔══██╗██╔══██╗' \
-          'azul|  █████╔╝ ██║██████╔╝███████║' \
-          'azul|  ██╔═██╗ ██║██╔══██╗██╔══██║' \
-          'violeta|  ██║  ██╗██║██║  ██║██║  ██║' \
-          'violeta|  ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝' \
-          "ambar|  💎 PREMIUM   ·   📡 $ip" \
-          "verde|  💬 Soporte: $KIRA_SOP" ;;
+          'cian|🔷🔷🔷🔷🔷🔷🔷🔷🔷🔷' \
+          'cian|💎 K I R A  P R E M I U M' \
+          'cian|🔷🔷🔷🔷🔷🔷🔷🔷🔷🔷' \
+          "verde|🌐 Servidor: $ip" \
+          "azul|💬 Soporte: $KIRA_SOP" \
+          'ambar|📶 Alta velocidad sin cortes' ;;
 
     3)  printf '%s\n' \
-          'ambar|*************************************' \
-          'rosa|      👑  K I R A   V I P  👑' \
-          'ambar|*************************************' \
-          'violeta|  💎 Acceso premium activado' \
-          'cian|  📶 Alta velocidad, sin cortes' \
-          "verde|  🌐 Servidor : $ip" \
-          "azul|  💬 Soporte  : $KIRA_SOP" \
-          'ambar|*************************************' ;;
+          'ambar|👑👑👑👑👑👑👑👑👑👑' \
+          'rosa|      K I R A   V I P' \
+          'ambar|👑👑👑👑👑👑👑👑👑👑' \
+          'violeta|💎 Acceso premium activado' \
+          "verde|📡 Servidor: $ip" \
+          "azul|💬 Soporte: $KIRA_SOP" ;;
 
     4)  printf '%s\n' \
-          'cian|═════════════════════════════════════' \
-          'rosa|      🔐  K I R A   S S H  🔐' \
-          'cian|═════════════════════════════════════' \
-          "verde|  🌐 Servidor : $ip" \
-          "azul|  💬 Soporte  : $KIRA_SOP" \
-          'rojo|  🚫 Prohibido compartir la cuenta' \
-          'cian|═════════════════════════════════════' ;;
+          'cian|🔴🔵🔴🔵🔴🔵🔴🔵🔴🔵' \
+          'rosa|🔐 K I R A   S S H' \
+          'cian|🔴🔵🔴🔵🔴🔵🔴🔵🔴🔵' \
+          "verde|🌐 Servidor: $ip" \
+          "azul|💬 Soporte: $KIRA_SOP" \
+          'rojo|🚫 Prohibido compartir' ;;
 
     5)  printf '%s\n' \
-          'violeta|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' \
-          'cian|      🚀  K I R A   S S H  🚀' \
-          'violeta|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' \
-          "azul|  📡 Servidor : $ip" \
-          "ambar|  🔑 Soporte  : $KIRA_SOP" \
-          'verde|  ✅ Conexion establecida' \
-          'violeta|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' ;;
+          'violeta|💙💚💛💜💙💚💛💜💙💚' \
+          'cian|🚀 K I R A   S S H' \
+          'violeta|💙💚💛💜💙💚💛💜💙💚' \
+          "azul|📡 Servidor: $ip" \
+          "ambar|🔑 Soporte: $KIRA_SOP" \
+          'verde|✅ Conexion establecida' ;;
 
     6)  printf '%s\n' \
-          'ambar|-------------------------------------' \
-          'cian|     📜  K I R A   ·   R E G L A S' \
-          'ambar|-------------------------------------' \
-          'verde|  🔒 Una sola conexion por cuenta' \
-          'rojo|  🚫 Prohibido revender el acceso' \
-          'rojo|  🚫 Prohibido el abuso de la red' \
-          'ambar|-------------------------------------' \
-          "azul|  💬 Soporte: $KIRA_SOP" ;;
+          'cian|📜 K I R A  ·  R E G L A S' \
+          'ambar|🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹' \
+          'verde|🔒 Una sola conexion' \
+          'rojo|🚫 Prohibido revender' \
+          'rojo|🚫 Prohibido el abuso' \
+          'ambar|🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹' \
+          "azul|💬 Soporte: $KIRA_SOP" ;;
 
     7)  printf '%s\n' \
-          'cian|     🚀  K I R A   S S H' \
-          'verde| [##############################] 100%' \
-          'ambar|  📶 Velocidad al maximo' \
-          "azul|  🌐 Servidor : $ip" \
-          "violeta|  💬 Soporte  : $KIRA_SOP" \
-          'rosa|  🔥 Gracias por elegirnos' ;;
+          'cian|🚀 K I R A   S S H' \
+          'verde|🔵🔵🔵🔵🔵🔵🔵🔵 100%' \
+          'ambar|📶 Velocidad al maximo' \
+          "azul|🌐 Servidor: $ip" \
+          "violeta|💬 Soporte: $KIRA_SOP" \
+          'rosa|🔥 Gracias por elegirnos' ;;
 
     8)  printf '%s\n' \
-          'cian|🔥 KIRA SSH  ·  conexion establecida' \
-          "verde|💬 soporte $KIRA_SOP" ;;
+          'cian|🔥 KIRA SSH' \
+          "verde|💬 $KIRA_SOP" ;;
 
     9)  printf '%s\n' \
-          'rosa|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' \
-          'ambar|     🎉  B I E N V E N I D O  🎉' \
-          'cian|           K I R A   S S H' \
-          'rosa|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' \
-          "verde|  🌍 Servidor : $ip" \
-          "azul|  💬 Soporte  : $KIRA_SOP" \
-          'violeta|  🙌 Gracias por confiar en nosotros' ;;
+          'rosa|🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉' \
+          'ambar|   B I E N V E N I D O' \
+          'cian|      K I R A   S S H' \
+          'rosa|🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉' \
+          "verde|🌍 Servidor: $ip" \
+          "azul|💬 Soporte: $KIRA_SOP" \
+          'violeta|🙌 Gracias por confiar' ;;
 
     10) printf '%s\n' \
-          'cian|  💠  K I R A   S S H' \
-          'azul|─────────────────────────────────────' \
-          "violeta|  📡 Servidor    $ip" \
-          'verde|  ✅ Estado      ACTIVO' \
-          "ambar|  🔑 Soporte     $KIRA_SOP" \
-          'cian|  🕐 Disponible  24 / 7' \
-          'azul|─────────────────────────────────────' \
-          'rosa|  🔥 Alta velocidad garantizada' ;;
+          'cian|💠 K I R A   S S H' \
+          'azul|🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸' \
+          "violeta|📡 Servidor: $ip" \
+          'verde|✅ Estado: ACTIVO' \
+          "ambar|🔑 Soporte: $KIRA_SOP" \
+          'cian|🕐 Disponible 24 / 7' \
+          'azul|🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸' \
+          'rosa|🔥 Alta velocidad' ;;
 
     *)  printf '%s\n' \
-          'cian|=====================================' \
-          'rosa|      🔥  K I R A   S S H  🔥' \
-          'cian|=====================================' \
-          "verde|  🌐 Servidor : $ip" \
-          "azul|  💬 Soporte  : $KIRA_SOP" \
-          'ambar|  🚀 Conexion estable 24 / 7' \
-          'cian|=====================================' ;;
+          'cian|🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥' \
+          'rosa|      K I R A   S S H' \
+          'cian|🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥' \
+          "verde|🌐 Servidor: $ip" \
+          "azul|💬 Soporte: $KIRA_SOP" \
+          'ambar|🚀 Conexion estable 24 / 7' ;;
   esac
 }
 
-# Le pone (o no) la etiqueta de color a un renglón, según el interruptor.
+# Un banner de PRUEBA que cubre TODAS las formas de pedir color que existen,
+# numeradas. Te conectás una vez desde el celular, sacás captura y se ve cuál
+# salió pintada. Con eso se termina la adivinanza:
+#
+#   1 a 4  son HTML, que es lo que usan los paneles de este ambiente.
+#   5 y 6  son códigos de terminal, que es lo que usa PuTTY.
+#   7      es el control: tiene que salir blanco sí o sí.
+#   8      el emoji, que ya sabemos que pinta.
+#
+# Si sale pintada alguna del 1 al 4, el color va por HTML y lo pongo en las
+# diez plantillas. Si sale alguna del 5 o 6, va por códigos de terminal. Si no
+# sale ninguna, la app no pinta el texto y lo sabemos de una vez por todas.
+plantilla_prueba() {
+  local e=$'\033'
+  printf '%s\n' \
+    'PRUEBA DE COLOR KIRA<br>' \
+    '<font color="#FF0000">1 rojo hex</font><br>' \
+    '<font color="red">2 rojo nombre</font><br>' \
+    '<b>3 negrita</b><br>' \
+    '<span style="color:#00CC00">4 verde span</span><br>' \
+    "${e}[31m5 rojo terminal${e}[0m<br>" \
+    "${e}[1;32m6 verde terminal${e}[0m<br>" \
+    '7 este sale blanco<br>' \
+    '8 el emoji pinta 🔴🔵<br>'
+}
+
+# Le pone (o no) la ropa de HTML a un renglón. El <br> es el que de verdad
+# importa: sin él la app junta todo en un párrafo. La etiqueta de color va
+# igual porque no estorba —si la app no la usa, la descarta en silencio— y
+# si algún día la soporta, ya está puesta.
 vestir() { # $1=texto $2=nombre del color
-  if (( COLOR_ON )); then printf '<font color="#%s">%s</font>' "${BC[$2]:-00B8D4}" "$1"
-  else                    printf '%s' "$1"; fi
+  if (( MODO_APP )); then
+    printf '<font color="#%s">%s</font><br>' "${BC[$2]:-00B8D4}" "$1"
+  else
+    printf '%s' "$1"
+  fi
 }
 
 plantilla() { # $1=número · las líneas finales, listas para guardar
@@ -767,8 +800,8 @@ ejecutar() {
           if (( ${#LINEAS[@]} == 0 )); then AVISO="No hay ningún banner puesto"
           else ACCION=quitar; PANTALLA=confirmar; fi ;;
         88)
-          if (( COLOR_ON )); then COLOR_ON=0; MENSAJE="Color apagado · las plantillas se guardan peladas"
-          else COLOR_ON=1; MENSAJE="Color encendido · las plantillas se guardan con etiquetas"; fi ;;
+          if (( MODO_APP )); then MODO_APP=0; MENSAJE="Color apagado · las plantillas se guardan peladas"
+          else MODO_APP=1; MENSAJE="Color encendido · las plantillas se guardan con etiquetas"; fi ;;
         5|05)
           if (( ! HAY_DROPBEAR )); then AVISO="No veo dropbear instalado en esta VPS"
           elif (( DB_LISTO ));     then AVISO="Dropbear ya está usando este banner"
@@ -808,8 +841,15 @@ ejecutar() {
       case "$entrada" in
         ""|0|00) PANTALLA=inicio ;;
         88)
-          if (( COLOR_ON )); then COLOR_ON=0; MENSAJE="Color apagado"
-          else COLOR_ON=1; MENSAJE="Color encendido"; fi ;;
+          if (( MODO_APP )); then MODO_APP=0; MENSAJE="Color apagado"
+          else MODO_APP=1; MENSAJE="Color encendido"; fi ;;
+        77)
+          local -a pr=()
+          mapfile -t pr < <(plantilla_prueba)
+          if guardar_banner "${pr[@]}"; then
+            MENSAJE="Banner de prueba puesto · conectate del celular y mirá cuáles salen pintadas"
+            PANTALLA=inicio
+          fi ;;
         99)
           local -a m=()
           mapfile -t m < <(plantilla "$PLANT_SEL")
@@ -821,7 +861,7 @@ ejecutar() {
           if [[ "$entrada" =~ ^[0-9]+$ ]] && (( 10#$entrada >= 1 && 10#$entrada <= PLANT_N )); then
             PLANT_SEL=$(( 10#$entrada ))
           else
-            AVISO="Elegí del 01 al $PLANT_N · 88 color · 99 para dejarla puesta"
+            AVISO="Elegí del 01 al $PLANT_N · 77 prueba · 99 para dejarla puesta"
           fi ;;
       esac ;;
 
@@ -834,7 +874,7 @@ ejecutar() {
               local -a l=()
               local x
               for x in "${LINEAS[@]}"; do l+=("$(sin_etiquetas "$x")"); done
-              COLOR_ON=0
+              MODO_APP=0
               guardar_banner "${l[@]}" && MENSAJE="Banner pelado · ya sin etiquetas" ;;
             dropbear) poner_dropbear && MENSAJE="Dropbear también muestra el banner" ;;
           esac
@@ -878,7 +918,7 @@ cargar
 # Si el banner que ya hay está pelado, el interruptor arranca apagado; si
 # tiene color, encendido. Así el módulo respeta lo que el dueño venía usando
 # en vez de imponerle una preferencia.
-if (( ${#LINEAS[@]} > 0 )) && ! tiene_color; then COLOR_ON=0; fi
+if (( ${#LINEAS[@]} > 0 )) && ! tiene_color; then MODO_APP=0; fi
 
 while true; do
   printf -v ahora '%(%s)T' -1

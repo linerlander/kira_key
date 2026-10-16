@@ -296,6 +296,39 @@ kira_purgar_demos() { # $1 = carpeta del panel
   return 0
 }
 
+# ========================================================== CLAVES VENDIDAS ==
+# /etc/shadow NO guarda la contraseña: guarda un hash, que es de ida nada más.
+# No hay forma de volver a sacar el texto de ahí. Así que, para poder
+# mostrarle al dueño del panel la clave que le vendió a cada cliente, hay que
+# guardarla aparte en el momento de crearla o de cambiarla.
+#
+# El archivo queda en 600 —sólo root lo lee, igual que /etc/shadow— y una
+# línea por cuenta: "usuario clave". Las claves no pueden llevar espacios ni
+# dos puntos (lo valida el módulo de crear), así que `read -r u c` siempre
+# parte bien.
+kira_archivo_claves() { printf '%s/db/claves' "$1"; }
+
+kira_guardar_clave() { # $1=carpeta del panel $2=usuario $3=clave
+  local f="$1/db/claves" tmp="$1/db/.claves.tmp"
+  mkdir -p "$1/db" 2>/dev/null || return 1
+  [ -e "$f" ] || { : > "$f" 2>/dev/null || return 1; }
+  chmod 600 "$f" 2>/dev/null
+  grep -v "^$2 " "$f" > "$tmp" 2>/dev/null
+  printf '%s %s\n' "$2" "$3" >> "$tmp" || return 1
+  mv -f "$tmp" "$f" 2>/dev/null || return 1
+  chmod 600 "$f" 2>/dev/null
+  return 0
+}
+
+kira_borrar_clave() { # $1=carpeta del panel $2=usuario
+  local f="$1/db/claves" tmp="$1/db/.claves.tmp"
+  [ -r "$f" ] || return 0
+  grep -v "^$2 " "$f" > "$tmp" 2>/dev/null
+  mv -f "$tmp" "$f" 2>/dev/null
+  chmod 600 "$f" 2>/dev/null
+  return 0
+}
+
 # ============================================================= PANTALLA =====
 # Un cuadro = UNA escritura. Si cada printf sale suelto, por la red la
 # pantalla se ve temblar mientras se dibuja. \e[?2026h/l marca el cuadro como

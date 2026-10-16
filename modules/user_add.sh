@@ -23,7 +23,7 @@ ui_exige() {
   exit 1
 }
 ui_exige techo piso banda cabecera cachear_cabecera datos_sistema seccion encabezado pad \
-         kira_purgar_demos
+         kira_purgar_demos kira_guardar_clave
 
 # Crear cuentas toca /etc/passwd y /etc/shadow. Sin root no hay nada que hacer,
 # y es mejor decirlo ahora que a mitad del formulario.
@@ -368,21 +368,19 @@ linea_aviso() {
 # La ayuda cambia según el paso: explica qué se espera ANTES de que escriba,
 # no después de que se equivoque.
 AYUDA=("" \
-  "Minúsculas, números y guiones. Escribí  demo  para una cuenta de prueba." \
+  "Letras minúsculas, números y guiones. Escribí  demo  para una cuenta de prueba." \
   "ENTER solo = genero una al azar, fácil de dictar." \
   "Cuántos días dura la cuenta. Lo normal: 30." \
   "Cuántos dispositivos puede usar a la vez. Lo normal: 1 o 2." \
   "Revisá que esté todo bien. S para crear, N para empezar de nuevo." \
   "Copiá los datos de la derecha y mandáselos al cliente.")
 
-# La salida va como una opción más, con su número, igual que en el resto del
-# panel. Antes era una nota al pie en gris apagado: sobre el fondo oscuro no
-# se leía, así que el que entraba veía que le pedían un usuario y no sabía
-# cómo salir. Escrito pero invisible es lo mismo que no estar.
-opcion_volver() {
-  local t
-  if (( PASO == 1 )); then t="VOLVER AL PANEL"; else t="VOLVER AL PASO ANTERIOR"; fi
-  printf '  %s00%s %s%s%s\n' "$E_BLD$E_P1" "$E_RST" "$E_BLD$E_TXT" "$(pad "$t" 73)" "$E_RST"
+# Recordatorio fijo de cómo salir. Antes se podía volver atrás, pero no estaba
+# escrito en ningún lado, que para el que lo usa es lo mismo que no existir.
+salida_txt() {
+  if (( PASO == 1 ));    then printf '0 o ENTER vacío · salir al panel'
+  elif (( PASO <= 5 ));  then printf '0 · volver al paso anterior      ·      ENTER vacío en el usuario · salir'
+  else printf ''; fi
 }
 
 pintar() {
@@ -402,8 +400,7 @@ pintar() {
     seccion "PASO $PASO · ${NOMBRE_PASO[$PASO]}" "$E_P2"
     echo
     printf '  %s%s%s\n' "$E_MUT" "$(pad "${AYUDA[$PASO]}" 76)" "$E_RST"
-    echo
-    opcion_volver
+    printf '  %s%s%s\n' "$E_OFF" "$(pad "$(salida_txt)" 76)" "$E_RST"
   fi
   echo
   linea_aviso
@@ -484,6 +481,11 @@ crear() {
     return 1
   fi
 
+  # La clave se guarda aparte, porque /etc/shadow sólo guarda el hash y de ahí
+  # no se puede volver a sacar el texto. Sin esto, el padrón (módulo 04) no
+  # tendría de dónde leerla para mostrártela.
+  kira_guardar_clave "$DIR" "$USUARIO" "$CLAVE"
+
   # Límite de conexiones para el módulo 14. Se reescribe la línea del usuario
   # en vez de agregar otra, para que no queden dos límites para el mismo.
   mkdir -p "$DIR/db"
@@ -562,7 +564,7 @@ while true; do
       AVISO=""
       [ -z "$RESP" ] && { clear; exit 0; }          # ENTER vacío = salir
       case "${RESP,,}" in
-        0|00) clear; exit 0 ;;
+        0)    clear; exit 0 ;;
         demo|prueba|test)
               if crear_demo; then PASO=6; fi ;;
         *)    if val_usuario "$RESP"; then USUARIO="$RESP"; PASO=2; fi ;;
@@ -571,14 +573,14 @@ while true; do
     2)
       preguntar "Contraseña:"
       AVISO=""
-      case "$RESP" in 0|00) atras; continue ;; esac
+      [ "$RESP" = "0" ] && { atras; continue; }
       [ -z "$RESP" ] && RESP="$(clave_azar)"        # ENTER solo = al azar
       if val_clave "$RESP"; then CLAVE="$RESP"; PASO=3; fi
       ;;
     3)
       preguntar "Días:"
       AVISO=""
-      case "$RESP" in 0|00) atras; continue ;; esac
+      [ "$RESP" = "0" ] && { atras; continue; }
       [ -z "$RESP" ] && RESP=30                     # ENTER solo = 30 días
       if val_numero "$RESP" "$MAX_DIAS" "Días"; then
         DIAS=$(( 10#$RESP ))
@@ -590,7 +592,7 @@ while true; do
     4)
       preguntar "Límite:"
       AVISO=""
-      case "$RESP" in 0|00) atras; continue ;; esac
+      [ "$RESP" = "0" ] && { atras; continue; }
       [ -z "$RESP" ] && RESP=1                      # ENTER solo = 1 conexión
       if val_numero "$RESP" "$MAX_CONEX" "Límite"; then
         LIMITE=$(( 10#$RESP )); PASO=5
@@ -600,7 +602,7 @@ while true; do
       preguntar "¿Creo la cuenta? (s/n):"
       AVISO=""
       case "${RESP,,}" in
-        0|00)       atras ;;
+        0)          atras ;;
         s|si|sí|"") if crear; then PASO=6; fi ;;
         n|no)       limpiar_campos ;;
         *)          AVISO="Respondé s para crear, n para empezar de nuevo o 0 para volver" ;;

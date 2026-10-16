@@ -259,7 +259,22 @@ pintar_escribir() {
   prompt "Línea:"
 }
 
+# Media fila de plantilla. La elegida va en rosa; las que usan caracteres
+# especiales, en ámbar, para que de un vistazo sepas cuáles pueden verse mal
+# en un celular viejo.
+opcion_plant() { # $1=número
+  local n="$1" c nn
+  printf -v nn '%02d' "$n"
+  if   (( PLANT_SEL == n ));   then c="$E_BLD$E_PINK"
+  elif plant_especial "$n";    then c="$E_WARN"
+  else                              c="$E_BLD$E_TXT"; fi
+  printf '%s%s%s %s%s%s %s%s%s' "$E_BLD$E_P1" "$(pad "$nn" 2)" "$E_RST" \
+         "$E_P2" "$(plant_emoji "$n")" "$E_RST" "$c" "$(pad "$(plant_nombre "$n")" 31)" "$E_RST"
+}
+
 pintar_plantillas() {
+  local -a muestra=()
+  mapfile -t muestra < <(plantilla "$PLANT_SEL")
   echo
   printf '%s\n' "$REGLA_FIJA"
   printf '%s\n' "$CABECERA_FIJA"
@@ -268,19 +283,29 @@ pintar_plantillas() {
   echo
   encabezado "BANNER SSH" "KIRA v$KIRA_VER"
   echo
-  techo_ancho "VISTA PREVIA DE LA PLANTILLA $PLANT_SEL"
-  local -a muestra=()
-  mapfile -t muestra < <(plantilla "$PLANT_SEL")
+  techo_ancho "ASÍ LA VERÍA TU CLIENTE · $(plant_nombre "$PLANT_SEL")"
   vista_previa "${muestra[@]}"
   piso_ancho
   echo
-  printf '  %s%s%s\n' "$E_MUT" \
-    "$(pad 'Elegí un número para verla, y volvé a elegirlo para dejarla puesta.' 76)" "$E_RST"
+  if plant_especial "$PLANT_SEL"; then
+    printf '  %s%s%s\n' "$E_BLD$E_WARN" \
+      "$(pad '▸ Usa caracteres especiales: hay celulares que los muestran mal.' 76)" "$E_RST"
+  else
+    printf '  %s%s%s\n' "$E_OK" \
+      "$(pad '✔ Sólo caracteres de teclado: se ve igual en cualquier celular.' 76)" "$E_RST"
+  fi
   echo
-  seccion "PLANTILLAS" "$E_P1"
+  seccion "ELEGÍ UNA · LAS DE ÁMBAR USAN CARACTERES ESPECIALES" "$E_P1"
   echo
-  printf '  %s  %s\n' "$(opcion '01' '📇' 'SOLO LOS DATOS')"   "$(opcion '02' '📣' 'CON LAS REGLAS')"
-  printf '  %s  %s\n' "$(opcion '03' '⭐' 'CORTA Y DIRECTA')"   "$(opcion '09' '💾' 'DEJAR ESTA PUESTA')"
+  printf '  %s  %s\n' "$(opcion_plant 1)" "$(opcion_plant 2)"
+  printf '  %s  %s\n' "$(opcion_plant 3)" "$(opcion_plant 4)"
+  printf '  %s  %s\n' "$(opcion_plant 5)" "$(opcion_plant 6)"
+  printf '  %s  %s\n' "$(opcion_plant 7)" "$(opcion_plant 8)"
+  printf '  %s  %s\n' "$(opcion_plant 9)" "$(opcion_plant 10)"
+  echo
+  printf '  %s%s%s %s%s%s %s%s%s\n' \
+    "$E_BLD$E_OK" "$(pad '99' 2)" "$E_RST" "$E_P2" "💾" "$E_RST" \
+    "$E_BLD$E_TXT" "$(pad 'DEJAR ESTA PUESTA' 70)" "$E_RST"
   opcion_salir "VOLVER SIN CAMBIAR NADA"
   echo
   linea_aviso
@@ -339,27 +364,132 @@ pintar() {
 render() { local f; f="$(pintar)"; volcar "$f"; }
 
 # =============================================================== PLANTILLAS =
+# Diez diseños. Las que llevan ╔ ║ █ ─ se ven preciosas en una terminal, pero
+# dependen de la tipografía del celular: en HTTP Injector algunos equipos las
+# muestran como cuadraditos. Por eso cada plantilla dice de qué tipo es y las
+# "especiales" aparecen en ámbar en la lista.
+#
+# OJO con el ancho: el nombre del servidor y el de soporte cambian de largo,
+# así que dentro de los marcos NO se escriben a mano con espacios contados —
+# se pasan por pad(), que recorta y rellena. Si no, el día que cambiés la IP
+# el marco te queda chueco.
 PLANT_SEL=1
-plantilla() { # $1=número
-  local ip="${IP_PUB:-tu servidor}"
+PLANT_N=10
+
+plant_nombre() { # $1=número
   case "$1" in
-    2) printf '%s\n' \
-         "==============================" \
-         "        KIRA SSH VPN" \
-         "==============================" \
-         " Soporte: $KIRA_SOP" \
-         " Prohibido compartir la cuenta" \
-         " Una sola conexion por usuario" \
-         "==============================" ;;
-    3) printf '%s\n' \
-         "KIRA SSH · soporte $KIRA_SOP" ;;
-    *) printf '%s\n' \
-         "==============================" \
-         "   BIENVENIDO A KIRA SSH" \
-         "==============================" \
-         " Servidor: $ip" \
-         " Soporte:  $KIRA_SOP" \
-         "==============================" ;;
+    1)  printf 'CLÁSICA' ;;
+    2)  printf 'LOGO EN BLOQUES' ;;
+    3)  printf 'LOGO ASCII' ;;
+    4)  printf 'MARCO DOBLE' ;;
+    5)  printf 'MARCO FINO' ;;
+    6)  printf 'PREMIUM' ;;
+    7)  printf 'FLECHAS' ;;
+    8)  printf 'LAS REGLAS' ;;
+    9)  printf 'MINIMAL' ;;
+    10) printf 'VELOCIDAD' ;;
+  esac
+}
+plant_emoji() { # $1=número
+  case "$1" in
+    1) printf '📄' ;; 2) printf '🔳' ;; 3) printf '🔤' ;; 4) printf '📦' ;;
+    5) printf '📐' ;; 6) printf '⭐' ;; 7) printf '🚀' ;; 8) printf '📜' ;;
+    9) printf '📌' ;; 10) printf '🏁' ;;
+  esac
+}
+# 0 = sólo caracteres de teclado, se ve igual en cualquier celular
+# 1 = usa caracteres especiales, puede verse mal en equipos viejos
+plant_especial() { # $1=número
+  case "$1" in 2|4|5) return 0 ;; *) return 1 ;; esac
+}
+
+plantilla() { # $1=número · imprime las líneas del banner
+  local ip="${IP_PUB:-tu servidor}" b
+  case "$1" in
+    2)  printf '%s\n' \
+          ' ██╗  ██╗██╗██████╗  █████╗' \
+          ' ██║ ██╔╝██║██╔══██╗██╔══██╗' \
+          ' █████╔╝ ██║██████╔╝███████║' \
+          ' ██╔═██╗ ██║██╔══██╗██╔══██║' \
+          ' ██║  ██╗██║██║  ██║██║  ██║' \
+          ' ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝' \
+          '    A D M I N I S T R A D O R   V P S' \
+          "    Soporte: $KIRA_SOP" ;;
+
+    3)  printf '%s\n' \
+          '   _  _____ ____       _' \
+          '  | |/ /_ _|  _ \     / \' \
+          "  | ' / | || |_) |   / _ \\" \
+          '  | . \ | ||  _ <   / ___ \' \
+          '  |_|\_\___|_| \_\ /_/   \_\' \
+          '  ---------------------------' \
+          '   Conexion estable 24/7' \
+          "   Soporte: $KIRA_SOP" ;;
+
+    4)  b="$(rep '═' 44)"
+        printf '%s\n' "╔${b}╗"
+        printf '║%s║\n' "$(pad '           K I R A   S S H' 44)"
+        printf '%s\n' "╠${b}╣"
+        printf '║%s║\n' "$(pad "   Servidor : $ip" 44)"
+        printf '║%s║\n' "$(pad "   Soporte  : $KIRA_SOP" 44)"
+        printf '║%s║\n' "$(pad '   Una sola conexion por cuenta' 44)"
+        printf '%s\n' "╚${b}╝" ;;
+
+    5)  b="$(rep '─' 44)"
+        printf '%s\n' "┌${b}┐"
+        printf '│%s│\n' "$(pad '            KIRA · SSH VPN' 44)"
+        printf '%s\n' "├${b}┤"
+        printf '│%s│\n' "$(pad "   Soporte    $KIRA_SOP" 44)"
+        printf '│%s│\n' "$(pad "   Servidor   $ip" 44)"
+        printf '│%s│\n' "$(pad '   Gracias por confiar' 44)"
+        printf '%s\n' "└${b}┘" ;;
+
+    6)  printf '%s\n' \
+          '  * * * * * * * * * * * * * * * * * * * *' \
+          '           K I R A   P R E M I U M' \
+          '  * * * * * * * * * * * * * * * * * * * *' \
+          '     Alta velocidad  -  Sin cortes' \
+          "     Servidor : $ip" \
+          "     Soporte  : $KIRA_SOP" \
+          '  * * * * * * * * * * * * * * * * * * * *' ;;
+
+    7)  printf '%s\n' \
+          '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' \
+          '>>>           K I R A   S S H          <<<' \
+          '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' \
+          "    Conectado a : $ip" \
+          "    Soporte     : $KIRA_SOP" ;;
+
+    8)  printf '%s\n' \
+          '------------------------------------------' \
+          '        K I R A   S S H   -   REGLAS' \
+          '------------------------------------------' \
+          '  1. Una sola conexion por cuenta' \
+          '  2. Prohibido revender el acceso' \
+          '  3. Prohibido el abuso de la red' \
+          '------------------------------------------' \
+          "  Soporte: $KIRA_SOP" ;;
+
+    9)  printf '%s\n' \
+          'KIRA SSH  -  conexion establecida' \
+          "soporte $KIRA_SOP" ;;
+
+    10) printf '%s\n' \
+          ' [########################################]' \
+          '             K I R A   S S H' \
+          ' [########################################]' \
+          "   Servidor : $ip" \
+          "   Soporte  : $KIRA_SOP" \
+          '   Gracias por elegirnos' ;;
+
+    *)  printf '%s\n' \
+          '==============================================' \
+          '             B I E N V E N I D O' \
+          '               K I R A   S S H' \
+          '==============================================' \
+          "  Servidor : $ip" \
+          "  Soporte  : $KIRA_SOP" \
+          '==============================================' ;;
   esac
 }
 
@@ -546,17 +676,19 @@ ejecutar() {
     plantillas)
       case "$entrada" in
         ""|0|00) PANTALLA=inicio ;;
-        1|01) PLANT_SEL=1 ;;
-        2|02) PLANT_SEL=2 ;;
-        3|03) PLANT_SEL=3 ;;
-        9|09)
+        99)
           local -a m=()
           mapfile -t m < <(plantilla "$PLANT_SEL")
           if guardar_banner "${m[@]}"; then
-            MENSAJE="Banner puesto con la plantilla $PLANT_SEL"
+            MENSAJE="Banner puesto · plantilla $(plant_nombre "$PLANT_SEL")"
             PANTALLA=inicio
           fi ;;
-        *) AVISO="Elegí 01, 02 o 03 para verla · 09 para dejarla puesta" ;;
+        *)
+          if [[ "$entrada" =~ ^[0-9]+$ ]] && (( 10#$entrada >= 1 && 10#$entrada <= PLANT_N )); then
+            PLANT_SEL=$(( 10#$entrada ))
+          else
+            AVISO="Elegí del 01 al $PLANT_N para verla · 99 para dejarla puesta"
+          fi ;;
       esac ;;
 
     confirmar)

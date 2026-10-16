@@ -22,7 +22,8 @@ ui_exige() {
   printf '  Actualizalo con:  \e[1mcd %s && git pull\e[0m\n' "$KIRA_DIR"
   exit 1
 }
-ui_exige banda cabecera cachear_cabecera datos_sistema seccion encabezado pad rpad volcar
+ui_exige banda cabecera cachear_cabecera datos_sistema seccion encabezado pad rpad volcar \
+         kira_borrar_clave
 
 if [ "$(id -u)" -ne 0 ]; then
   printf '\e[1;38;2;255;95;109m✖ Hay que ser root para borrar usuarios\e[0m\n'
@@ -474,6 +475,9 @@ borrar_una() { # $1=nombre -> 0 ok, 1 error
     grep -v "^$u " "$f" > "$tmp" 2>/dev/null
     mv -f "$tmp" "$f"
   done
+  # Las claves van aparte: ese archivo tiene que quedar en 600 y el rodeo del
+  # archivo temporal de arriba lo dejaría en 644, legible por cualquiera.
+  kira_borrar_clave "$DIR" "$u"
 
   DETALLE+=("$u · borrada")
   return 0

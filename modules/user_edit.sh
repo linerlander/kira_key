@@ -23,7 +23,8 @@ ui_exige() {
   printf '  Actualizalo con:  \e[1mcd %s && git pull\e[0m\n' "$KIRA_DIR"
   exit 1
 }
-ui_exige banda cabecera cachear_cabecera datos_sistema seccion encabezado pad rpad volcar rep
+ui_exige banda cabecera cachear_cabecera datos_sistema seccion encabezado pad rpad volcar rep \
+         kira_guardar_clave
 
 if [ "$(id -u)" -ne 0 ]; then
   printf '\e[1;38;2;255;95;109m✖ Hay que ser root para editar usuarios\e[0m\n'
@@ -419,6 +420,9 @@ cambiar_clave() { # $1=clave
     # NO las tira: siguen vivas con la clave vieja y siguen ocupando el cupo
     # del límite, así que al reconectar con la clave nueva el control de
     # conexiones lo rechaza y parece que la clave no funcionara.
+    # Se guarda para poder mostrarla después en el padrón: /etc/shadow sólo
+    # tiene el hash y de ahí no se recupera el texto.
+    kira_guardar_clave "$DIR" "$u" "$c"
     local n; n=$(cortar_conexiones "$u")
     if (( n > 0 )); then
       MENSAJE="$u · clave nueva: $c · se cortaron $n conexiones viejas"

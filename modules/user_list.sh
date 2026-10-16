@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
 #  KIRA · módulo 01.04 · USUARIOS REGISTRADOS
-#  El padrón completo: todas las cuentas que existen en la VPS, con filtros y
-#  buscador. No toca nada — sólo mira. Para cambiar algo están los módulos
-#  01, 02 y 03.
+#  El padrón completo: todas las cuentas que existen en la VPS, con su clave,
+#  filtros y buscador en vivo. No toca nada — sólo mira. Para cambiar algo
+#  están los módulos 01, 02 y 03.
 #  Uso:  bash modules/user_list.sh
 # =============================================================================
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,7 +37,7 @@ UMBRAL_VENCE=7
 SIN_ROOT=0
 BUF=""; SEG_ANT=0; CARGA_ANT=0
 
-declare -a T_NOM=() T_VENCE=() T_VTO=() T_CONEX=() T_ESTADO=() T_LIMITE=()
+declare -a T_NOM=() T_CLAVE=() T_VENCE=() T_VTO=() T_CONEX=() T_ESTADO=() T_LIMITE=()
 declare -a V_IDX=()       # los índices que pasan el filtro y la búsqueda
 declare -A CON_USR=() NOM_DE_UID=()
 
@@ -67,8 +67,9 @@ cargar_conexiones() {
 }
 
 cargar_cuentas() {
-  T_NOM=(); T_VENCE=(); T_VTO=(); T_CONEX=(); T_ESTADO=(); T_LIMITE=(); NOM_DE_UID=()
-  declare -A ES_CLIENTE=() LIM=() ES_DEMO=()
+  T_NOM=(); T_CLAVE=(); T_VENCE=(); T_VTO=(); T_CONEX=(); T_ESTADO=(); T_LIMITE=()
+  NOM_DE_UID=()
+  declare -A ES_CLIENTE=() LIM=() ES_DEMO=() CLV=()
 
   # Clientes = UID >= 1000. root y las cuentas de sistema no se venden.
   local n uid resto
@@ -89,6 +90,14 @@ cargar_cuentas() {
   local du dt
   if [ -r "$DIR/db/demos" ]; then
     while read -r du dt; do [ -n "$du" ] && ES_DEMO[$du]=1; done < "$DIR/db/demos"
+  fi
+  # Las claves. /etc/shadow sólo tiene el hash, que no se puede volver a
+  # convertir en texto, así que lo que se muestra es lo que el panel guardó
+  # cuando se creó la cuenta o cuando se le cambió la clave. Una cuenta hecha
+  # a mano, o de antes de esta versión, no va a tener nada acá.
+  local cu cc
+  if [ -r "$DIR/db/claves" ]; then
+    while read -r cu cc; do [ -n "$cu" ] && CLV[$cu]="$cc"; done < "$DIR/db/claves"
   fi
 
   if [ ! -r /etc/shadow ]; then SIN_ROOT=1; aplicar_filtro; return; fi
@@ -120,13 +129,15 @@ cargar_cuentas() {
         elif (( dias <= UMBRAL_VENCE ));  then est="pronto"
         else                                   est="activa"; fi ;;
     esac
-    T_NOM+=("$nom"); T_VENCE+=("$fecha"); T_VTO+=("$epoca")
+    T_NOM+=("$nom"); T_CLAVE+=("${CLV[$nom]:-}"); T_VENCE+=("$fecha"); T_VTO+=("$epoca")
     T_CONEX+=("${CON_USR[$nom]:-0}"); T_ESTADO+=("$est"); T_LIMITE+=("${LIM[$nom]:-}")
   done < /etc/shadow
   aplicar_filtro
 }
 
-# Qué cuentas se ven, según el filtro puesto y lo que se haya buscado.
+# Qué cuentas se ven, según el filtro puesto y lo que se haya escrito en el
+# buscador. Es barata a propósito: se llama en CADA tecla del buscador, así
+# la lista se va achicando mientras escribís.
 aplicar_filtro() {
   V_IDX=()
   local i e n
@@ -235,16 +246,16 @@ prompt() {
 }
 
 # =============================================================== PANTALLA ===
-# Fila de 74: 1 + nº 2 + 2 + usuario 18 + 2 + finaliza 10 + 2 + termina 9
+# Fila de 74: 1 + nº 2 + 2 + usuario 16 + 2 + clave 12 + 2 + termina 9
 #             + 2 + conex 5 + 2 + límite 6 + 2 + estado 10 + 1
 cab_tabla() {
   fila_ancha "$(printf ' %s%s  %s  %s  %s  %s  %s  %s%s ' "$E_MUT" \
-    "$(pad 'Nº' 2)" "$(pad 'USUARIO' 18)" "$(pad 'FINALIZA' 10)" \
+    "$(pad 'Nº' 2)" "$(pad 'USUARIO' 16)" "$(pad 'CLAVE' 12)" \
     "$(rpad 'TERMINA' 9)" "$(rpad 'CONEX' 5)" "$(rpad 'LÍMITE' 6)" \
     "$(rpad 'ESTADO' 10)" "$E_RST")"
 }
 fila_usuario() { # $1=número a mostrar  $2=índice real
-  local n="$1" i="$2" col colr resta ahora_f falta cx lim
+  local n="$1" i="$2" col colr resta ahora_f falta cx lim clv ccl
   col="$(color_estado "${T_ESTADO[i]}")"
   resta="$(cuenta_regresiva "${T_VTO[i]}")"
   printf -v ahora_f '%(%s)T' -1
@@ -259,10 +270,15 @@ fila_usuario() { # $1=número a mostrar  $2=índice real
   # Las conexiones en verde cuando hay alguien usando la cuenta ahora mismo.
   cx="$E_MUT"; (( ${T_CONEX[i]:-0} > 0 )) && cx="$E_BLD$E_OK"
   lim="${T_LIMITE[i]}"; [ -z "$lim" ] && lim="—"
-  fila_ancha "$(printf ' %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s  %s%s%s ' \
+  # La clave va en verde, igual que en la pantalla de crear la cuenta: es el
+  # dato que copiás para pasarle al cliente.
+  clv="${T_CLAVE[i]}"; ccl="$E_BLD$E_OK"
+  if [ -z "$clv" ]; then clv="sin guardar"; ccl="$E_MUT"
+  elif (( ${#clv} > 12 )); then clv="${clv:0:11}…"; fi
+  fila_ancha "$(printf ' %s%s%s  %s%s%s  %s%s%s  %s%s%s  %s%s  %s%s  %s%s%s ' \
     "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST" \
-    "$E_TXT" "$(pad "${T_NOM[i]}" 18)" "$E_RST" \
-    "$E_MUT" "$(pad "${T_VENCE[i]}" 10)" \
+    "$E_TXT" "$(pad "${T_NOM[i]}" 16)" "$E_RST" \
+    "$ccl" "$(pad "$clv" 12)" "$E_RST" \
     "$colr" "$(rpad "$resta" 9)" "$E_RST" \
     "$cx" "$(rpad "${T_CONEX[i]}" 5)" \
     "$E_MUT" "$(rpad "$lim" 6)" \
@@ -280,7 +296,7 @@ indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
     vis=$(( pags + 3 ))
   fi
   local medio
-  if (( total == 0 )); then medio="no hay cuentas que coincidan"
+  if (( total == 0 )); then medio=""
   else medio="mostrando $(( desde + 1 ))-$fin de $total"; fi
   vis=$(( vis + ${#medio} ))
   local izq=$(( (74 - vis) / 2 )); (( izq < 1 )) && izq=1
@@ -290,6 +306,28 @@ indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
   else
     fila_ancha "$(printf '%*s%s%s%s%*s' "$izq" '' "$E_MUT" "$medio" "$E_RST" "$der" '')"
   fi
+}
+
+# La tabla entera. La usan las DOS pantallas: el padrón y el buscador. Así,
+# mientras escribís el nombre, ves la misma lista de siempre achicándose, en
+# vez de escribir a ciegas y enterarte del resultado recién al dar ENTER.
+bloque_tabla() { # $1=título del marco $2=texto cuando no hay nada
+  local total=${#V_IDX[@]} pags; pags=$(paginas)
+  local i desde fin
+  desde=$(( PAGINA * POR_PAGINA ))
+  fin=$(( desde + POR_PAGINA ))
+  (( fin > total )) && fin=$total
+  techo_ancho "$1"
+  cab_tabla
+  if (( total == 0 )); then
+    fila_ancha "$(printf ' %s%s ' "$E_MUT" "$(pad "$2" 72)")"
+    for ((i=1; i<POR_PAGINA; i++)); do fila_ancha "$(pad '' 74)"; done
+  else
+    for ((i=desde; i<fin; i++)); do fila_usuario $(( i + 1 )) "${V_IDX[i]}"; done
+    for ((i=fin-desde; i<POR_PAGINA; i++)); do fila_ancha "$(pad '' 74)"; done
+  fi
+  indicador_paginas "$pags" "$desde" "$fin" "$total"
+  piso_ancho
 }
 
 titulo_tabla() {
@@ -305,13 +343,7 @@ titulo_tabla() {
   printf '%s' "$t"
 }
 
-pintar_lista() {
-  local total=${#V_IDX[@]} pags; pags=$(paginas)
-  local i desde fin
-  desde=$(( PAGINA * POR_PAGINA ))
-  fin=$(( desde + POR_PAGINA ))
-  (( fin > total )) && fin=$total
-
+marco_superior() { # lo que llevan todas las pantallas
   echo
   printf '%s\n' "$REGLA_FIJA"
   printf '%s\n' "$CABECERA_FIJA"
@@ -320,51 +352,41 @@ pintar_lista() {
   echo
   encabezado "USUARIOS REGISTRADOS" "KIRA v$KIRA_VER"
   echo
-  techo_ancho "$(titulo_tabla)"
-  cab_tabla
-  if (( total == 0 )); then
-    fila_ancha "$(printf ' %s%s ' "$E_MUT" "$(pad 'Ninguna cuenta entra en este filtro.' 72)")"
-    for ((i=1; i<POR_PAGINA; i++)); do fila_ancha "$(pad '' 74)"; done
-  else
-    for ((i=desde; i<fin; i++)); do fila_usuario $(( i + 1 )) "${V_IDX[i]}"; done
-    for ((i=fin-desde; i<POR_PAGINA; i++)); do fila_ancha "$(pad '' 74)"; done
-  fi
-  indicador_paginas "$pags" "$desde" "$fin" "$total"
-  piso_ancho
+}
+
+pintar_lista() {
+  marco_superior
+  bloque_tabla "$(titulo_tabla)" 'Ninguna cuenta entra en este filtro.'
   echo
   seccion "FILTRAR" "$E_WARN"
   echo
   printf '  %s  %s\n' "$(opcion_f '01' '📋' 'TODAS' todas)"          "$(opcion_f '02' '✅' 'ACTIVAS' activas)"
   printf '  %s  %s\n' "$(opcion_f '03' '⏳' 'POR VENCER' pronto)"     "$(opcion_f '04' '💀' 'VENCIDAS' vencidas)"
   printf '  %s  %s\n' "$(opcion_f '05' '🔒' 'BLOQUEADAS' bloqueadas)" "$(opcion_f '06' '📡' 'EN LÍNEA AHORA' enlinea)"
-  printf '  %s  %s\n' "$(opcion   '07' '🔍' 'BUSCAR POR NOMBRE')" "$(opcion '77' '⏪' 'PÁGINA ANTERIOR')"
-  printf '  %s  %s\n' "$(opcion   '88' '⏩' 'PÁGINA SIGUIENTE')"  "$(opcion '99' '🧽' 'LIMPIAR LA BÚSQUEDA')"
+  printf '  %s  %s\n' "$(opcion   '07' '🔍' 'BUSCAR POR NOMBRE')"     "$(opcion '77' '⏪' 'PÁGINA ANTERIOR')"
+  printf '  %s  %s\n' "$(opcion   '88' '⏩' 'PÁGINA SIGUIENTE')"      "$(opcion '99' '🧽' 'LIMPIAR LA BÚSQUEDA')"
   opcion_salir
   echo
   linea_aviso
   prompt "Opción:"
 }
 
+# Mismo padrón, pero filtrándose con cada tecla. No hay que dar ENTER para
+# ver el resultado: ENTER es solamente para salir del buscador llevándose lo
+# que quedó filtrado.
 pintar_buscar() {
-  echo
-  printf '%s\n' "$REGLA_FIJA"
-  printf '%s\n' "$CABECERA_FIJA"
-  echo
-  banda
-  echo
-  encabezado "USUARIOS REGISTRADOS" "KIRA v$KIRA_VER"
-  echo
-  seccion "BUSCAR POR NOMBRE" "$E_P1"
+  local t
+  if [ -z "$BUF" ]; then t="ESCRIBÍ Y LA LISTA SE VA FILTRANDO SOLA"
+  else                   t="BUSCANDO \"$BUF\" · ${#V_IDX[@]} COINCIDEN"; fi
+  marco_superior
+  bloque_tabla "$t" "Ninguna cuenta tiene \"$BUF\" en el nombre."
   echo
   printf '  %s%s%s\n' "$E_TXT" \
-    "$(pad 'Escribí una parte del nombre y dale ENTER. No hace falta el nombre entero.' 76)" "$E_RST"
+    "$(pad 'Con una sola letra alcanza. No hace falta el nombre entero.' 76)" "$E_RST"
   printf '  %s%s%s\n' "$E_MUT" \
-    "$(pad 'ENTER en blanco muestra todas las cuentas otra vez.' 76)" "$E_RST"
-  echo
-  printf '  %s%s%s%s%s\n' "$E_MUT" "$(pad 'Buscando ahora:' 17)" \
-    "$E_BLD$E_P1" "$(pad "${BUSCA:-nada}" 59)" "$E_RST"
-  echo
-  opcion_salir "CANCELAR"
+    "$(pad 'ENTER vuelve al padrón con lo filtrado · ESC cancela y muestra todas.' 76)" "$E_RST"
+  printf '  %s%s%s\n' "$E_MUT" \
+    "$(pad 'Las flechas ← → pasan de página, porque acá los números son texto.' 76)" "$E_RST"
   echo
   linea_aviso
   prompt "Buscar:"
@@ -391,7 +413,7 @@ ejecutar() {
         4|04) FILTRO=vencidas;   PAGINA=0; aplicar_filtro ;;
         5|05) FILTRO=bloqueadas; PAGINA=0; aplicar_filtro ;;
         6|06) FILTRO=enlinea;    PAGINA=0; aplicar_filtro ;;
-        7|07) PANTALLA=buscar; BUF="" ;;
+        7|07) PANTALLA=buscar; BUF="$BUSCA" ;;
         77) (( PAGINA > 0 )) && PAGINA=$(( PAGINA - 1 )) || AVISO="Ya estás en la primera página" ;;
         88) (( PAGINA + 1 < $(paginas) )) && PAGINA=$(( PAGINA + 1 )) || AVISO="Ya estás en la última página" ;;
         99)
@@ -400,20 +422,51 @@ ejecutar() {
         *)  AVISO="Elegí una opción de la lista" ;;
       esac ;;
     buscar)
-      if [ "$entrada" = "00" ]; then PANTALLA=lista
-      else BUSCA="$entrada"; PAGINA=0; aplicar_filtro; PANTALLA=lista; fi ;;
+      # ENTER: se sale del buscador con lo que quedó filtrado.
+      PANTALLA=lista ;;
   esac
+}
+
+# Mientras se escribe en el buscador la lista se rearma en cada tecla. Es
+# barato: no se vuelve a leer /etc/shadow, sólo se recorre lo que ya está en
+# memoria.
+teclear_busqueda() {
+  BUSCA="$BUF"; PAGINA=0; aplicar_filtro
+}
+
+cancelar_busqueda() {
+  BUF=""; BUSCA=""; PAGINA=0; aplicar_filtro; PANTALLA=lista
 }
 
 procesar() {
   case "$1" in
-    "")            ejecutar "$BUF"; BUF="" ;;
-    $'\177'|$'\b') BUF="${BUF%?}" ;;
-    $'\e')         read -rsn2 -t 0.05 _ || true ;;
+    "")            ejecutar "$BUF"; [ "$PANTALLA" = buscar ] || BUF="" ;;
+    $'\177'|$'\b')
+      BUF="${BUF%?}"
+      [ "$PANTALLA" = buscar ] && teclear_busqueda ;;
+    $'\e')
+      # Una flecha manda ESC seguido de dos caracteres más; ESC sola no manda
+      # nada atrás y el read se vence. Esa es la diferencia entre "moviste una
+      # flecha" y "apretaste ESC para cancelar".
+      #
+      # Las flechas pasan de página. En el buscador hacen falta: ahí cada
+      # tecla es una letra de la búsqueda, así que escribir "88" no puede
+      # significar "página siguiente".
+      if read -rsn2 -t 0.05 sec; then
+        case "$sec" in
+          '[C') (( PAGINA + 1 < $(paginas) )) && PAGINA=$(( PAGINA + 1 )) ;;
+          '[D') (( PAGINA > 0 ))              && PAGINA=$(( PAGINA - 1 )) ;;
+        esac
+      else
+        [ "$PANTALLA" = buscar ] && cancelar_busqueda
+      fi ;;
     *)
-      # En la pantalla de buscar se escriben letras; en la lista, sólo números.
+      # En el buscador se escriben letras; en el padrón, sólo números.
       if [ "$PANTALLA" = buscar ]; then
-        case "$1" in [[:print:]]) (( ${#BUF} < 24 )) && BUF="$BUF$1" ;; esac
+        case "$1" in
+          [[:print:]])
+            (( ${#BUF} < 24 )) && { BUF="$BUF$1"; teclear_busqueda; } ;;
+        esac
       else
         case "$1" in [0-9]) (( ${#BUF} < 4 )) && BUF="$BUF$1" ;; esac
       fi ;;
@@ -437,7 +490,7 @@ while true; do
   # se releen cada 5: cambian poco y leer passwd + shadow entero cada vuelta
   # es gasto al pedo.
   if (( ahora != SEG_ANT )); then SEG_ANT=$ahora; redibujar=1; fi
-  if [ "$PANTALLA" = lista ] && (( ahora - CARGA_ANT >= 5 )); then
+  if (( ahora - CARGA_ANT >= 5 )); then
     cargar_cuentas; CARGA_ANT=$ahora; redibujar=1
   fi
   (( redibujar )) && render

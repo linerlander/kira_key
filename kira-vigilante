@@ -161,7 +161,11 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  systemctl enable --now kira-vigilante >/dev/null 2>&1
+  systemctl enable kira-vigilante >/dev/null 2>&1
+  # restart, no `enable --now`: si el servicio ya estaba corriendo, --now no
+  # hace nada y el proceso sigue con el código VIEJO en memoria. Reinstalar
+  # tiene que traer siempre la versión nueva.
+  systemctl restart kira-vigilante >/dev/null 2>&1
   sleep 1
   if systemctl is-active --quiet kira-vigilante; then
     echo "Vigilante activo. Revisa cada $INTERVALO segundos."

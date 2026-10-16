@@ -338,10 +338,18 @@ procesar() {
 asegurar_vigilante() {
   [ "$(id -u)" -eq 0 ] || return 0
   [ -f "$DIR/kira-vigilante" ] || return 0
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl is-active --quiet kira-vigilante 2>/dev/null && return 0
-  else
-    [ -x /usr/local/sbin/kira-vigilante ] && return 0
+  local puesto="/usr/local/sbin/kira-vigilante"
+  # El servicio corre desde una COPIA en /usr/local/sbin. Actualizar el repo
+  # no la toca, así que además de ver si está andando hay que comparar: si la
+  # del repo es distinta, se reinstala y el servicio arranca con lo nuevo.
+  # Sin esto, el cliente actualiza y sigue corriendo la versión vieja sin que
+  # nada se lo avise.
+  if [ -f "$puesto" ] && cmp -s "$DIR/kira-vigilante" "$puesto"; then
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl is-active --quiet kira-vigilante 2>/dev/null && return 0
+    else
+      return 0
+    fi
   fi
   KIRA_DIR="$DIR" bash "$DIR/kira-vigilante" --instalar >/dev/null 2>&1 &
 }

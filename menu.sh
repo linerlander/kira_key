@@ -42,8 +42,13 @@ B_CHIP=$'\e[48;2;'"$C_CHIP"'m'
 # aplicarlas, así que b NO ve a `a`. Siempre en líneas separadas.
 # OJO 2: printf "%-30s" cuenta BYTES. Con tildes (caché, tráfico, Menú) la
 # columna se descuadra. pad() usa ${#s}, que cuenta caracteres.
-pad()  { local s="$1" w="$2"; local n=$(( w - ${#s} )); ((n<0)) && n=0; printf '%s%*s' "$s" "$n" ''; }
-rpad() { local s="$1" w="$2"; local n=$(( w - ${#s} )); ((n<0)) && n=0; printf '%*s%s' "$n" '' "$s"; }
+# pad y rpad RECORTAN si el texto no entra. Antes sólo rellenaban, así que un
+# valor largo (un uptime de "2 weeks 3d 22h 45m", un SO con nombre extenso)
+# empujaba la fila más allá de las 78 columnas y rompía el marco.
+pad()  { local s="$1" w="$2"; (( ${#s} > w )) && s="${s:0:w}"
+         local n=$(( w - ${#s} )); printf '%s%*s' "$s" "$n" ''; }
+rpad() { local s="$1" w="$2"; (( ${#s} > w )) && s="${s:0:w}"
+         local n=$(( w - ${#s} )); printf '%*s%s' "$n" '' "$s"; }
 rep()  { local i; for ((i=0;i<$2;i++)); do printf '%s' "$1"; done; }
 
 mezcla() { # $1=i $2=n -> "R;G;B" interpolado entre G1 y G2
@@ -249,9 +254,23 @@ cabecera() {
   done
 }
 
+# La HORA va pegada al borde derecho, que cae en la misma columna donde
+# termina la regla de colores de arriba. El hueco del medio se calcula, no
+# se escribe a mano: así el ancho del SO o de la IP no corre la hora.
 banda() {
-  local t=" IP $IP_PUB    SO $SO    UPTIME $UPTIME    HORA $HORA"
-  printf '%s%s%s\n' "$B_BAND" "$(pad "$t" $ANCHO)" "$E_RST"
+  # Tres bloques: IP a la izquierda, SO centrado, HORA a la derecha. Los dos
+  # huecos se calculan para que el SO quede centrado en las 78 columnas y los
+  # extremos coincidan con la regla de colores (columnas 2 y 78).
+  local izq="  IP $IP_PUB"
+  local cen="SO $SO"
+  local der="HORA $HORA"
+  local sitio=$(( ANCHO - ${#izq} - ${#der} - 4 ))   # 2 de hueco mínimo a cada lado
+  (( ${#cen} > sitio )) && cen="${cen:0:sitio}"
+  local g1=$(( (ANCHO - ${#cen}) / 2 - ${#izq} ))
+  (( g1 < 2 )) && g1=2
+  local g2=$(( ANCHO - ${#izq} - g1 - ${#cen} - ${#der} ))
+  (( g2 < 2 )) && { g2=2; g1=$(( ANCHO - ${#izq} - ${#cen} - ${#der} - g2 )); }
+  printf '%s%s%*s%s%*s%s%s\n' "$B_BAND" "$izq" "$g1" '' "$cen" "$g2" '' "$der" "$E_RST"
 }
 
 # Ambas cajas miden 37 columnas: bordes en 2, 38, 41 y 77. El contenido
@@ -453,6 +472,10 @@ while true; do
       [0-9])         [ ${#BUF} -lt 2 ] && BUF="$BUF$tecla" ;;
       $'\e')         read -rsn2 -t 0.05 _ || true ;;  # descarta flechas
     esac
+    # Eco INMEDIATO. Sin esto, si la tecla cae justo cuando cambia el segundo,
+    # la vuelta siguiente recolecta datos (~96ms) ANTES de repintar y la tecla
+    # tarda en aparecer. Pasaba a veces sí y a veces no, según el momento.
+    render
   elif (( rc <= 128 )); then
     exit 0          # stdin cerrado: salir en vez de girar en vacío
   fi

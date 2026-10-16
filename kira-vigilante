@@ -95,9 +95,10 @@ una_pasada() {
     [[ "$v" =~ ^[0-9]+$ ]] || continue
     (( v < 1000 )) && continue              # root y sistema nunca se tocan
     [ -n "${NOM_DE_UID[$v]:-}" ] || continue
-    pid="${p##*/}"
-    leer_inicio "$pid"
-    CONEX[$v]="${CONEX[$v]:-} $pid:$INICIO"
+    # Acá se guarda SOLO el pid. El momento de arranque se lee más abajo y
+    # únicamente para los que se pasan: con 180 conexiones abiertas y 2 o 3
+    # excedidos, leerlo para todas era gastar el 95% del trabajo al pedo.
+    CONEX[$v]="${CONEX[$v]:-} ${p##*/}"
   done
 
   local nombre lim n cortar i fila
@@ -106,12 +107,21 @@ una_pasada() {
     lim="${LIMITE_DE[$nombre]:-}"
     [ -z "$lim" ] && continue
 
-    ordenar_nuevas_primero ${CONEX[$uid]}
-    n=${#ORD[@]}
+    # Contar es barato; recién si se pasa vale la pena averiguar cuál es la
+    # más nueva, que es la parte cara.
+    local -a suyos=(${CONEX[$uid]})
+    n=${#suyos[@]}
     if (( n <= lim )); then
       unset "ULT_AVISO[$nombre]"       # vuelve a estar en regla
       continue
     fi
+
+    local -a coninicio=()
+    for pid in "${suyos[@]}"; do
+      leer_inicio "$pid"
+      coninicio+=("$pid:$INICIO")
+    done
+    ordenar_nuevas_primero "${coninicio[@]}"
 
     if [ "$MODO" = todas ]; then cortar=$n; else cortar=$(( n - lim )); fi
 

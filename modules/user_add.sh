@@ -22,7 +22,8 @@ ui_exige() {
   printf '  Actualizalo con:  \e[1mcd %s && git pull\e[0m\n' "$KIRA_DIR"
   exit 1
 }
-ui_exige techo piso banda cabecera cachear_cabecera datos_sistema seccion encabezado pad
+ui_exige techo piso banda cabecera cachear_cabecera datos_sistema seccion encabezado pad \
+         kira_purgar_demos
 
 # Crear cuentas toca /etc/passwd y /etc/shadow. Sin root no hay nada que hacer,
 # y es mejor decirlo ahora que a mitad del formulario.
@@ -37,8 +38,10 @@ fi
 PASO=1                      # 1 usuario · 2 clave · 3 días · 4 límite · 5 confirmar · 6 hecho
 USUARIO=""; CLAVE=""; DIAS=""; LIMITE=""
 VENCE=""; AVISO=""; CREADO=0
+ES_DEMO=0; DEMO_HASTA=0
 MAX_DIAS=3650               # 10 años: más que eso es un error de tipeo
 MAX_CONEX=99
+DEMO_MIN=60                 # cuánto dura la cuenta de prueba, en minutos
 
 NOMBRE_PASO=("" "NOMBRE DE USUARIO" "CONTRASEÑA" "DURACIÓN" "LÍMITE DE CONEXIONES" \
              "CONFIRMAR" "CUENTA CREADA")
@@ -104,9 +107,21 @@ estado_col() {
   elif (( PASO >= 5 )); then printf '%s' "$E_BLD$E_WARN"
   else printf '%s' "$E_MUT"; fi
 }
-dur_txt()  { [ -n "$DIAS" ] && printf '%s días' "$DIAS"; }
-lim_txt()  { [ -n "$LIMITE" ] && printf '%s simultáneas' "$LIMITE"; }
-vence_txt(){ [ -n "$VENCE" ] && printf '%s' "$VENCE"; }
+dur_txt() {
+  if (( ES_DEMO )); then printf '%s min · PRUEBA' "$DEMO_MIN"
+  elif [ -n "$DIAS" ]; then printf '%s días' "$DIAS"; fi
+}
+lim_txt() {
+  [ -n "$LIMITE" ] || return
+  (( LIMITE == 1 )) && printf '1 simultánea' || printf '%s simultáneas' "$LIMITE"
+}
+# En una cuenta normal alcanza con la fecha. En una de prueba hace falta la
+# hora, porque se vence el mismo día.
+vence_txt() {
+  if (( ES_DEMO )) && (( DEMO_HASTA > 0 )); then
+    printf '%(%d/%m a las %H:%M)T' "$DEMO_HASTA"
+  elif [ -n "$VENCE" ]; then printf '%s' "$VENCE"; fi
+}
 
 paneles() {
   techo "DATOS DE LA CUENTA" "$E_P1" "PARA EL CLIENTE" "$E_P2" "$M_DAT" "$M_CLI"
@@ -126,12 +141,20 @@ linea_aviso() {
 # La ayuda cambia según el paso: explica qué se espera ANTES de que escriba,
 # no después de que se equivoque.
 AYUDA=("" \
-  "Letras minúsculas, números y guiones. Sin espacios ni mayúsculas." \
+  "Letras minúsculas, números y guiones. Escribí  demo  para una cuenta de prueba." \
   "ENTER solo = genero una al azar, fácil de dictar." \
   "Cuántos días dura la cuenta. Lo normal: 30." \
   "Cuántos dispositivos puede usar a la vez. Lo normal: 1 o 2." \
-  "Revisá que esté todo bien. S para crear, N para cancelar." \
+  "Revisá que esté todo bien. S para crear, N para empezar de nuevo." \
   "Copiá los datos de la derecha y mandáselos al cliente.")
+
+# Recordatorio fijo de cómo salir. Antes se podía volver atrás, pero no estaba
+# escrito en ningún lado, que para el que lo usa es lo mismo que no existir.
+salida_txt() {
+  if (( PASO == 1 ));    then printf '0 o ENTER vacío · salir al panel'
+  elif (( PASO <= 5 ));  then printf '0 · volver al paso anterior      ·      ENTER vacío en el usuario · salir'
+  else printf ''; fi
+}
 
 pintar() {
   echo
@@ -147,6 +170,7 @@ pintar() {
   seccion "PASO $PASO · ${NOMBRE_PASO[$PASO]}" "$E_P2"
   echo
   printf '  %s%s%s\n' "$E_MUT" "$(pad "${AYUDA[$PASO]}" 76)" "$E_RST"
+  printf '  %s%s%s\n' "$E_OFF" "$(pad "$(salida_txt)" 76)" "$E_RST"
   echo
   linea_aviso
 }
@@ -242,6 +266,48 @@ crear() {
 
 limpiar_campos() {
   PASO=1; USUARIO=""; CLAVE=""; DIAS=""; LIMITE=""; VENCE=""; AVISO=""; CREADO=0
+  ES_DEMO=0; DEMO_HASTA=0
+}
+
+# Volver un paso y borrar lo que se había cargado ahí, para que el campo
+# quede vacío y se vea que hay que escribirlo de nuevo.
+atras() {
+  AVISO=""
+  case $PASO in
+    1) clear; exit 0 ;;
+    2) USUARIO=""; PASO=1 ;;
+    3) CLAVE="";   PASO=2 ;;
+    4) DIAS="";    VENCE=""; PASO=3 ;;
+    5) LIMITE="";  PASO=4 ;;
+  esac
+}
+
+# ============================================================ CUENTA DEMO ===
+# Para que el cliente pruebe antes de pagar. Se crea de una, sin preguntar
+# nada: nombre libre, clave al azar, una sola conexión y una hora de vida.
+crear_demo() {
+  local i u=""
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    local cand="demo$(( RANDOM % 9000 + 1000 ))"
+    id "$cand" >/dev/null 2>&1 || { u="$cand"; break; }
+  done
+  [ -z "$u" ] && { AVISO="No encontré un nombre libre para la prueba"; return 1; }
+
+  USUARIO="$u"; CLAVE="$(clave_azar)"; LIMITE=1; DIAS=""
+  ES_DEMO=1
+  printf -v DEMO_HASTA '%(%s)T' -1
+  DEMO_HASTA=$(( DEMO_HASTA + DEMO_MIN * 60 ))
+
+  # Techo de seguridad: aunque nunca más abras el panel y nadie corra la
+  # limpieza, el sistema la da de baja mañana por su cuenta.
+  VENCE=$(date -d "+1 day" +%Y-%m-%d 2>/dev/null)
+  [ -z "$VENCE" ] && { AVISO="No pude calcular el vencimiento"; return 1; }
+
+  crear || return 1
+
+  mkdir -p "$DIR/db"
+  printf '%s %s\n' "$USUARIO" "$DEMO_HASTA" >> "$DIR/db/demos"
+  return 0
 }
 
 # ================================================================= MAIN =====
@@ -249,6 +315,7 @@ exigir_ancho
 datos_sistema
 cachear_cabecera
 detectar_puertos
+kira_purgar_demos "$DIR"    # se lleva las pruebas que ya vencieron
 trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear' EXIT
 trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear; exit 130' INT TERM
 cursor_off
@@ -260,17 +327,24 @@ while true; do
       preguntar "Usuario:"
       AVISO=""
       [ -z "$RESP" ] && { clear; exit 0; }          # ENTER vacío = salir
-      if val_usuario "$RESP"; then USUARIO="$RESP"; PASO=2; fi
+      case "${RESP,,}" in
+        0)    clear; exit 0 ;;
+        demo|prueba|test)
+              if crear_demo; then PASO=6; fi ;;
+        *)    if val_usuario "$RESP"; then USUARIO="$RESP"; PASO=2; fi ;;
+      esac
       ;;
     2)
       preguntar "Contraseña:"
       AVISO=""
+      [ "$RESP" = "0" ] && { atras; continue; }
       [ -z "$RESP" ] && RESP="$(clave_azar)"        # ENTER solo = al azar
       if val_clave "$RESP"; then CLAVE="$RESP"; PASO=3; fi
       ;;
     3)
       preguntar "Días:"
       AVISO=""
+      [ "$RESP" = "0" ] && { atras; continue; }
       [ -z "$RESP" ] && RESP=30                     # ENTER solo = 30 días
       if val_numero "$RESP" "$MAX_DIAS" "Días"; then
         DIAS=$(( 10#$RESP ))
@@ -282,6 +356,7 @@ while true; do
     4)
       preguntar "Límite:"
       AVISO=""
+      [ "$RESP" = "0" ] && { atras; continue; }
       [ -z "$RESP" ] && RESP=1                      # ENTER solo = 1 conexión
       if val_numero "$RESP" "$MAX_CONEX" "Límite"; then
         LIMITE=$(( 10#$RESP )); PASO=5
@@ -291,16 +366,19 @@ while true; do
       preguntar "¿Creo la cuenta? (s/n):"
       AVISO=""
       case "${RESP,,}" in
+        0)          atras ;;
         s|si|sí|"") if crear; then PASO=6; fi ;;
         n|no)       limpiar_campos ;;
-        *)          AVISO="Respondé s para crear o n para cancelar" ;;
+        *)          AVISO="Respondé s para crear, n para empezar de nuevo o 0 para volver" ;;
       esac
       ;;
     6)
-      preguntar "ENTER vuelve · N crea otro:"
+      # Mismo idioma que el resto del panel: se elige con números, no con
+      # letras sueltas que hay que adivinar.
+      preguntar "1 otra cuenta · 0 volver al panel:"
       case "${RESP,,}" in
-        n|o|otro) limpiar_campos ;;
-        *)        clear; exit 0 ;;
+        1|o|otra|otro) limpiar_campos ;;
+        *)             clear; exit 0 ;;
       esac
       ;;
   esac

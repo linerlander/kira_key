@@ -267,6 +267,35 @@ banda() {
   printf '%s%s%*s%s%*s%s%s\n' "$B_BAND" "$izq" "$g1" '' "$cen" "$g2" '' "$der" "$E_RST"
 }
 
+# ======================================================= CUENTAS DE PRUEBA ==
+# Las cuentas de prueba duran MINUTOS, y /etc/shadow sólo sabe de días: su
+# campo de vencimiento es un número de día, no tiene hora. Por eso la hora
+# exacta se guarda aparte, en db/demos, y el borrado se hace acá.
+# Se llama al abrir cualquier módulo de usuarios, así que no hace falta cron
+# ni at: se limpian solas apenas entrás al panel. Igual, al crearlas se les
+# pone vencimiento de sistema para mañana, como techo: aunque no abras el
+# panel en una semana, la cuenta no sobrevive más de un día.
+kira_purgar_demos() { # $1 = carpeta del panel
+  local f="$1/db/demos" tmp="$1/db/.demos.tmp" lim="$1/db/limites"
+  local u t ahora borrados=0
+  [ -r "$f" ] || return 0
+  printf -v ahora '%(%s)T' -1
+  : > "$tmp" 2>/dev/null || return 0
+  while read -r u t; do
+    [ -z "$u" ] && continue
+    [[ "$t" =~ ^[0-9]+$ ]] || continue
+    if (( ahora >= t )); then
+      userdel "$u" 2>/dev/null
+      [ -w "$lim" ] && { grep -v "^$u " "$lim" > "$lim.tmp" 2>/dev/null; mv -f "$lim.tmp" "$lim"; }
+      borrados=$(( borrados + 1 ))
+    else
+      printf '%s %s\n' "$u" "$t" >> "$tmp"
+    fi
+  done < "$f"
+  mv -f "$tmp" "$f" 2>/dev/null
+  return 0
+}
+
 # ============================================================= PANTALLA =====
 # Un cuadro = UNA escritura. Si cada printf sale suelto, por la red la
 # pantalla se ve temblar mientras se dibuja. \e[?2026h/l marca el cuadro como

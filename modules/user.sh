@@ -24,7 +24,8 @@ ui_exige() {
   printf '  Actualizalo con:  \e[1mcd %s && git pull\e[0m\n' "$KIRA_DIR"
   exit 1
 }
-ui_exige techo piso banda cabecera cachear_cabecera datos_sistema pad rpad
+ui_exige techo piso banda cabecera cachear_cabecera datos_sistema pad rpad \
+         kira_purgar_demos
 
 MOD="$DIR/modules"
 BUF=""; MENSAJE=""; AVISO=""
@@ -101,6 +102,10 @@ cargar_cuentas() {
     (( uid >= 1000 && uid != 65534 )) || continue
     ES_CLIENTE[$n]=1; NOM_DE_UID[$uid]="$n"
   done < /etc/passwd
+
+  # Las cuentas de prueba vencen en minutos: se borran acá, aprovechando que
+  # esta pantalla se refresca sola. Si no hay ninguna, no cuesta nada.
+  kira_purgar_demos "$DIR"
 
   cargar_conexiones
   cargar_ultimo

@@ -67,6 +67,20 @@ CAT_CLA=(SSH   DROPBEAR         SSL         WS          V2RAY   SS            OV
 declare -A PUERTO_DE=()
 PUERTOS="—"
 
+# Arma "a · b +N": los primeros $1 puertos y, si hay más, cuántos quedaron.
+# Cortar y poner "…" deja al que mira sin saber si falta uno o faltan diez.
+lista_corta() { # $1=cuántos mostrar  $2..=puertos
+  local max="$1"; shift
+  local n=$# salida="" i=0 p
+  for p in "$@"; do
+    (( i >= max )) && break
+    [ -n "$salida" ] && salida="$salida · "
+    salida="$salida$p"; i=$(( i + 1 ))
+  done
+  (( n > max )) && salida="$salida +$(( n - max ))"
+  printf '%s' "$salida"
+}
+
 # Qué programa corresponde a qué servicio del catálogo.
 clave_servicio() {
   case "${1,,}" in
@@ -94,7 +108,7 @@ detectar_puertos() {
     [ -n "${visto[$pto]:-}" ] && continue  # un puerto, una sola vez (IPv4 e IPv6 repiten)
     visto[$pto]=1
     if [ -z "${PUERTO_DE[$cla]:-}" ]; then PUERTO_DE[$cla]="$pto"
-    else PUERTO_DE[$cla]="${PUERTO_DE[$cla]} · $pto"; fi
+    else PUERTO_DE[$cla]="${PUERTO_DE[$cla]} $pto"; fi
   done < <(
     { ss -tlnpH 2>/dev/null; ss -ulnpH 2>/dev/null; } | awk '
       {
@@ -114,16 +128,16 @@ detectar_puertos() {
     PUERTO_DE[SSH]="$p"
   fi
 
-  # Resumen corto para la caja de la derecha mientras se carga el formulario
+  # Resumen para la caja de la derecha mientras se carga el formulario. Van
+  # sólo los tres primeros: la lista completa aparece al crear la cuenta, y
+  # un renglón lleno de números con puntos no se lee, se mancha.
+  local -a todos=()
   local i c
   for i in "${!CAT_CLA[@]}"; do
-    c="${PUERTO_DE[${CAT_CLA[i]}]:-}"
-    [ -z "$c" ] && continue
-    [ -n "$PUERTOS" ] && PUERTOS="$PUERTOS · "
-    PUERTOS="$PUERTOS$c"
+    for c in ${PUERTO_DE[${CAT_CLA[i]}]:-}; do todos+=("$c"); done
   done
+  PUERTOS="$(lista_corta 3 "${todos[@]}")"
   [ -z "$PUERTOS" ] && PUERTOS="—"
-  (( ${#PUERTOS} > 22 )) && PUERTOS="${PUERTOS:0:21}…"
 }
 
 # Clave sugerida. Se sacan las letras y números que se confunden al dictarla
@@ -198,8 +212,13 @@ izq_opcion() { # $1=número $2=texto
 srv_der() { # $1=índice del catálogo
   local i="$1" v col
   v="${PUERTO_DE[${CAT_CLA[i]}]:-}"
-  if [ -z "$v" ]; then v="OFF"; col="$E_BLD$E_ERR"; else col="$E_BLD$E_OK"; fi
-  caja_der " $E_TXT$(pad "${CAT_NOM[i]}" 21)$E_RST$col$(rpad "$v" 13)$E_RST" "$M_CLI"
+  if [ -z "$v" ]; then
+    v="OFF"; col="$E_BLD$E_ERR"
+  else
+    v="$(lista_corta 2 $v)"; col="$E_BLD$E_OK"
+  fi
+  # 1 de sangría + nombre 19 + puerto 15 = 35
+  caja_der " $E_TXT$(pad "${CAT_NOM[i]}" 19)$E_RST$col$(rpad "$v" 15)$E_RST" "$M_CLI"
 }
 
 paneles() {

@@ -301,7 +301,13 @@ kira_purgar_demos() { # $1 = carpeta del panel
 # pantalla se ve temblar mientras se dibuja. \e[?2026h/l marca el cuadro como
 # atómico en los clientes que lo soportan; el resto lo ignora sin romperse.
 volcar() { # $1=cuadro ya armado
-  printf '\e[?2026h\e[H%s\e[0J\e[?2026l' "$1"
+  # Cada renglón se cierra con \e[K, que borra desde el cursor hasta el final
+  # de ESA línea. Sin eso, un renglón EN BLANCO del cuadro nuevo no borra lo
+  # que había antes en esa posición: el \n sólo baja el cursor, no limpia.
+  # No se nota mientras todos los cuadros miden lo mismo, pero apenas uno es
+  # más corto que el anterior quedan pedazos del viejo intercalados entre las
+  # líneas del nuevo. \e[0J limpia de ahí para abajo, no los huecos de arriba.
+  printf '\e[?2026h\e[H%s\e[0J\e[?2026l' "${1//$'\n'/$'\e[K'$'\n'}"
 }
 
 cursor_off() { printf '\e[?25l'; }

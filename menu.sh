@@ -157,12 +157,16 @@ net_medir() {
 }
 
 cpu_snap() { awk '/^cpu /{idle=$5; tot=0; for(i=2;i<=NF;i++) tot+=$i; print idle, tot}' /proc/stat; }
+
+# SIN sleep. Antes dormía 0.2s para tomar dos muestras, y ese bloqueo era la
+# mayor parte del retardo al teclear. Ahora guarda la muestra anterior entre
+# vueltas del bucle: la ventana pasa a ser ~1s, que además mide mejor.
+CPU_I_ANT=0; CPU_T_ANT=0
 cpu_pct() {
-  # top -bn1 tarda ~1s y la primera muestra es basura. /proc/stat con una
-  # ventana de 0.2s es rápido y correcto.
-  local i1 t1 i2 t2
-  read -r i1 t1 < <(cpu_snap); sleep 0.2; read -r i2 t2 < <(cpu_snap)
-  local dt=$(( t2 - t1 )) di=$(( i2 - i1 ))
+  local i2 t2
+  read -r i2 t2 < <(cpu_snap)
+  local dt=$(( t2 - CPU_T_ANT )) di=$(( i2 - CPU_I_ANT ))
+  CPU_I_ANT=$i2; CPU_T_ANT=$t2
   (( dt <= 0 )) && { echo 0; return; }
   echo $(( (100 * (dt - di)) / dt ))
 }
@@ -198,6 +202,7 @@ cargar_vivos() {   # lo que cambia en cada refresco
   net_medir
   CONEX=$(conexiones)
   USUARIOS=$(awk -F: '$3>=1000 && $1!="nobody"{n++} END{print n+0}' /etc/passwd 2>/dev/null)
+  PANELES_CACHE="$(banda; echo; paneles)"   # se rearma sólo al refrescar datos
 
   cargar_puertos
   servicio_activo ssh sshd          && ST_SSH=on   || ST_SSH=off
@@ -327,7 +332,7 @@ menu() {
   # ancho según el cliente y desalinean la columna.
   opcion 01 "👥" "CONTROL DE USUARIOS"      "$M_USER"   "$(sel_de 01)"
   opcion 02 "🔧" "OPTIMIZAR VPS"            "$M_OPT"    "$(sel_de 02)"
-  opcion 03 "🌐" "USUARIOS ONLINE"          "$M_ONLINE" "$(sel_de 03)"
+  opcion 03 "📡" "USUARIOS ONLINE"          "$M_ONLINE" "$(sel_de 03)"
   opcion 04 "🚀" "AUTO INICIO"              "$M_AUTO"   "$(sel_de 04)"
   opcion 05 "📦" "INSTALADOR DE PROTOCOLOS" "$M_PROTO"  "$(sel_de 05)"
   opcion 06 "📊" "MONITOR EN TIEMPO REAL"   "$M_MON"    "$(sel_de 06)"
@@ -355,14 +360,14 @@ cachear_estatico() {
   CABECERA_FIJA="$(cabecera)"
 }
 
+# Al teclear sólo cambian el menú y el prompt. Los paneles se reusan desde
+# la caché: rearmarlos en cada tecla costaba ~40ms de más.
 pintar() {
   echo
   printf '%s\n' "$REGLA_FIJA"
   printf '%s\n' "$CABECERA_FIJA"
   echo
-  banda
-  echo
-  paneles
+  printf '%s\n' "$PANELES_CACHE"
   echo
   menu
   echo
@@ -422,22 +427,33 @@ cachear_estatico
 trap 'printf "\e[?25h\e[?2026l\e[0m\n"; clear' EXIT INT TERM
 printf '\e[?25l'
 clear
-net_medir           # primera lectura: fija la base para calcular velocidad
+net_medir           # primera lectura: fija la base de red
+cpu_pct >/dev/null  # primera muestra de CPU: la siguiente ya mide un intervalo
 BUF=""
+SEG_ANT=-1
 
 # El bucle NO se queda bloqueado en `read`: espera una tecla hasta 0.8s y si
 # no llega, repinta con datos frescos. Así la hora y los recursos avanzan
 # solos. Se lee tecla por tecla (en vez de `read -t` sobre la línea entera)
 # para no perder lo ya tecleado cuando vence el tiempo.
 while true; do
-  cargar_vivos
+  # Los datos se recogen UNA vez por segundo; el repintado va aparte. Antes se
+  # recolectaba en cada vuelta (320ms) y la tecla tardaba en aparecer.
+  printf -v ahora '%(%s)T' -1
+  if [ "$ahora" != "$SEG_ANT" ]; then cargar_vivos; SEG_ANT="$ahora"; fi
   render
-  if read -rsn1 -t 0.8 tecla; then
+  read -rsn1 -t 0.25 tecla; rc=$?
+  # read devuelve >128 si venció el tiempo y 1 si stdin se cerró. Sin separar
+  # los dos casos, al cerrarse la sesión el bucle gira a máxima velocidad y
+  # clava la CPU en 100%.
+  if (( rc == 0 )); then
     case "$tecla" in
-      "")        ejecutar "$BUF"; BUF="" ;;   # ENTER
-      $'\177'|$'\b') BUF="${BUF%?}" ;;        # borrar
-      [0-9])     [ ${#BUF} -lt 2 ] && BUF="$BUF$tecla" ;;
-      $'\e')     read -rsn2 -t 0.05 _ || true ;;  # descarta flechas
+      "")            ejecutar "$BUF"; BUF="" ;;   # ENTER
+      $'\177'|$'\b') BUF="${BUF%?}" ;;            # borrar
+      [0-9])         [ ${#BUF} -lt 2 ] && BUF="$BUF$tecla" ;;
+      $'\e')         read -rsn2 -t 0.05 _ || true ;;  # descarta flechas
     esac
+  elif (( rc <= 128 )); then
+    exit 0          # stdin cerrado: salir en vez de girar en vacío
   fi
 done

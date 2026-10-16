@@ -36,8 +36,7 @@ M_CPU=$'\e[38;2;22;92;110m'; M_MEM=$'\e[38;2;74;64;130m'
 M_RED=$'\e[38;2;110;46;84m'; M_DSK=$'\e[38;2;96;76;28m'
 E_PINK=$'\e[38;2;255;111;181m'
 
-# Nombre de la interfaz por donde sale el tráfico. Idea tomada de tu versión:
-# saber si estás mirando eth0 o venet0 importa cuando algo no cuadra.
+# Se detecta la interfaz aunque no se muestre: la usa el cálculo de tráfico.
 IFACE=$(ip route 2>/dev/null | awk '/^default/{print $5; exit}')
 [ -z "$IFACE" ] && IFACE=$(ls /sys/class/net/ 2>/dev/null | grep -v '^lo$' | head -n1)
 [ -z "$IFACE" ] && IFACE="red" 
@@ -177,7 +176,7 @@ hum_mb() { awk -v m="$1" 'BEGIN{ if (m>=1024) printf "%.1fG", m/1024; else print
 
 paneles_abajo() {
   MARCO_I="$M_RED"; MARCO_D="$M_DSK"
-  techo "RED · $IFACE" "$E_PINK" "DISCO Y SISTEMA" "$E_WARN" "$M_RED" "$M_DSK"
+  techo "RED VPS" "$E_PINK" "DISCO Y SISTEMA" "$E_WARN" "$M_RED" "$M_DSK"
   f_izq "BAJADA"  "$(cuerpo_txt "$(bytes_hum "$NET_RX_VEL")/s")" ; f_der "USO"     "$(cuerpo_barra "$DSK_PCT" "")"
   f_izq "SUBIDA"  "$(cuerpo_txt "$(bytes_hum "$NET_TX_VEL")/s")" ; f_der "ESPACIO" "$(cuerpo_txt "$DSK_USA de $DSK_TOT")"
   f_izq "TOTAL ▼" "$(cuerpo_txt "$(bytes_hum "$NET_RX_TOT")")" ; f_der "SESIONES" "$(cuerpo_txt "$SESIONES abiertas")"
@@ -209,20 +208,23 @@ tabla_procesos() {
   for ((; i<5; i++)); do printf '  %s\n' "$(pad '' 76)"; done
 }
 
-# El pie usa el MISMO formato de fila que las opciones del menú, para que la
-# salida se vea como una opción más y no como una nota al pie.
-# 2 + bar1 + sp + chip4 + sp + emoji2 + sp + sep1 + sp + texto 52 + estado 12 = 78
+# El pie es una fila de opción como las demás, más el prompt donde se teclea.
+# 2 + bar1 + sp + chip4 + sp + emoji2 + sp + sep1 + sp + texto 64 = 78
 pie() {
   local etxt col
   if [ "$PAUSA" = 1 ]; then etxt="⏸ PAUSADO"; col="$E_WARN"; else etxt="▶ EN VIVO"; col="$E_OK"; fi
-  printf '  %s▏%s %s %s %s %s%s%s\n' \
+  printf '  %s▏%s %s %s %s %s%s\n' \
     "$E_OFF" "$E_RST" \
     "$B_CHIP$E_P1 00 $E_RST" \
     "$E_P2🚪$E_RST" \
     "$E_OFF│$E_RST" \
-    "$E_BLD$E_TXT$(pad 'VOLVER AL MENÚ' 32)$E_RST" \
-    "$E_MUT$(pad 'P pausar' 20)$E_RST" \
-    "$E_BLD$col$(rpad "$etxt" 12)$E_RST"
+    "$E_BLD$E_TXT$(pad 'VOLVER AL MENÚ' 64)" "$E_RST"
+  # "  ❯ Opción: " ocupa 12 columnas, más lo tecleado y el cursor
+  local vis=$(( 12 + ${#BUF} + 1 ))
+  printf '  %s%s❯%s %s%sOpción:%s %s%s%s\e[48;2;%sm \e[0m%*s%s%s%s\n' \
+    "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$E_RST" \
+    "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( ANCHO - vis - 12 )) '' \
+    "$E_BLD$col" "$(rpad "$etxt" 12)" "$E_RST"
 }
 
 pintar() {
@@ -268,9 +270,11 @@ while true; do
   read -rsn1 -t 0.25 tecla; rc=$?
   if (( rc == 0 )); then
     case "$tecla" in
-      0)        clear; exit 0 ;;
-      p|P)      PAUSA=$(( 1 - PAUSA )) ;;
-      $'\e')    read -rsn2 -t 0.05 _ || true ;;
+      "")            case "$BUF" in 0|00) clear; exit 0 ;; esac; BUF="" ;;
+      $'\177'|$'\b') BUF="${BUF%?}" ;;
+      [0-9])         [ ${#BUF} -lt 2 ] && BUF="$BUF$tecla" ;;
+      p|P)           PAUSA=$(( 1 - PAUSA )) ;;
+      $'\e')         read -rsn2 -t 0.05 _ || true ;;
     esac
     render
   elif (( rc <= 128 )); then

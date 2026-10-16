@@ -13,6 +13,15 @@ MOD="$DIR/modules"
 # Paleta, utilería, marcos y volcado de pantalla viven en lib/ui.sh: una
 # sola copia para el menú y para todos los módulos. Si estuvieran
 # duplicados, cambiar un color acá dejaría los módulos con el viejo.
+# Si falta, `source` sigue de largo y después salen cientos de "command not
+# found" que no dicen nada. Mejor una línea clara y salir.
+if [ ! -r "$DIR/lib/ui.sh" ]; then
+  printf '\e[1;38;2;255;95;109m✖ Falta el archivo lib/ui.sh\e[0m\n'
+  printf '  Tiene que estar en: \e[1m%s/lib/ui.sh\e[0m\n' "$DIR"
+  printf '  Creá la carpeta con:  \e[1mmkdir -p %s/lib\e[0m\n' "$DIR"
+  printf '  y pegá ahí el archivo ui.sh.\n'
+  exit 1
+fi
 source "$DIR/lib/ui.sh"
 
 # ================================================================ DATOS =====
@@ -92,15 +101,11 @@ cpu_pct() {
 
 IP_PUB="";  SSH_PORTS=""
 cargar_fijos() {   # lo que no cambia: se consulta una sola vez
-  IP_PUB=$(curl -s --max-time 4 ifconfig.me 2>/dev/null)
-  [ -z "$IP_PUB" ] && IP_PUB=$(hostname -I 2>/dev/null | awk '{print $1}')
-  [ -z "$IP_PUB" ] && IP_PUB="sin red"
+  datos_sistema    # IP y SO, desde lib/ui.sh (con caché de la IP)
   # sshd_config puede no declarar Port: el valor por omisión es 22
   SSH_PORTS=$(awk '/^[[:space:]]*Port[[:space:]]+[0-9]+/{print $2}' \
               /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | sort -un | tr '\n' ' ')
   [ -z "${SSH_PORTS// }" ] && SSH_PORTS="22 "
-  SO=$(awk -F'"' '/^PRETTY_NAME/{print $2}' /etc/os-release 2>/dev/null)
-  [ -z "$SO" ] && SO="Linux"
   # La versión sale del archivo VERSION, que escribe el instalador y actualiza
   # el módulo 07. Escrita a mano en la cabecera quedaba desfasada al actualizar.
   VER=$(cat "$DIR/VERSION" 2>/dev/null)
@@ -109,7 +114,6 @@ cargar_fijos() {   # lo que no cambia: se consulta una sola vez
 
 cargar_vivos() {   # lo que cambia en cada refresco
   FECHA=$(date "+%d/%m/%Y %H:%M:%S")
-  HORA=$(date "+%H:%M:%S")
   read -r RAM_USA RAM_TOT < <(free -m 2>/dev/null | awk '/^Mem:/{print $3, $2}')
   : "${RAM_USA:=0}"; : "${RAM_TOT:=1}"
   RAM_PCT=$(( RAM_USA * 100 / (RAM_TOT>0?RAM_TOT:1) ))
@@ -176,24 +180,7 @@ cabecera() {
   done
 }
 
-# La HORA va pegada al borde derecho, que cae en la misma columna donde
-# termina la regla de colores de arriba. El hueco del medio se calcula, no
-# se escribe a mano: así el ancho del SO o de la IP no corre la hora.
-banda() {
-  # Tres bloques: IP a la izquierda, SO centrado, HORA a la derecha. Los dos
-  # huecos se calculan para que el SO quede centrado en las 78 columnas y los
-  # extremos coincidan con la regla de colores (columnas 2 y 78).
-  local izq="  IP $IP_PUB"
-  local cen="SO $SO"
-  local der="HORA $HORA"
-  local sitio=$(( ANCHO - ${#izq} - ${#der} - 4 ))   # 2 de hueco mínimo a cada lado
-  (( ${#cen} > sitio )) && cen="${cen:0:sitio}"
-  local g1=$(( (ANCHO - ${#cen}) / 2 - ${#izq} ))
-  (( g1 < 2 )) && g1=2
-  local g2=$(( ANCHO - ${#izq} - g1 - ${#cen} - ${#der} ))
-  (( g2 < 2 )) && { g2=2; g1=$(( ANCHO - ${#izq} - ${#cen} - ${#der} - g2 )); }
-  printf '%s%s%*s%s%*s%s%s\n' "$B_BAND" "$izq" "$g1" '' "$cen" "$g2" '' "$der" "$E_RST"
-}
+# banda() y datos_sistema() viven en lib/ui.sh: los módulos usan la misma.
 
 # Ambas cajas miden 37 columnas: bordes en 2, 38, 41 y 77. El contenido
 # entre bordes mide SIEMPRE 35. Se arma el cuerpo primero y se imprime con
@@ -368,7 +355,10 @@ cachear_estatico
 cachear_menu
 # El cursor real parpadeando mientras se repinta suma al temblor: se oculta
 # y se dibuja uno propio en el prompt. El trap lo devuelve pase lo que pase.
-trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear' EXIT INT TERM
+# El manejador de INT/TERM DEBE salir. Si sólo limpia, Ctrl+C ejecuta el
+# trap y el bucle sigue corriendo: no hay forma de cortar el script.
+trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear' EXIT
+trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear; exit 130' INT TERM
 cursor_off
 clear
 net_medir           # primera lectura: fija la base de red

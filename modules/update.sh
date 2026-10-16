@@ -26,7 +26,7 @@ git_k() { git -C "$DIR" "$@" 2>/dev/null; }
 
 VER_LOCAL="$(cat "$ARCH_VER" 2>/dev/null)"; [ -z "$VER_LOCAL" ] && VER_LOCAL="—"
 RAMA="";  SHA_LOCAL="—"; SHA_REMOTO="—"; ATRAS=0; FECHA_REM="—"; AUTOR="—"
-NOVEDADES=()
+NOVEDADES=(); REVISADO="—"
 ESTADO="revisando"   # revisando · al_dia · disponible · instalando · listo · error
 MENSAJE=""; BUF=""; SELLO=""
 
@@ -43,7 +43,7 @@ revisar() {
     FECHA_REM="16/10 01:42"; AUTOR="linerlander"
     NOVEDADES=("Rediseño del panel de usuarios" "Arregla el conteo de sesiones"
                "Agrega soporte WebSocket")
-    ESTADO="disponible"; return
+    REVISADO="$(date +%H:%M:%S)"; ESTADO="disponible"; return
   fi
 
   if [ ! -d "$DIR/.git" ]; then
@@ -68,6 +68,7 @@ revisar() {
   # El historial de commits ES la lista de novedades: no hay que escribirla.
   mapfile -t NOVEDADES < <(git_k log --format=%s "HEAD..origin/$RAMA" | head -12)
 
+  REVISADO="$(date +%H:%M:%S)"
   if [ "$ATRAS" -gt 0 ]; then ESTADO="disponible"; else ESTADO="al_dia"; fi
 }
 
@@ -82,17 +83,34 @@ fila_der() {
   else                     caja_der "$(pad '' 35)"; fi
 }
 
+# Los identificadores de commit y la rama son detalle interno: no le dicen
+# nada al que usa el panel. Se muestra lo que sí importa.
 paneles() {
-  local marca="" tit="CAMBIOS NUEVOS"
-  [ "$ESTADO" = "disponible" ] && marca="NUEVOS"
-  [ "$ATRAS" -eq 0 ] 2>/dev/null && tit="SIN CAMBIOS"
-  techo "ESTADO" "$E_P1" "$tit" "$E_P2"
-  fila_izq "VERSIÓN"  "$VER_LOCAL"  "$E_TXT"      ""      ; fila_der "${NOVEDADES[0]:-}"
-  fila_izq "RAMA"     "${RAMA:-—}"  "$E_INFO"     ""      ; fila_der "${NOVEDADES[1]:-}"
-  fila_izq "TU COPIA" "$SHA_LOCAL"  "$E_TXT"      ""      ; fila_der "${NOVEDADES[2]:-}"
-  fila_izq "EN GITHUB" "$SHA_REMOTO" "$E_BLD$E_OK" "$marca"; fila_der "${NOVEDADES[3]:-}"
-  fila_izq "ÚLTIMO"   "$FECHA_REM"  "$E_MUT"      ""      ; fila_der "${NOVEDADES[4]:-}"
+  local marca="" tit="NOVEDADES" est col
+  case "$ESTADO" in
+    disponible) est="Atrasado"; col="$E_BLD$E_WARN"; marca="NUEVO" ;;
+    listo)      est="Al día";         col="$E_BLD$E_OK" ;;
+    al_dia)     est="Al día";         col="$E_BLD$E_OK" ;;
+    error)      est="Sin conexión";   col="$E_BLD$E_ERR" ;;
+    *)          est="Consultando…";   col="$E_MUT" ;;
+  esac
+  [ "$ATRAS" -eq 0 ] 2>/dev/null && tit="SIN NOVEDADES"
+  techo "ESTADO DEL PANEL" "$E_P1" "$tit" "$E_P2"
+  fila_izq "VERSIÓN"   "$VER_LOCAL"                 "$E_BLD$E_TXT" ""     ; fila_der "${NOVEDADES[0]:-}"
+  fila_izq "ESTADO"    "$est"                       "$col"         "$marca"; fila_der "${NOVEDADES[1]:-}"
+  fila_izq "NOVEDADES" "$(novedades_txt)"           "$E_TXT"       ""     ; fila_der "${NOVEDADES[2]:-}"
+  fila_izq "PUBLICADO" "$FECHA_REM"                 "$E_MUT"       ""     ; fila_der "${NOVEDADES[3]:-}"
+  fila_izq "REVISADO"  "$REVISADO"                  "$E_MUT"       ""     ; fila_der "${NOVEDADES[4]:-}"
   piso
+}
+
+novedades_txt() {
+  case "$ESTADO" in
+    disponible) [ "$ATRAS" = 1 ] && printf '1 cambio' || printf '%s cambios' "$ATRAS" ;;
+    error)      printf '—' ;;
+    revisando)  printf '—' ;;
+    *)          printf 'ninguna' ;;
+  esac
 }
 
 # Fila de paso: 2 + ▏1 + 1 + glifo 1 + 1 + texto 38 + 1 + detalle 33 = 78
@@ -110,12 +128,13 @@ fila_paso() {
 
 ACC_NUM=(01 02 00)
 ACC_EMO=("📥" "📋" "🚪")
-ACC_TXT=("ACTUALIZAR AHORA" "VER TODOS LOS CAMBIOS" "VOLVER AL MENÚ")
+ACC_TXT=("ACTUALIZAR" "VER TODOS LOS CAMBIOS" "VOLVER AL MENÚ")
 acciones() {
   local i n f bar chip col
   for i in 0 1 2; do
     n="${ACC_NUM[i]}"
-    if [ "$i" = 0 ] && [ "$ESTADO" != "disponible" ]; then col="$E_OFF"; else col="$E_TXT"; fi
+    # 01 queda siempre activa: si no hay nada nuevo, vuelve a consultar.
+    col="$E_TXT"
     if [ -n "$BUF" ] && { [ "$BUF" = "$n" ] || [ "$BUF" = "${n#0}" ]; }; then
       f="$B_SEL"; bar="$E_P1▌$E_RST$f"; chip="$B_CHIP$E_BLD$E_P1"
     else
@@ -130,9 +149,9 @@ acciones() {
 aviso() {
   local t
   case "$ESTADO" in
-    al_dia)     t="✔ Tu copia está al día con GitHub" ;;
-    disponible) t="▸ Hay $ATRAS commit(s) nuevo(s) · pulsá 01 para traerlos" ;;
-    listo)      t="✔ Actualizado · $ATRAS commit(s) aplicados" ;;
+    al_dia)     t="✔ Tu panel está al día" ;;
+    disponible) t="▸ Hay $(novedades_txt) sin aplicar · pulsá 01 para actualizar" ;;
+    listo)      t="✔ Panel actualizado a la versión $VER_LOCAL" ;;
     error)      t="✖ $MENSAJE" ;;
     instalando) t="◐ Actualizando… no cierres la terminal" ;;
     revisando)  t="◐ Consultando GitHub…" ;;
@@ -156,6 +175,8 @@ prompt() {
 pintar() {
   echo
   printf '%s\n' "$REGLA_FIJA"
+  echo
+  banda
   echo
   encabezado "ACTUALIZAR SCRIPT" "KIRA v$VER_LOCAL"
   echo
@@ -279,6 +300,7 @@ ver_cambios() {
 # ================================================================= MAIN =====
 exigir_ancho
 REGLA_FIJA="$(regla '▀' 76)"
+datos_sistema
 # El manejador de INT/TERM DEBE salir. Si sólo limpia, Ctrl+C ejecuta el
 # trap y el bucle sigue corriendo: no hay forma de cortar el script.
 trap 'cursor_on; printf "\e[?2026l\e[0m\n"' EXIT
@@ -295,7 +317,13 @@ procesar() {
   case "$1" in
     "")
       case "$BUF" in
-        1|01) [ "$ESTADO" = "disponible" ] && { ESTADO="instalando"; render; actualizar; } ;;
+        1|01)
+          if [ "$ESTADO" = "disponible" ]; then
+            ESTADO="instalando"; render; actualizar
+          else
+            revisar     # nada pendiente: se vuelve a consultar GitHub
+            [ "$ESTADO" = "disponible" ] && { ESTADO="instalando"; render; actualizar; }
+          fi ;;
         2|02) ver_cambios ;;
         0|00) exit 0 ;;
         9|99) revisar ;;     # volver a consultar sin salir del módulo

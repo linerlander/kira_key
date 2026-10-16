@@ -141,6 +141,42 @@ encabezado() { # $1=titulo $2=texto derecho
          "$E_OFF" "$(rep '─' "$d")" "$E_RST" "$E_BLD$E_P2" "$2" "$E_RST"
 }
 
+# ======================================================= BANDA DEL SISTEMA ==
+# La usan el menú y los módulos, para que todas las pantallas lleven la misma
+# cabecera. La IP se guarda en caché: consultarla cuesta segundos y no cambia.
+CACHE_IP="/tmp/kira-ip"
+IP_PUB=""; SO=""; HORA=""
+
+datos_sistema() {
+  if [ -r "$CACHE_IP" ] && [ -n "$(find "$CACHE_IP" -mmin -60 2>/dev/null)" ]; then
+    IP_PUB="$(cat "$CACHE_IP")"
+  else
+    IP_PUB=$(curl -s --max-time 4 ifconfig.me 2>/dev/null)
+    [ -z "$IP_PUB" ] && IP_PUB=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [ -z "$IP_PUB" ] && IP_PUB="sin red"
+    printf '%s' "$IP_PUB" > "$CACHE_IP" 2>/dev/null
+  fi
+  SO=$(awk -F'"' '/^PRETTY_NAME/{print $2}' /etc/os-release 2>/dev/null)
+  [ -z "$SO" ] && SO="Linux"
+}
+
+# Tres bloques: IP a la izquierda, SO centrado, HORA a la derecha. Los huecos
+# se calculan para que el SO quede centrado y los extremos coincidan con la
+# regla de colores (columnas 2 y 78).
+banda() {
+  HORA=$(date "+%H:%M:%S")
+  local izq="  IP $IP_PUB"
+  local cen="SO $SO"
+  local der="HORA $HORA"
+  local sitio=$(( ANCHO - ${#izq} - ${#der} - 4 ))
+  (( ${#cen} > sitio )) && cen="${cen:0:sitio}"
+  local g1=$(( (ANCHO - ${#cen}) / 2 - ${#izq} ))
+  (( g1 < 2 )) && g1=2
+  local g2=$(( ANCHO - ${#izq} - g1 - ${#cen} - ${#der} ))
+  (( g2 < 2 )) && { g2=2; g1=$(( ANCHO - ${#izq} - ${#cen} - ${#der} - g2 )); }
+  printf '%s%s%*s%s%*s%s%s\n' "$B_BAND" "$izq" "$g1" '' "$cen" "$g2" '' "$der" "$E_RST"
+}
+
 # ============================================================= PANTALLA =====
 # Un cuadro = UNA escritura. Si cada printf sale suelto, por la red la
 # pantalla se ve temblar mientras se dibuja. \e[?2026h/l marca el cuadro como

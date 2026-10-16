@@ -67,18 +67,30 @@ CAT_CLA=(SSH   DROPBEAR         SSL         WS          V2RAY   SS            OV
 declare -A PUERTO_DE=()
 PUERTOS="—"
 
-# Arma "a · b +N": los primeros $1 puertos y, si hay más, cuántos quedaron.
-# Cortar y poner "…" deja al que mira sin saber si falta uno o faltan diez.
-lista_corta() { # $1=cuántos mostrar  $2..=puertos
-  local max="$1"; shift
-  local n=$# salida="" i=0 p
-  for p in "$@"; do
-    (( i >= max )) && break
-    [ -n "$salida" ] && salida="$salida · "
-    salida="$salida$p"; i=$(( i + 1 ))
+# Arma la lista de puertos que entra en el ancho dado. Mete todos los que
+# quepan hasta el tope y, si quedan afuera, avisa cuántos con "+N". Cortar con
+# "…" deja al que mira sin saber si falta uno o faltan diez.
+lista_corta() { # $1=ancho disponible  $2=tope de puertos  $3..=puertos
+  local ancho="$1" tope="$2"; shift 2
+  local n=$# primero="${1:-}"
+  (( n == 0 )) && { printf ''; return; }
+  (( tope > n )) && tope=$n
+  local i k p s largo resto
+  for (( i=tope; i>=1; i-- )); do
+    s=""; k=0; largo=0
+    for p in "$@"; do
+      (( k >= i )) && break
+      [ -n "$s" ] && { s="$s · "; largo=$(( largo + 3 )); }
+      s="$s$p"; largo=$(( largo + ${#p} )); k=$(( k + 1 ))
+    done
+    resto=$(( n - i ))
+    (( resto > 0 )) && { s="$s +$resto"; largo=$(( largo + 2 + ${#resto} )); }
+    # El ancho se calcula sumando, no con ${#s}: el separador · ocupa DOS
+    # bytes, y si la terminal no quedó en UTF-8 bash cuenta bytes en vez de
+    # caracteres. Los puertos son dígitos, así que medirlos siempre da igual.
+    (( largo <= ancho )) && { printf '%s' "$s"; return; }
   done
-  (( n > max )) && salida="$salida +$(( n - max ))"
-  printf '%s' "$salida"
+  printf '%s' "$primero"      # ni uno solo entra: al menos el primero
 }
 
 # Qué programa corresponde a qué servicio del catálogo.
@@ -96,19 +108,30 @@ clave_servicio() {
   esac
 }
 
-detectar_puertos() {
-  PUERTO_DE=(); PUERTOS=""
-  local pto prog cla
-  declare -A visto=()
+declare -A PTO_VISTO=()
+agrega_puerto() { # $1=clave del servicio $2=puerto
+  local c="$1" p="$2"
+  # Sin clave es un programa que no nos interesa (systemd-resolve, postgres…).
+  # Hay que cortar ACÁ: con la clave vacía, PUERTO_DE[] tira "bad array
+  # subscript" y además el puerto queda marcado como visto, así que si otro
+  # servicio de verdad usara ese puerto, ya no se registraría.
+  [ -z "$c" ] && return
+  [[ "$p" =~ ^[0-9]+$ ]] || return
+  (( p >= 1 && p <= 65535 )) || return
+  [ -n "${PTO_VISTO[$p]:-}" ] && return      # un puerto, un solo servicio
+  PTO_VISTO[$p]=1
+  if [ -z "${PUERTO_DE[$c]:-}" ]; then PUERTO_DE[$c]="$p"
+  else PUERTO_DE[$c]="${PUERTO_DE[$c]} $p"; fi
+}
 
+# --- fuente 1: los sockets que están escuchando --------------------------
+# Es la fuente buena: dice lo que el sistema está haciendo AHORA, no lo que
+# algún archivo dice que debería hacer.
+puertos_de_sockets() {
+  local pto prog
   while read -r pto prog; do
-    [ -z "$pto" ] && continue
-    cla="$(clave_servicio "$prog")"
-    [ -z "$cla" ] && continue              # programa que no es un servicio nuestro
-    [ -n "${visto[$pto]:-}" ] && continue  # un puerto, una sola vez (IPv4 e IPv6 repiten)
-    visto[$pto]=1
-    if [ -z "${PUERTO_DE[$cla]:-}" ]; then PUERTO_DE[$cla]="$pto"
-    else PUERTO_DE[$cla]="${PUERTO_DE[$cla]} $pto"; fi
+    [ -z "$prog" ] && continue
+    agrega_puerto "$(clave_servicio "$prog")" "$pto"
   done < <(
     { ss -tlnpH 2>/dev/null; ss -ulnpH 2>/dev/null; } | awk '
       {
@@ -117,26 +140,81 @@ detectar_puertos() {
         # el campo de proceso viene como:  users:(("sshd",pid=811,fd=3))
         if (match($0, /users:\(\("[^"]+"/)) prog = substr($0, RSTART+9, RLENGTH-10)
         if (p ~ /^[0-9]+$/ && prog != "") print p, prog
-      }' | sort -n -u)
+      }')
+}
 
-  # Sin ss, o sin permiso para ver el proceso, al menos el SSH de la
-  # configuración. Es lo mínimo que el cliente necesita.
-  if [ -z "${PUERTO_DE[SSH]:-}" ]; then
-    local p
-    p=$(awk 'tolower($1)=="port" && $2 ~ /^[0-9]+$/ {print $2; exit}' /etc/ssh/sshd_config 2>/dev/null)
-    [ -z "$p" ] && p=22
-    PUERTO_DE[SSH]="$p"
+# --- fuente 2: la línea de comandos de cada demonio ----------------------
+# ss a veces no puede decir de quién es el socket y esa línea se pierde
+# entera. Acá se recupera leyendo con qué argumentos arrancó cada programa:
+# dropbear usa -p, badvpn-udpgw usa --listen-addr ip:puerto.
+puertos_de_procesos() {
+  local d c cla cmd tok espera
+  for d in /proc/[0-9]*; do
+    [ -r "$d/comm" ] || continue
+    read -r c < "$d/comm" 2>/dev/null || continue
+    cla="$(clave_servicio "$c")"
+    [ -z "$cla" ] && continue
+    cmd=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)
+    [ -z "$cmd" ] && continue
+    espera=0
+    for tok in $cmd; do
+      if (( espera )); then
+        espera=0
+        agrega_puerto "$cla" "${tok##*:}"     # sirve para 109 y para ip:109
+        continue
+      fi
+      case "$tok" in
+        -p|--port|-L|--listen|--listen-addr|--local-addr) espera=1 ;;
+        --port=*|--listen-addr=*) agrega_puerto "$cla" "${tok##*[=:]}" ;;
+        -p[0-9]*)                 agrega_puerto "$cla" "${tok#-p}" ;;
+      esac
+    done
+  done
+}
+
+# --- fuente 3: los archivos de configuración -----------------------------
+# stunnel nunca lleva el puerto en la línea de comandos, siempre está en el
+# archivo. Y el SSH es lo mínimo que el cliente necesita saber.
+puertos_de_config() {
+  local f pt
+  for f in /etc/stunnel/*.conf; do
+    [ -r "$f" ] || continue
+    while read -r pt; do agrega_puerto SSL "$pt"; done < <(
+      awk -F= 'tolower($1) ~ /^[ \t]*accept[ \t]*$/ {
+                 gsub(/[ \t]/, "", $2); n = split($2, a, ":"); print a[n] }' "$f" 2>/dev/null)
+  done
+  if [ -r /etc/default/dropbear ]; then
+    while read -r pt; do agrega_puerto DROPBEAR "$pt"; done < <(
+      awk -F'[="]' '/^[ \t]*DROPBEAR_PORT/ { print $2 }' /etc/default/dropbear 2>/dev/null)
   fi
+  if [ -z "${PUERTO_DE[SSH]:-}" ]; then
+    pt=$(awk 'tolower($1)=="port" && $2 ~ /^[0-9]+$/ { print $2 }' /etc/ssh/sshd_config 2>/dev/null | head -4)
+    [ -z "$pt" ] && pt=22
+    for f in $pt; do agrega_puerto SSH "$f"; done
+  fi
+}
+
+detectar_puertos() {
+  PUERTO_DE=(); PTO_VISTO=(); PUERTOS=""
+  puertos_de_sockets
+  puertos_de_procesos
+  puertos_de_config
+
+  # Cada servicio con sus puertos de menor a mayor. Al venir de tres fuentes
+  # distintas llegan desordenados, y una lista desordenada parece un error.
+  local c
+  for c in "${!PUERTO_DE[@]}"; do
+    PUERTO_DE[$c]=$(printf '%s\n' ${PUERTO_DE[$c]} | sort -n | tr '\n' ' ')
+  done
 
   # Resumen para la caja de la derecha mientras se carga el formulario. Van
-  # sólo los tres primeros: la lista completa aparece al crear la cuenta, y
-  # un renglón lleno de números con puntos no se lee, se mancha.
+  # sólo los tres primeros: un renglón lleno de números no se lee, se mancha.
   local -a todos=()
-  local i c
+  local i p
   for i in "${!CAT_CLA[@]}"; do
-    for c in ${PUERTO_DE[${CAT_CLA[i]}]:-}; do todos+=("$c"); done
+    for p in ${PUERTO_DE[${CAT_CLA[i]}]:-}; do todos+=("$p"); done
   done
-  PUERTOS="$(lista_corta 3 "${todos[@]}")"
+  PUERTOS="$(lista_corta 22 3 "${todos[@]}")"
   [ -z "$PUERTOS" ] && PUERTOS="—"
 }
 
@@ -215,12 +293,16 @@ srv_der() { # $1=índice del catálogo
   if [ -z "$v" ]; then
     v="OFF"; col="$E_BLD$E_ERR"
   else
-    v="$(lista_corta 2 $v)"; col="$E_BLD$E_OK"
+    # Hasta 3 puertos se muestran todos. Pasando de 3 van sólo 2 y el resto
+    # se resume en el +N: una fila con cuatro números es un manchón.
+    local -a pts=($v) tope=3
+    (( ${#pts[@]} > 3 )) && tope=2
+    v="$(lista_corta 18 "$tope" "${pts[@]}")"; col="$E_BLD$E_OK"
   fi
-  # 1 de sangría + nombre 19 + puerto 15 = 35
+  # 1 de sangría + nombre 16 + puerto 18 = 35
   # El nombre va en el mismo gris que IP, USUARIO y CLAVE: son todas
   # etiquetas, y el color fuerte queda para el dato, que es lo que se copia.
-  caja_der " $E_MUT$(pad "${CAT_NOM[i]}" 19)$E_RST$col$(rpad "$v" 15)$E_RST" "$M_CLI"
+  caja_der " $E_MUT$(pad "${CAT_NOM[i]}" 16)$E_RST$col$(rpad "$v" 18)$E_RST" "$M_CLI"
 }
 
 paneles() {

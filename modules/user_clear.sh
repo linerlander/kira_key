@@ -38,6 +38,10 @@ PANTALLA=lista            # lista · confirmar · resultado
 UMBRAL_VENCE=7
 
 declare -a U_NOM=() U_VENCE=() U_DIAS=() U_CONEX=() U_ESTADO=()
+# OJO: las marcas van por NOMBRE DE USUARIO, no por posición en la lista.
+# La pantalla se refresca sola, y si una cuenta vence o alguien se conecta,
+# el orden puede cambiar entre un refresco y otro. Guardadas por posición,
+# el [x] terminaría apuntando a OTRO usuario y se borraría al que no era.
 declare -A MARCADA=() NOM_DE_UID=()
 BORRADAS=0; FALLADAS=0
 declare -a DETALLE=()
@@ -116,7 +120,7 @@ cargar_cuentas() {
         if   [ -n "${ES_DEMO[$nom]:-}" ]; then est="prueba"
         elif (( dias == 99999 ));         then est="sin vencimiento"
         elif (( dias < 0 ));              then est="vencida"
-        elif (( dias <= UMBRAL_VENCE ));  then est="por vencer"
+        elif (( dias <= UMBRAL_VENCE ));  then est="pronto"
         else                                   est="activa"; fi ;;
     esac
 
@@ -149,7 +153,7 @@ color_estado() {
   case "$1" in
     vencida)         printf '%s' "$E_ERR" ;;
     bloqueada)       printf '%s' "$E_ERR" ;;
-    'por vencer')    printf '%s' "$E_WARN" ;;
+    pronto)          printf '%s' "$E_WARN" ;;
     prueba)          printf '%s' "$E_P2" ;;
     activa)          printf '%s' "$E_OK" ;;
     *)               printf '%s' "$E_MUT" ;;
@@ -162,7 +166,7 @@ fila_usuario() { # $1=índice global
   # llama usa una variable que también se llama i.
   local i="$1" marca col fondo="" n
   n=$(( i + 1 ))
-  if [ "${MARCADA[$i]:-}" = 1 ]; then marca="[x]"; fondo="$B_SEL"; else marca="[ ]"; fi
+  if [ "${MARCADA[${U_NOM[i]}]:-}" = 1 ]; then marca="[x]"; fondo="$B_SEL"; else marca="[ ]"; fi
   col="$(color_estado "${U_ESTADO[i]}")"
   printf '  %s%s%s%s %s%s%s %s%s%s %s%s %s %s%s %s%s%s%s\n' \
     "$fondo" "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST$fondo" \
@@ -263,6 +267,7 @@ pintar_lista() {
   printf '  %s  %s\n' "$(opcion '77' 'PÁGINA ANTERIOR')"    "$(opcion '88' 'PÁGINA SIGUIENTE')"
   echo
   linea_aviso
+  prompt
 }
 
 pintar_confirmar() {
@@ -280,7 +285,7 @@ pintar_confirmar() {
   printf '  %s%s%s\n' "$E_BLD$E_TXT" "$(pad "Se van a borrar estas $(marcadas_total) cuentas:" 76)" "$E_RST"
   echo
   for i in "${!U_NOM[@]}"; do
-    [ "${MARCADA[$i]:-}" = 1 ] || continue
+    [ "${MARCADA[${U_NOM[i]}]:-}" = 1 ] || continue
     (( n++ ))
     if (( n > 12 )); then
       printf '  %s%s%s\n' "$E_MUT" "$(pad "… y $(( $(marcadas_total) - 12 )) más" 76)" "$E_RST"
@@ -298,6 +303,7 @@ pintar_confirmar() {
   printf '  %s  %s\n' "$(opcion '01' 'SÍ, BORRARLAS')" "$(opcion '00' 'NO, VOLVER')"
   echo
   linea_aviso
+  prompt
 }
 
 pintar_resultado() {
@@ -328,6 +334,7 @@ pintar_resultado() {
   opcion_ancha '00' 'VOLVER AL PANEL' 
   echo
   linea_aviso
+  prompt
 }
 
 pintar() {
@@ -338,14 +345,27 @@ pintar() {
   esac
 }
 
-preguntar() { # $1=etiqueta -> RESP
-  local f; f="$(pintar)"
-  volcar "$f"
-  printf '\n  %s%s❯%s %s%s%s%s %s' "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$1" "$E_RST" "$E_BLD$E_P1"
-  cursor_on
-  IFS= read -r RESP
-  cursor_off
-  printf '%s' "$E_RST"
+# El prompt se dibuja DENTRO del cuadro, con lo tecleado y un cursor propio.
+# Antes se usaba `read -r` bloqueante: la pantalla quedaba congelada hasta que
+# se apretaba ENTER, así que las conexiones y los días no se movían nunca.
+prompt() {
+  local vis=$(( 12 + ${#BUF} + 1 ))
+  printf '  %s%s❯%s %s%sOpción:%s %s%s%s\e[48;2;%sm \e[0m%*s\n' \
+    "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$E_RST" \
+    "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( ANCHO - vis )) ''
+}
+render() { local f; f="$(pintar)"; volcar "$f"; }
+
+# Se lee tecla por tecla para poder repintar mientras tanto. Se aceptan
+# espacios porque la idea es poder escribir varios números de una: "41 42".
+procesar() {
+  case "$1" in
+    "")            ejecutar "$BUF"; BUF="" ;;
+    $'\177'|$'\b') BUF="${BUF%?}" ;;
+    [0-9])         (( ${#BUF} < 24 )) && BUF="$BUF$1" ;;
+    ' ')           [ -n "$BUF" ] && [ "${BUF: -1}" != " " ] && BUF="$BUF " ;;
+    $'\e')         read -rsn2 -t 0.05 _ || true ;;   # descarta flechas
+  esac
 }
 
 # =============================================================== BORRADO ====
@@ -389,7 +409,7 @@ borrar_marcadas() {
   mkdir -p "$DIR/db"
   local i fecha; printf -v fecha '%(%F %H:%M)T' -1
   for i in "${!U_NOM[@]}"; do
-    [ "${MARCADA[$i]:-}" = 1 ] || continue
+    [ "${MARCADA[${U_NOM[i]}]:-}" = 1 ] || continue
     if borrar_una "${U_NOM[i]}"; then
       (( BORRADAS++ ))
       printf '%s %s\n' "$fecha" "${U_NOM[i]}" >> "$DIR/db/borrados"
@@ -412,51 +432,71 @@ cursor_off
 clear
 cargar_cuentas
 
-while true; do
+BUF=""
+SEG_ANT=0
+
+# Lo que hace cada opción, una vez que se apretó ENTER.
+ejecutar() {
+  local entrada="$1" tok idx nom_sel
+  AVISO=""
   case "$PANTALLA" in
     lista)
-      preguntar "Opción:"
-      AVISO=""
-      [ -z "$RESP" ] && { clear; exit 0; }
-      case "$RESP" in
-        0|00) clear; exit 0 ;;
-        77)   (( PAGINA > 0 )) && PAGINA=$(( PAGINA - 1 )) || AVISO="Ya estás en la primera página" ;;
-        88)   (( PAGINA + 1 < $(paginas) )) && PAGINA=$(( PAGINA + 1 )) || AVISO="Ya estás en la última página" ;;
-        99)
-          if (( $(marcadas_total) == 0 )); then AVISO="No marcaste ninguna cuenta"
-          else PANTALLA=confirmar; fi ;;
+      case "$entrada" in
+        ""|0|00) clear; exit 0 ;;
+        77) (( PAGINA > 0 )) && PAGINA=$(( PAGINA - 1 )) || AVISO="Ya estás en la primera página" ;;
+        88) (( PAGINA + 1 < $(paginas) )) && PAGINA=$(( PAGINA + 1 )) || AVISO="Ya estás en la última página" ;;
+        99) if (( $(marcadas_total) == 0 )); then AVISO="No elegiste ninguna cuenta"
+            else PANTALLA=confirmar; fi ;;
         *)
-          # Se aceptan varios números de una: "1 3 5"
-          marco_algo=0
-          for tok in $RESP; do
-            if [[ "$tok" =~ ^[0-9]+$ ]]; then
-              idx=$(( 10#$tok - 1 ))
-              if (( idx >= 0 && idx < ${#U_NOM[@]} )); then
-                if [ "${MARCADA[$idx]:-}" = 1 ]; then unset "MARCADA[$idx]"; else MARCADA[$idx]=1; fi
-                marco_algo=1
-              else
-                AVISO="El número $tok no existe en la lista"
-              fi
+          # Se aceptan varios números de una: "41 42 44"
+          for tok in $entrada; do
+            [[ "$tok" =~ ^[0-9]+$ ]] || { AVISO="Escribí números, o 00 para volver"; continue; }
+            idx=$(( 10#$tok - 1 ))
+            if (( idx >= 0 && idx < ${#U_NOM[@]} )); then
+              nom_sel="${U_NOM[$idx]}"
+              if [ "${MARCADA[$nom_sel]:-}" = 1 ]; then unset "MARCADA[$nom_sel]"
+              else MARCADA[$nom_sel]=1; fi
             else
-              AVISO="Escribí números, o 00 para volver"
+              AVISO="El número $tok no existe en la lista"
             fi
-          done
-          : "$marco_algo"
-          ;;
-      esac
-      ;;
+          done ;;
+      esac ;;
     confirmar)
-      preguntar "Opción:"
-      AVISO=""
-      case "$RESP" in
-        1|01)   borrar_marcadas; PANTALLA=resultado ;;
-        0|00|"") PANTALLA=lista ;;
-        *)      AVISO="Elegí 01 para borrar o 00 para volver" ;;
-      esac
-      ;;
+      case "$entrada" in
+        1|01)    borrar_marcadas; PANTALLA=resultado ;;
+        ""|0|00) PANTALLA=lista ;;
+        *)       AVISO="Elegí 01 para borrar o 00 para volver" ;;
+      esac ;;
     resultado)
-      preguntar "Opción:"
-      clear; exit 0
-      ;;
+      clear; exit 0 ;;
   esac
+}
+
+while true; do
+  # Las cuentas se releen cada 2 segundos: así las conexiones abiertas y los
+  # días que faltan se ven moverse, en vez de quedar como estaban al entrar.
+  # En la pantalla de confirmación NO se refresca: ahí ya se decidió qué se
+  # borra y la lista no debe cambiarse debajo de los pies.
+  printf -v ahora '%(%s)T' -1
+  if [ "$PANTALLA" = lista ] && (( ahora - SEG_ANT >= 2 )); then
+    cargar_cuentas
+    # Se sueltan las marcas de cuentas que ya no existen, para que no quede
+    # elegida una que alguien borró por otro lado.
+    for nom_sel in "${!MARCADA[@]}"; do
+      hay=0
+      for tok in "${U_NOM[@]}"; do [ "$tok" = "$nom_sel" ] && { hay=1; break; }; done
+      (( hay )) || unset "MARCADA[$nom_sel]"
+    done
+    SEG_ANT=$ahora
+  fi
+
+  render
+  read -rsn1 -t 0.25 tecla; rc=$?
+  if (( rc == 0 )); then
+    procesar "$tecla"
+    while read -rsn1 -t 0.01 extra; do procesar "$extra"; done
+    render
+  elif (( rc <= 128 )); then
+    exit 0          # stdin cerrado: salir en vez de girar en vacío
+  fi
 done

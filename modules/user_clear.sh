@@ -244,14 +244,16 @@ piso_ancho() { printf '  %s╰%s╯%s\n' "$M_TABLA" "$(rep '─' 74)" "$E_RST"; 
 # El número va a ancho fijo porque "99" y "01-10" miden distinto y, sin
 # igualarlos, la segunda columna queda escalonada.
 opcion() { # $1=número $2=emoji $3=texto
-  # 5 del número + 1 + 2 del emoji + 2 + 27 del texto = 37
-  printf '%s%s%s %s%s%s  %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 5)" "$E_RST" \
-         "$E_P2" "$2" "$E_RST" "$E_BLD$E_TXT" "$(pad "$3" 27)" "$E_RST"
+  # Mismo ritmo que el menú principal: 2 del número + 1 + 2 del emoji + 1 +
+  # 31 del texto = 37. El número iba a ancho 5 de cuando decía "41-46"; con
+  # números de dos cifras eso dejaba al emoji flotando lejos.
+  printf '%s%s%s %s%s%s %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST" \
+         "$E_P2" "$2" "$E_RST" "$E_BLD$E_TXT" "$(pad "$3" 31)" "$E_RST"
 }
 # Fila entera: 2 + 5 + 1 + 70 = 78
 opcion_ancha() { # $1=número $2=texto
-  printf '  %s%s%s %s%s%s\n' "$E_BLD$E_P1" "$(pad "$1" 5)" "$E_RST" \
-         "$E_BLD$E_TXT" "$(pad "$2" 70)" "$E_RST"
+  printf '  %s%s%s %s%s%s\n' "$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST" \
+         "$E_BLD$E_TXT" "$(pad "$2" 73)" "$E_RST"
 }
 
 # La salida va sola, abajo y a todo el ancho, igual que en el menú principal:
@@ -259,10 +261,11 @@ opcion_ancha() { # $1=número $2=texto
 # le comería 3 columnas al texto y las dos columnas quedarían escalonadas.
 # 2 + 5 del número + 1 + 2 del emoji + 2 + 66 del texto = 78
 opcion_salir() {
-  printf '  %s%s%s %s%s%s  %s%s%s\n' \
-    "$E_BLD$E_ERR" "$(pad '00' 5)" "$E_RST" \
+  # 2 de margen + 2 del número + 1 + 2 del emoji + 1 + 70 del texto = 78
+  printf '  %s%s%s %s%s%s %s%s%s\n' \
+    "$E_BLD$E_ERR" "$(pad '00' 2)" "$E_RST" \
     "$E_P2" "🚪" "$E_RST" \
-    "$E_BLD$E_TXT" "$(pad 'VOLVER AL PANEL' 66)" "$E_RST"
+    "$E_BLD$E_TXT" "$(pad 'VOLVER AL PANEL' 70)" "$E_RST"
 }
 
 # Debajo de la lista, de un vistazo: en qué página estás, cuántas hay y qué

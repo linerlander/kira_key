@@ -203,18 +203,21 @@ indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
       if (( i == PAGINA )); then puntos="$puntos$E_BLD$E_P1●$E_RST"
       else                       puntos="$puntos$E_MUT○$E_RST"; fi
     done
-    vis=$pags
+    vis=$(( pags + 3 ))
   fi
   local medio="mostrando $(( desde + 1 ))-$fin de $total"
-  local pista=""
-  if   (( pags <= 1 ));            then pista=""
-  elif (( PAGINA + 1 < pags ));    then pista="▼ hay más abajo · 88 para seguir"
-  else                                  pista="▲ última página · 77 para volver"
+  vis=$(( vis + ${#medio} ))
+  # Centrado a mano: los códigos de color ocupan caracteres pero no columnas,
+  # así que hay que medir el texto visible, no la cadena.
+  local izq=$(( (78 - vis) / 2 ))
+  (( izq < 2 )) && izq=2
+  local der=$(( 78 - izq - vis ))
+  (( der < 0 )) && der=0
+  if (( vis > ${#medio} )); then
+    printf '%*s%s   %s%s%s%*s\n' "$izq" '' "$puntos" "$E_MUT" "$medio" "$E_RST" "$der" ''
+  else
+    printf '%*s%s%s%s%*s\n' "$izq" '' "$E_MUT" "$medio" "$E_RST" "$der" ''
   fi
-  local hueco=$(( 76 - vis - 3 - ${#medio} - 3 - ${#pista} ))
-  (( hueco < 0 )) && hueco=0
-  printf '  %s   %s%s%s   %s%s%s%*s\n' "$puntos" \
-    "$E_MUT" "$medio" "$E_RST" "$E_BLD$E_P1" "$pista" "$E_RST" "$hueco" ''
 }
 
 pintar_lista() {
@@ -236,17 +239,6 @@ pintar_lista() {
   echo
   encabezado "BORRAR USUARIOS" "KIRA v$KIRA_VER"
   echo
-  # La línea lleva color, así que no se puede pasar entera por pad(): los
-  # códigos de color no ocupan columnas pero sí caracteres. Se mide el texto
-  # visible y se rellena a mano hasta las 76.
-  local izq="$total cuentas" cen="página $(( PAGINA + 1 )) de $pags"
-  local der="$(marcadas_total) elegidas para borrar"
-  local hueco=$(( 76 - ${#izq} - ${#cen} - ${#der} - 6 ))
-  (( hueco < 0 )) && hueco=0
-  printf '  %s%s%s   %s%s%s   %s%s%s%*s\n' \
-    "$E_BLD$E_TXT" "$izq" "$E_RST" "$E_MUT" "$cen" "$E_RST" \
-    "$E_BLD$E_ERR" "$der" "$E_RST" "$hueco" ''
-  echo
   seccion "CUENTAS" "$E_PINK"
   echo
   cab_tabla
@@ -264,7 +256,10 @@ pintar_lista() {
   printf '  %s%s%s\n' "$E_TXT" \
     "$(pad "Escribí el número de la cuenta para elegirla. Podés poner varias: $(( desde + 1 )) $(( desde + 2 ))" 76)" "$E_RST"
   echo
-  printf '  %s  %s\n' "$(opcion '99' 'BORRAR LAS ELEGIDAS')" "$(opcion '00' 'VOLVER AL PANEL')"
+  local nsel; nsel=$(marcadas_total)
+  local txt99='BORRAR LAS ELEGIDAS'
+  (( nsel > 0 )) && txt99="BORRAR LAS ELEGIDAS ($nsel)"
+  printf '  %s  %s\n' "$(opcion '99' "$txt99")" "$(opcion '00' 'VOLVER AL PANEL')"
   printf '  %s  %s\n' "$(opcion '77' 'PÁGINA ANTERIOR')"    "$(opcion '88' 'PÁGINA SIGUIENTE')"
   echo
   linea_aviso

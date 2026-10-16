@@ -15,6 +15,10 @@ source "$DIR/lib/ui.sh"
 # ============================================================== AJUSTES =====
 ORIGEN="${KIRA_ORIGEN:-https://raw.githubusercontent.com/linerlander/kira_key/main}"
 ARCH_VER="$DIR/VERSION"
+LOG="/tmp/kira-update.log"
+
+# La salida de git destroza el marco si sale por pantalla: va toda al log.
+ejec() { echo "+ $*" >> "$LOG"; "$@" >> "$LOG" 2>&1; }
 RESPALDOS="$DIR/.respaldos"
 
 VER_LOCAL="$(cat "$ARCH_VER" 2>/dev/null || echo "1.0")"
@@ -25,8 +29,8 @@ MENSAJE=""
 BUF=""
 SELLO=""
 
-PASOS=("Comprobar versión remota" "Respaldar la versión actual" "Descargar el paquete"
-       "Verificar integridad"     "Instalar archivos"           "Reiniciar servicios")
+PASOS=("Comprobar versión remota" "Respaldar la versión actual" "Traer cambios de GitHub"
+       "Verificar archivos"       "Anotar la nueva versión"     "Reiniciar servicios")
 EST=(pend pend pend pend pend pend)
 DET=("" "" "" "" "" "")
 PCT=(0 0 0 0 0 0)
@@ -163,7 +167,7 @@ fallar() { # $1=indice $2=detalle $3=mensaje
 }
 
 actualizar() {
-  local tmp; tmp="$(mktemp -d)"
+  local faltantes f
   paso 0 ok "v$VER_REMOTA"
 
   # Respaldo ANTES de tocar nada: si algo falla a mitad, hay con qué volver.
@@ -176,55 +180,62 @@ actualizar() {
     paso 1 ok "$VER_LOCAL guardada"
   else
     fallar 1 "sin permisos" "No se pudo respaldar. Se cancela para no dejar el script a medias."
-    rm -rf "$tmp"; return 1
+    return 1
   fi
 
+  # Se actualiza con git, no bajando un paquete: el repo ya es la fuente.
+  # Así no hay que armar un .tgz ni su firma en cada versión, y git verifica
+  # la integridad de cada objeto por su propio hash.
   paso 2 curso
   if [ -n "${DEMO:-}" ]; then
-    local p; for p in 12 31 48 66 84 100; do PCT[2]=$p; render; sleep 0.12; done
-    paso 2 ok "412K"
-  elif curl -fsS --max-time 60 -o "$tmp/kira.tgz" "$ORIGEN/kira-$VER_REMOTA.tgz" 2>/dev/null; then
-    paso 2 ok "$(bytes_hum "$(stat -c%s "$tmp/kira.tgz" 2>/dev/null || echo 0)")"
+    sleep 0.7; paso 2 ok "5 archivos"
+  elif [ -d "$DIR/.git" ]; then
+    if ejec git -C "$DIR" pull --ff-only; then
+      paso 2 ok "$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null)"
+    else
+      fallar 2 "git pull falló" "Hay cambios locales en $DIR. Descartalos con: git -C $DIR checkout -- ."
+      return 1
+    fi
   else
-    fallar 2 "descarga fallida" "No se pudo descargar el paquete. El script quedó sin tocar."
-    rm -rf "$tmp"; return 1
+    fallar 2 "no es un repo git" "Reinstalá con: git clone ${ORIGEN%/main}"
+    return 1
   fi
 
+  # Que los archivos que el panel necesita estén y no hayan quedado a medias
   paso 3 curso
-  if [ -n "${DEMO:-}" ]; then
-    sleep 0.4; paso 3 ok "sha256 correcto"
-  else
-    local esperado real
-    esperado=$(curl -fsS --max-time 10 "$ORIGEN/kira-$VER_REMOTA.sha256" 2>/dev/null | awk '{print $1}')
-    real=$(sha256sum "$tmp/kira.tgz" 2>/dev/null | awk '{print $1}')
-    if [ -n "$esperado" ] && [ "$esperado" = "$real" ]; then
-      paso 3 ok "sha256 correcto"
-    else
-      fallar 3 "suma no coincide" "El paquete no coincide con su firma. No se instaló nada."
-      rm -rf "$tmp"; return 1
-    fi
+  faltantes=""
+  for f in menu.sh lib/ui.sh; do
+    [ -r "$DIR/$f" ] || faltantes="$faltantes $f"
+  done
+  if [ -n "$faltantes" ]; then
+    fallar 3 "faltan archivos" "El repo no trae:$faltantes. Restaurá el respaldo $SELLO."
+    return 1
   fi
+  if ! bash -n "$DIR/menu.sh" 2>>"$LOG"; then
+    fallar 3 "menu.sh con errores" "La versión descargada no es válida. Restaurá el respaldo $SELLO."
+    return 1
+  fi
+  paso 3 ok "sintaxis correcta"
 
   paso 4 curso
-  if [ -n "${DEMO:-}" ]; then
-    local p; for p in 25 60 100; do PCT[4]=$p; render; sleep 0.15; done
-    paso 4 ok "38 archivos"
-  elif tar xzf "$tmp/kira.tgz" -C "$DIR" 2>/dev/null; then
-    printf '%s\n' "$VER_REMOTA" > "$ARCH_VER"
-    paso 4 ok "instalados"
-  else
-    fallar 4 "error al extraer" "Falló la instalación. Restaurá con el respaldo $SELLO."
-    rm -rf "$tmp"; return 1
-  fi
+  if [ -z "${DEMO:-}" ]; then printf '%s\n' "$VER_REMOTA" > "$ARCH_VER"; fi
+  paso 4 ok "v$VER_REMOTA"
 
   paso 5 curso
   if [ -z "${DEMO:-}" ]; then
     systemctl daemon-reload 2>/dev/null; systemctl restart kira 2>/dev/null
-  else sleep 0.4; fi
+  else sleep 0.3; fi
   paso 5 ok "al día"
 
-  rm -rf "$tmp"
   VER_LOCAL="$VER_REMOTA"; ESTADO="listo"; render
+
+  # Bash ya tiene el código viejo en memoria: sin reiniciar, el usuario
+  # actualiza y sigue usando la versión anterior sin notarlo.
+  if [ -z "${DEMO:-}" ] && [ -r "$DIR/menu.sh" ]; then
+    sleep 2
+    cursor_on
+    exec bash "$DIR/menu.sh"
+  fi
 }
 
 ver_cambios() {
@@ -254,6 +265,7 @@ trap 'cursor_on; printf "\e[?2026l\e[0m\n"' EXIT
 trap 'cursor_on; printf "\e[?2026l\e[0m\n"; exit 130' INT TERM
 cursor_off
 clear
+: > "$LOG"
 
 render        # el marco primero: el usuario no ve la pantalla en blanco
 revisar

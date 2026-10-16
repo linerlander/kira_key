@@ -172,9 +172,9 @@ paginas() { local n=${#U_NOM[@]}; printf '%s' $(( (n + POR_PAGINA - 1) / POR_PAG
 # Fila de 78: 2 + nº 2 + 1 + marca 3 + 1 + usuario 20 + 1 + fecha 11
 #             + 1 + días 9 + 1 + conex 7 + 1 + estado 18
 cab_tabla() {
-  printf '  %s%s  %s  %s  %s  %s  %s  %s%s\n' "$E_MUT" \
-    "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 20)" "$(pad 'FINALIZA' 10)" \
-    "$(rpad 'TERMINA' 10)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 14)" "$E_RST"
+  fila_ancha "$(printf ' %s%s  %s  %s  %s  %s  %s  %s%s ' "$E_MUT" \
+    "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 18)" "$(pad 'FINALIZA' 10)" \
+    "$(rpad 'TERMINA' 10)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 12)" "$E_RST")"
 }
 
 color_estado() {
@@ -206,20 +206,39 @@ fila_usuario() { # $1=índice global
   elif (( falta <= 0 ));          then colr="$E_BLD$E_ERR"
   elif (( falta < 172800 ));      then colr="$E_BLD$E_WARN"
   fi
-  printf '  %s%s%s%s  %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s%s%s\n' \
+  fila_ancha "$(printf '%s %s%s%s  %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s%s %s' \
     "$fondo" "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST$fondo" \
     "$E_BLD$E_ERR" "$marca" "$E_RST$fondo" \
-    "$E_TXT" "$(pad "${U_NOM[i]}" 20)" "$E_RST$fondo" \
+    "$E_TXT" "$(pad "${U_NOM[i]}" 18)" "$E_RST$fondo" \
     "$E_MUT" "$(pad "${U_VENCE[i]}" 10)" \
     "$colr" "$(rpad "$resta" 10)" "$E_RST$fondo" \
     "$E_TXT" "$(rpad "${U_CONEX[i]}" 5)" \
-    "$col" "$(rpad "${U_ESTADO[i]}" 14)" "$E_RST" "$E_RST"
+    "$col" "$(rpad "${U_ESTADO[i]}" 12)" "$E_RST$fondo" "$E_RST")"
 }
 
 linea_aviso() {
   if [ -n "$AVISO" ]; then printf '  %s%s%s\n' "$E_BLD$E_ERR" "$(pad "✖ $AVISO" 76)" "$E_RST"
   else printf '  %s\n' "$(pad '' 76)"; fi
 }
+
+# ====================================================== MARCO A LO ANCHO ===
+# La librería sólo trae cajas de media pantalla, de a pares. Acá hace falta
+# una sola de 78, así que se arma a mano. Las cuentas: 2 de margen + 1 del
+# borde + 74 de contenido + 1 del borde = 78.
+M_TABLA=$'\e[38;2;110;46;84m'
+
+techo_ancho() { # $1=título, centrado en el borde de arriba
+  local t=" $1 " hueco izq der
+  hueco=$(( 74 - ${#t} ))
+  izq=$(( hueco / 2 )); der=$(( hueco - izq ))
+  printf '  %s╭%s%s%s%s%s%s%s╮%s\n' "$M_TABLA" "$(rep '─' "$izq")" \
+    "$E_RST$B_CHIP$E_BLD$E_PINK" "$t" "$E_RST$M_TABLA" "$(rep '─' "$der")" \
+    "" "$M_TABLA" "$E_RST"
+}
+fila_ancha() { # $1=contenido ya medido en 74 columnas
+  printf '  %s│%s%s%s│%s\n' "$M_TABLA" "$E_RST" "$1" "$M_TABLA" "$E_RST"
+}
+piso_ancho() { printf '  %s╰%s╯%s\n' "$M_TABLA" "$(rep '─' 74)" "$E_RST"; }
 
 # Media fila de opción: 5 del número + 1 + 31 del texto = 37.
 # El número va a ancho fijo porque "99" y "01-10" miden distinto y, sin
@@ -250,16 +269,16 @@ indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
   fi
   local medio="mostrando $(( desde + 1 ))-$fin de $total"
   vis=$(( vis + ${#medio} ))
-  # Centrado a mano: los códigos de color ocupan caracteres pero no columnas,
-  # así que hay que medir el texto visible, no la cadena.
-  local izq=$(( (78 - vis) / 2 ))
-  (( izq < 2 )) && izq=2
-  local der=$(( 78 - izq - vis ))
+  # Centrado a mano dentro de las 74 del marco: los códigos de color ocupan
+  # caracteres pero no columnas, así que hay que medir el texto visible.
+  local izq=$(( (74 - vis) / 2 ))
+  (( izq < 1 )) && izq=1
+  local der=$(( 74 - izq - vis ))
   (( der < 0 )) && der=0
   if (( vis > ${#medio} )); then
-    printf '%*s%s   %s%s%s%*s\n' "$izq" '' "$puntos" "$E_MUT" "$medio" "$E_RST" "$der" ''
+    fila_ancha "$(printf '%*s%s   %s%s%s%*s' "$izq" '' "$puntos" "$E_MUT" "$medio" "$E_RST" "$der" '')"
   else
-    printf '%*s%s%s%s%*s\n' "$izq" '' "$E_MUT" "$medio" "$E_RST" "$der" ''
+    fila_ancha "$(printf '%*s%s%s%s%*s' "$izq" '' "$E_MUT" "$medio" "$E_RST" "$der" '')"
   fi
 }
 
@@ -282,17 +301,17 @@ pintar_lista() {
   echo
   encabezado "BORRAR USUARIOS" "KIRA v$KIRA_VER"
   echo
-  seccion "CUENTAS" "$E_PINK"
-  echo
+  techo_ancho "CUENTAS"
   cab_tabla
   if (( total == 0 )); then
-    printf '  %s%s%s\n' "$E_MUT" "$(pad 'No hay cuentas de clientes en esta VPS.' 76)" "$E_RST"
+    fila_ancha "$(printf ' %s%s ' "$E_MUT" "$(pad 'No hay cuentas de clientes en esta VPS.' 72)")"
   else
     for ((i=desde; i<fin; i++)); do fila_usuario "$i"; done
   fi
-  # Relleno para que la pantalla no cambie de alto entre páginas
-  for ((i=fin-desde; i<POR_PAGINA; i++)); do printf '  %s\n' "$(pad '' 76)"; done
+  # Relleno para que el marco no cambie de alto entre páginas
+  for ((i=fin-desde; i<POR_PAGINA; i++)); do fila_ancha "$(pad '' 74)"; done
   indicador_paginas "$pags" "$desde" "$fin" "$total"
+  piso_ancho
   echo
   seccion "QUÉ HACER" "$E_WARN"
   echo

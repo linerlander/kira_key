@@ -322,8 +322,11 @@ opcion() { # $1=nn $2=emoji $3=etiqueta $4=on|off|"" $5=sel
 menu() {
   seccion "MENÚ PRINCIPAL" "$E_P1"
   echo
+  # TODOS los emoji van del bloque U+1F300 en adelante: ésos miden 2 columnas
+  # en cualquier terminal. Los heredados U+26xx/U+27xx (⚡ ⚙ ✦) cambian de
+  # ancho según el cliente y desalinean la columna.
   opcion 01 "👥" "CONTROL DE USUARIOS"      "$M_USER"   "$(sel_de 01)"
-  opcion 02 "⚡" "OPTIMIZAR VPS"            "$M_OPT"    "$(sel_de 02)"
+  opcion 02 "🔧" "OPTIMIZAR VPS"            "$M_OPT"    "$(sel_de 02)"
   opcion 03 "🌐" "USUARIOS ONLINE"          "$M_ONLINE" "$(sel_de 03)"
   opcion 04 "🚀" "AUTO INICIO"              "$M_AUTO"   "$(sel_de 04)"
   opcion 05 "📦" "INSTALADOR DE PROTOCOLOS" "$M_PROTO"  "$(sel_de 05)"
@@ -342,8 +345,6 @@ prompt() {
   printf '  %s%s❯%s %s%sOpción:%s %s%s%s\e[48;2;%sm \e[0m%*s\n' \
     "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$E_RST" \
     "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( 78 - vis )) ''
-  printf '  %s%s%s\n' "$E_MUT" \
-    "$(pad 'escribí el número y pulsá ENTER · 0 para salir' 76)" "$E_RST"
 }
 
 # El logo y la regla son fijos y cuestan caro: grad_txt y regla lanzan un

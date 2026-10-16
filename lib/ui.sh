@@ -91,6 +91,27 @@ barra() { # $1=pct $2=ancho · verde → ámbar → rojo según la carga
   printf '%s%s%s' "$E_OFF" "$(rep '░' $(( w - lle )))" "$E_RST"
 }
 
+# Medidor segmentado: el RIEL lleva las zonas pintadas (verde hasta 60, ámbar
+# hasta 85, rojo arriba), así la escala carga el significado y el relleno no
+# tiene que cambiar de color. Se lee la zona sin mirar el número.
+medidor() { # $1=pct $2=ancho
+  local pct="$1" w="$2"
+  [[ "$pct" =~ ^[0-9]+$ ]] || pct=0
+  (( pct > 100 )) && pct=100
+  local lle=$(( pct * w / 100 ))
+  (( lle==0 && pct>0 )) && lle=1
+  local i p col
+  for ((i=0; i<w; i++)); do
+    p=$(( i * 100 / (w-1) ))
+    if   (( p < 60 )); then col="$E_OK"
+    elif (( p < 85 )); then col="$E_WARN"
+    else                    col="$E_ERR"; fi
+    if (( i < lle )); then printf '%s▰' "$col"
+    else printf '\e[38;2;30;42;66m▱'; fi
+  done
+  printf '%s' "$E_RST"
+}
+
 # Barra de un solo color (para descargas, donde el color no significa carga)
 barra_fija() { # $1=pct $2=ancho $3=color
   local pct="$1" w="$2"
@@ -110,21 +131,35 @@ bytes_hum() { awk -v b="$1" 'BEGIN{
 # mide SIEMPRE 35. Se arma el cuerpo primero y se imprime con un solo %s: si
 # la cantidad de marcadores no coincide con la de argumentos, printf repite
 # el formato y mete líneas fantasma.
-caja_izq() { printf '  %s│%s%s%s│%s'   "$E_BOR" "$E_RST" "$1" "$E_BOR" "$E_RST"; }
-caja_der() { printf '  %s│%s%s%s│%s\n' "$E_BOR" "$E_RST" "$1" "$E_BOR" "$E_RST"; }
+# El 2º argumento tiñe el marco. Sin él usa el azul de siempre, así que todo
+# lo que ya estaba escrito sigue funcionando igual.
+caja_izq() { local c="${2:-$E_BOR}"; printf '  %s│%s%s%s│%s'   "$c" "$E_RST" "$1" "$c" "$E_RST"; }
+caja_der() { local c="${2:-$E_BOR}"; printf '  %s│%s%s%s│%s\n' "$c" "$E_RST" "$1" "$c" "$E_RST"; }
 
 # Techo y piso de un par de cajas lado a lado
 # Caja de 37 columnas: ╭ + ─ + espacio + título + espacio + rayas + ╮
 # 5 fijos + título + rayas = 37  ->  rayas = 32 - largo del título
-techo() { # $1=titulo izq $2=color izq $3=titulo der $4=color der
-  printf '  %s╭─%s %s%s%s%s %s%s╮%s  ' "$E_BOR" "$E_RST" "$E_BLD" "$2" "$1" "$E_RST" \
-         "$E_BOR" "$(rep '─' $(( 32 - ${#1} )))" "$E_RST"
-  printf '%s╭─%s %s%s%s%s %s%s╮%s\n'   "$E_BOR" "$E_RST" "$E_BLD" "$4" "$3" "$E_RST" \
-         "$E_BOR" "$(rep '─' $(( 32 - ${#3} )))" "$E_RST"
+# El título va en una PASTILLA con fondo, no en texto suelto: destaca mucho
+# más y el marco se tiñe del color de la sección. Mismo ancho de antes:
+# 5 fijos + título + rayas = 37, así que rayas = 32 - largo del título.
+# $5 y $6 tiñen los marcos; sin ellos, azul de siempre.
+techo() { # $1=tit izq $2=color izq $3=tit der $4=color der [$5=marco izq $6=marco der]
+  local bi="${5:-$E_BOR}" bd="${6:-$E_BOR}"
+  printf '  %s╭─%s%s%s %s %s%s%s╮%s  ' "$bi" "$E_RST" "$B_CHIP$E_BLD" "$2" "$1" \
+         "$E_RST$bi" "$(rep '─' $(( 32 - ${#1} )))" "$bi" "$E_RST"
+  printf '%s╭─%s%s%s %s %s%s%s╮%s\n'   "$bd" "$E_RST" "$B_CHIP$E_BLD" "$4" "$3" \
+         "$E_RST$bd" "$(rep '─' $(( 32 - ${#3} )))" "$bd" "$E_RST"
 }
-piso() {
-  printf '  %s╰%s╯%s  %s╰%s╯%s\n' "$E_BOR" "$(rep '─' 35)" "$E_RST" \
-                                   "$E_BOR" "$(rep '─' 35)" "$E_RST"
+piso() { # [$1=marco izq $2=marco der]
+  local bi="${1:-$E_BOR}" bd="${2:-$E_BOR}"
+  printf '  %s╰%s╯%s  %s╰%s╯%s\n' "$bi" "$(rep '─' 35)" "$E_RST" \
+                                   "$bd" "$(rep '─' 35)" "$E_RST"
+}
+
+# Banda ancha con fondo: para el estado general, que tiene que saltar a la
+# vista antes que cualquier otra cosa de la pantalla.
+banner() { # $1=texto $2=color de fondo "R;G;B" $3=color de texto
+  printf '\e[48;2;%sm%s%s%s\n' "$2" "$3$E_BLD" "$(pad "  $1" ANCHO)" "$E_RST"
 }
 
 # Título de sección a todo lo ancho
@@ -161,8 +196,6 @@ dias_restantes() {
 }
 
 cabecera() {
-  [ -z "$KIRA_VER" ] && KIRA_VER="$(cat "${KIRA_DIR:-.}/VERSION" 2>/dev/null)"
-  [ -z "$KIRA_VER" ] && KIRA_VER="1.0"
   local L=(
     "██╗  ██╗██╗██████╗  █████╗ "
     "██║ ██╔╝██║██╔══██╗██╔══██╗"
@@ -190,6 +223,10 @@ cabecera() {
 # El logo y la regla cuestan caro: grad_txt y regla lanzan un subshell por
 # carácter (≈240 por cuadro). Se arman una sola vez al arrancar.
 cachear_cabecera() {
+  # La versión se resuelve ACÁ, no dentro de cabecera(): esa corre en $( ),
+  # que es un subshell, y cualquier variable que asigne se pierde al volver.
+  [ -z "$KIRA_VER" ] && KIRA_VER="$(cat "${KIRA_DIR:-.}/VERSION" 2>/dev/null)"
+  [ -z "$KIRA_VER" ] && KIRA_VER="1.0"
   REGLA_FIJA="$(regla '▀' 76)"
   CABECERA_FIJA="$(cabecera)"
 }

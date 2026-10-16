@@ -13,6 +13,22 @@ fi
 KIRA_DIR="$DIR"
 source "$DIR/lib/ui.sh"
 
+# lib/ui.sh crece con el tiempo. Si el módulo es nuevo y la librería vieja,
+# bash tira "command not found" por cada llamada y la pantalla se inunda:
+# cientos de errores que no dicen cuál es el problema real. Mejor comprobar
+# una vez qué funciones faltan y decirlo en una línea.
+ui_exige() {
+  local f faltan=""
+  for f in "$@"; do declare -F "$f" >/dev/null 2>&1 || faltan="$faltan $f"; done
+  [ -z "$faltan" ] && return 0
+  printf '\e[1;38;2;255;95;109m✖ Tu lib/ui.sh está desactualizado\e[0m\n'
+  printf '  Le faltan estas funciones:\e[1m%s\e[0m\n' "$faltan"
+  printf '  Actualizalo con:  \e[1mcd %s && git pull\e[0m\n' "$KIRA_DIR"
+  exit 1
+}
+ui_exige medidor techo piso banda cabecera cachear_cabecera datos_sistema pad rpad
+
+
 BUF=""; PAUSA=0
 # Marcos teñidos: cada sección lleva su color, apagado para que no compita
 # con el contenido. Es lo que hace que la pantalla se lea por bloques.

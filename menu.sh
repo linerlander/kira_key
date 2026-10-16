@@ -331,6 +331,22 @@ procesar() {
   esac
 }
 
+# El vigilante de conexiones tiene que quedar andando sin que el que compró
+# el panel toque nada. Se revisa cada vez que se abre el menú y, si no está
+# corriendo, se instala solo y en silencio. Va al fondo para no demorar el
+# arranque, y sólo como root: sin permisos no hay nada que instalar.
+asegurar_vigilante() {
+  [ "$(id -u)" -eq 0 ] || return 0
+  [ -f "$DIR/kira-vigilante" ] || return 0
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl is-active --quiet kira-vigilante 2>/dev/null && return 0
+  else
+    [ -x /usr/local/sbin/kira-vigilante ] && return 0
+  fi
+  KIRA_DIR="$DIR" bash "$DIR/kira-vigilante" --instalar >/dev/null 2>&1 &
+}
+asegurar_vigilante
+
 cargar_fijos
 cachear_cabecera
 cachear_menu

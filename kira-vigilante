@@ -1,0 +1,185 @@
+#!/bin/bash
+# =============================================================================
+#  KIRA · vigilante de conexiones simultáneas
+#  Cada pocos segundos cuenta las conexiones de cada usuario y corta las que
+#  sobran. Mira procesos, no utmp, así que ve por igual las de OpenSSH y las
+#  de dropbear, con terminal o sin ella (los túneles de HTTP Injector entran
+#  con ssh -N, sin terminal, y en utmp no figuran).
+#
+#  Se instala con:  bash kira-vigilante --instalar
+#  Se saca con:     bash kira-vigilante --desinstalar
+#  Una pasada sola: bash kira-vigilante --una-vez
+#  Sin cortar nada: bash kira-vigilante --simular
+# =============================================================================
+
+KIRA_DIR="${KIRA_DIR:-/root/kira_key}"
+INTERVALO="${INTERVALO:-5}"      # cada cuántos segundos revisa
+MODO="${MODO:-exceso}"           # exceso = corta las de más · todas = corta todo
+
+LIMITES="$KIRA_DIR/db/limites"
+DESTINO="/usr/local/sbin/kira-vigilante"
+UNIDAD="/etc/systemd/system/kira-vigilante.service"
+SIMULAR=0
+
+# ------------------------------------------------------------------ datos ---
+# El momento en que arrancó un proceso: campo 22 de /proc/PID/stat.
+# OJO: los dos primeros campos son el pid y el nombre ENTRE PARÉNTESIS, y ese
+# nombre puede tener espacios y hasta paréntesis adentro. Por eso se corta
+# desde el último ") " en vez de partir por espacios desde el principio.
+INICIO=0
+leer_inicio() { # $1=pid
+  local s resto
+  read -r s < "/proc/$1/stat" 2>/dev/null || { INICIO=0; return; }
+  resto="${s##*) }"
+  local -a f=($resto)
+  INICIO="${f[19]:-0}"
+}
+
+declare -A NOM_DE_UID=() LIMITE_DE=()
+cargar_tablas() {
+  NOM_DE_UID=(); LIMITE_DE=()
+  local n uid resto u l
+  while IFS=: read -r n resto uid resto; do
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    (( uid >= 1000 && uid != 65534 )) || continue
+    NOM_DE_UID[$uid]="$n"
+  done < /etc/passwd
+  [ -r "$LIMITES" ] || return
+  while read -r u l; do
+    [ -z "$u" ] && continue
+    [[ "$l" =~ ^[0-9]+$ ]] || continue
+    (( l >= 1 )) && LIMITE_DE[$u]="$l"
+  done < "$LIMITES"
+}
+
+# ---------------------------------------------------------------- pasada ----
+una_pasada() {
+  cargar_tablas
+  (( ${#LIMITE_DE[@]} == 0 )) && return    # nadie tiene límite: nada que hacer
+
+  declare -A CONEX=()
+  local p c k v uid pid
+  for p in /proc/[0-9]*; do
+    [ -r "$p/comm" ] || continue
+    read -r c < "$p/comm" 2>/dev/null || continue
+    case "$c" in
+      sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
+      *) continue ;;
+    esac
+    # Se cuenta por DUEÑO del proceso. Después de autenticar, tanto sshd como
+    # dropbear bajan privilegios, así que el proceso de la sesión queda
+    # corriendo como el usuario. Los "sshd: fulano [priv]" que acompañan a
+    # cada conexión siguen siendo de root, así que no se cuentan dos veces.
+    v=""
+    while read -r k v _; do [ "$k" = "Uid:" ] && break; done < "$p/status" 2>/dev/null
+    [[ "$v" =~ ^[0-9]+$ ]] || continue
+    (( v < 1000 )) && continue              # root y sistema nunca se tocan
+    [ -n "${NOM_DE_UID[$v]:-}" ] || continue
+    pid="${p##*/}"
+    leer_inicio "$pid"
+    CONEX[$v]="${CONEX[$v]:-} $pid:$INICIO"
+  done
+
+  local nombre lim n cortar i fila
+  for uid in "${!CONEX[@]}"; do
+    nombre="${NOM_DE_UID[$uid]}"
+    lim="${LIMITE_DE[$nombre]:-}"
+    [ -z "$lim" ] && continue
+
+    # De la más nueva a la más vieja. Se cortan las nuevas porque las viejas
+    # son las del dueño, que se conectó primero; el que se colgó de la cuenta
+    # llegó después.
+    local -a ord=()
+    mapfile -t ord < <(printf '%s\n' ${CONEX[$uid]} | sort -t: -k2,2nr)
+    n=${#ord[@]}
+    (( n <= lim )) && continue
+
+    if [ "$MODO" = todas ]; then cortar=$n; else cortar=$(( n - lim )); fi
+
+    for ((i=0; i<cortar; i++)); do
+      fila="${ord[i]}"
+      pid="${fila%%:*}"
+      (( SIMULAR )) || kill -TERM "$pid" 2>/dev/null
+    done
+
+    if (( SIMULAR )); then
+      printf '  %-16s tiene %s de %s permitidas -> cortaría %s\n' "$nombre" "$n" "$lim" "$cortar"
+    else
+      logger -t kira-vigilante "$nombre tenia $n conexiones de $lim permitidas: cortadas $cortar"
+    fi
+  done
+}
+
+# -------------------------------------------------------------- instalar ----
+instalar() {
+  [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
+  install -m 755 "${BASH_SOURCE[0]}" "$DESTINO"
+  sed -i "s|^KIRA_DIR=.*|KIRA_DIR=\"\${KIRA_DIR:-$KIRA_DIR}\"|" "$DESTINO"
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "No hay systemd en esta máquina."
+    echo "Agregá esto al cron de root para que revise cada minuto:"
+    echo "  * * * * * $DESTINO --una-vez"
+    exit 0
+  fi
+
+  cat > "$UNIDAD" <<EOF
+[Unit]
+Description=KIRA - control de conexiones simultaneas
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$DESTINO
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now kira-vigilante >/dev/null 2>&1
+  sleep 1
+  if systemctl is-active --quiet kira-vigilante; then
+    echo "Vigilante activo. Revisa cada $INTERVALO segundos."
+  else
+    echo "No arrancó. Mirá qué pasó con:  systemctl status kira-vigilante"
+    exit 1
+  fi
+  echo "Límites desde: $LIMITES"
+  echo "Para ver los cortes en vivo:  journalctl -t kira-vigilante -f"
+}
+
+desinstalar() {
+  [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now kira-vigilante >/dev/null 2>&1
+    rm -f "$UNIDAD"; systemctl daemon-reload
+  fi
+  rm -f "$DESTINO"
+  echo "Vigilante sacado. Las conexiones ya no se limitan."
+}
+
+# ------------------------------------------------------------------ main ----
+case "${1:-}" in
+  --instalar)    instalar ;;
+  --desinstalar) desinstalar ;;
+  --una-vez)     una_pasada ;;
+  --simular)     SIMULAR=1
+                 echo "Simulación: no corta nada, solo dice qué haría."
+                 una_pasada
+                 echo "(fin)" ;;
+  *)
+    # Así lo corre systemd: para siempre, hasta que lo paren.
+    # El sleep va al fondo y se espera con `wait`. Con el sleep en primer
+    # plano, bash guarda la señal y recién atiende el trap cuando el sleep
+    # termina, así que parar o reiniciar el servicio tardaba hasta un
+    # intervalo entero. Con `wait`, la señal corta la espera al instante.
+    trap 'exit 0' TERM INT
+    while true; do
+      una_pasada
+      sleep "$INTERVALO" &
+      wait $!
+    done
+    ;;
+esac

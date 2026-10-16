@@ -39,6 +39,7 @@ EN_LINEA=0; CONEXIONES=0; EXCEDIDOS=0; HAY_LIMITES=0
 ULTIMO="—"; TRAFICO="—"; SIN_ROOT=0
 declare -A CON_USR      # usuario -> cuántas conexiones tiene abiertas
 declare -A ES_CLIENTE   # usuarios vendibles (UID >= 1000)
+declare -A NOM_DE_UID   # número de UID -> nombre del usuario
 
 # Dónde registra el sistema los logins. Cambia según la distro.
 LOG_AUTH=""
@@ -91,11 +92,15 @@ cargar_cuentas() {
   fi
 
   # Quiénes son clientes: los de UID >= 1000. Sirve para descartar root y las
-  # cuentas de sistema de todo lo que viene después.
-  ES_CLIENTE=()
-  local u
-  while read -r u; do ES_CLIENTE[$u]=1; done < <(
-    awk -F: '$3>=1000 && $1!="nobody" && $1!="nogroup" {print $1}' /etc/passwd 2>/dev/null)
+  # cuentas de sistema de todo lo que viene después. Se guarda también el
+  # camino UID -> nombre, porque los procesos se identifican por número.
+  ES_CLIENTE=(); NOM_DE_UID=()
+  local n uid resto
+  while IFS=: read -r n resto uid resto; do
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    (( uid >= 1000 && uid != 65534 )) || continue
+    ES_CLIENTE[$n]=1; NOM_DE_UID[$uid]="$n"
+  done < /etc/passwd
 
   cargar_conexiones
   cargar_ultimo
@@ -103,47 +108,43 @@ cargar_cuentas() {
 }
 
 # ========================================================== CONEXIONES ======
-# OJO: `who` y `last` NO sirven acá. Los dos leen utmp/wtmp, donde sólo se
+# OJO 1: `who` y `last` NO sirven acá. Los dos leen utmp/wtmp, donde sólo se
 # anota la sesión que pide una TERMINAL. El cliente de HTTP Injector (y
 # cualquier túnel) se conecta con `ssh -N`: no pide terminal, así que para
-# `who` no existe. Hay que contar las conexiones de verdad, una por una.
+# `who` no existe.
+#
+# OJO 2: tampoco sirve leer el título del proceso ("sshd: usuario@notty").
+# Ese texto cambia entre versiones de OpenSSH y entre distros, y dropbear
+# directamente no lo pone. Si el patrón no coincide, el contador queda en
+# cero sin avisar — que es justo lo que pasaba antes.
+#
+# Lo que SÍ es parejo en todos lados: después de autenticar, tanto sshd como
+# dropbear bajan privilegios y el proceso de la sesión queda corriendo COMO
+# EL USUARIO. Así que se busca por DUEÑO del proceso, no por su nombre:
+#   /proc/PID/comm   -> qué programa es   (sshd, sshd-session, dropbear)
+#   /proc/PID/status -> campo Uid, de quién es
+# Los "sshd: usuario [priv]" que acompañan a cada conexión siguen siendo de
+# root, así que no se cuentan dos veces. Todo se lee con builtins de bash,
+# sin un solo subshell.
 cargar_conexiones() {
   CON_USR=(); CONEXIONES=0; EN_LINEA=0; EXCEDIDOS=0; HAY_LIMITES=0
-  local u pid
+  local u p c k v resto uid
 
-  # --- OpenSSH -------------------------------------------------------------
-  # sshd forja un proceso hijo por cada conexión y lo renombra
-  # "sshd: usuario@pts/0" (con terminal) o "sshd: usuario@notty" (túnel).
-  # Se cuentan SÓLO las que llevan @: por cada conexión sshd deja además un
-  # "sshd: usuario [priv]" que corre como root, y contarlo sería contar doble.
-  # Desde OpenSSH 9.8 el binario de sesión se llama sshd-session, de ahí el
-  # (-session)? del patrón.
-  while read -r u; do
-    [ -n "${ES_CLIENTE[$u]:-}" ] && (( CON_USR[$u]++ ))
-  done < <(ps -eo args= 2>/dev/null | awk '
-      $1 ~ /^sshd(-session)?:$/ && $2 ~ /@/ { s=$2; sub(/@.*/,"",s); print s }')
-
-  # --- Dropbear ------------------------------------------------------------
-  # Dropbear no pone el usuario en la línea del proceso, así que no se puede
-  # leer de `ps`. Hay que cruzarlo con el log: cada PID que autenticó bien y
-  # todavía está vivo es una conexión abierta. El PID se puede reciclar, por
-  # eso se comprueba que el proceso vivo sea realmente dropbear.
-  if [ -n "$LOG_AUTH" ] && pgrep -x dropbear >/dev/null 2>&1; then
-    local comm
-    while read -r pid u; do
-      [ -r "/proc/$pid/comm" ] || continue
-      read -r comm < "/proc/$pid/comm" 2>/dev/null || continue
-      [ "$comm" = "dropbear" ] || continue
-      [ -n "${ES_CLIENTE[$u]:-}" ] && (( CON_USR[$u]++ ))
-    done < <(tail -n 3000 "$LOG_AUTH" 2>/dev/null | awk '
-        /dropbear\[[0-9]+\]: Password auth succeeded for/ {
-          p=$5; gsub(/[^0-9]/,"",p)
-          u=""; for(i=1;i<=NF;i++) if($i=="for"){u=$(i+1);break}
-          gsub(/[^A-Za-z0-9._-]/,"",u)
-          if (p!="" && u!="") m[p]=u          # último usuario visto por PID
-        }
-        END { for (p in m) print p, m[p] }')
-  fi
+  for p in /proc/[0-9]*; do
+    [ -r "$p/comm" ] || continue
+    read -r c < "$p/comm" 2>/dev/null || continue
+    case "$c" in
+      sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
+      *) continue ;;
+    esac
+    uid=""
+    while read -r k v resto; do
+      [ "$k" = "Uid:" ] && { uid="$v"; break; }
+    done < "$p/status" 2>/dev/null
+    [ -n "$uid" ] || continue
+    u="${NOM_DE_UID[$uid]:-}"
+    [ -n "$u" ] && (( CON_USR[$u]++ ))
+  done
 
   # --- OpenVPN -------------------------------------------------------------
   # OpenVPN publica sus clientes conectados en el archivo de estado.

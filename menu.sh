@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # =============================================================================
 #  KIRA · ADMINISTRADOR DE VPS · menú principal
@@ -6,11 +5,11 @@
 #  Requiere: bash 4+, locale UTF-8. Todo lo demás tiene respaldo.
 # =============================================================================
 export LC_ALL=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8
- 
+
 ANCHO=78
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOD="$DIR/modules"
- 
+
 # ============================================================== PALETA ======
 # \e[38;2;R;G;Bm = texto · \e[48;2;R;G;Bm = fondo. Si el cliente no soporta
 # color verdadero el degradado se ve plano, pero nada se rompe.
@@ -28,7 +27,7 @@ C_SEL="19;34;65"
 C_OFF="28;39;66"
 C_CHIP="25;41;70"
 G1=(45 212 232); G2=(199 125 238)   # degradado del logo
- 
+
 E_RST=$'\e[0m'; E_BLD=$'\e[1m'
 E_P1=$'\e[38;2;'"$C_P1"'m';     E_P2=$'\e[38;2;'"$C_P2"'m'
 E_OK=$'\e[38;2;'"$C_OK"'m';     E_WARN=$'\e[38;2;'"$C_WARN"'m'
@@ -37,7 +36,7 @@ E_MUT=$'\e[38;2;'"$C_MUT"'m';   E_TXT=$'\e[38;2;'"$C_TXT"'m'
 E_BOR=$'\e[38;2;'"$C_BORDE"'m'; E_OFF=$'\e[38;2;'"$C_OFF"'m'
 B_BAND=$'\e[48;2;'"$C_BAND"'m'; B_SEL=$'\e[48;2;'"$C_SEL"'m'
 B_CHIP=$'\e[48;2;'"$C_CHIP"'m'
- 
+
 # ============================================================ UTILERÍA ======
 # OJO: en `local a=$1 b=$((a+1))` bash expande TODAS las asignaciones antes de
 # aplicarlas, así que b NO ve a `a`. Siempre en líneas separadas.
@@ -46,7 +45,7 @@ B_CHIP=$'\e[48;2;'"$C_CHIP"'m'
 pad()  { local s="$1" w="$2"; local n=$(( w - ${#s} )); ((n<0)) && n=0; printf '%s%*s' "$s" "$n" ''; }
 rpad() { local s="$1" w="$2"; local n=$(( w - ${#s} )); ((n<0)) && n=0; printf '%*s%s' "$n" '' "$s"; }
 rep()  { local i; for ((i=0;i<$2;i++)); do printf '%s' "$1"; done; }
- 
+
 mezcla() { # $1=i $2=n -> "R;G;B" interpolado entre G1 y G2
   local i=$1 n=$2
   (( n < 2 )) && n=2
@@ -55,13 +54,13 @@ mezcla() { # $1=i $2=n -> "R;G;B" interpolado entre G1 y G2
   local b=$(( G1[2] + (G2[2]-G1[2])*i/(n-1) ))
   printf '%d;%d;%d' "$r" "$g" "$b"
 }
- 
+
 regla() { # $1=caracter $2=ancho · regla con degradado
   local i; printf '  '
   for ((i=0;i<$2;i++)); do printf '\e[38;2;%sm%s' "$(mezcla "$i" "$2")" "$1"; done
   printf '%s\n' "$E_RST"
 }
- 
+
 grad_txt() { # $1=texto $2=fila · degradado en diagonal
   local s="$1" fila="${2:-0}"
   local n=${#s}
@@ -72,7 +71,7 @@ grad_txt() { # $1=texto $2=fila · degradado en diagonal
   done
   printf '%s' "$E_RST"
 }
- 
+
 barra() { # $1=pct $2=ancho · verde → ámbar → rojo según la carga
   local pct="$1" w="$2"
   [[ "$pct" =~ ^[0-9]+$ ]] || pct=0
@@ -91,7 +90,7 @@ barra() { # $1=pct $2=ancho · verde → ámbar → rojo según la carga
   done
   printf '%s%s%s' "$E_OFF" "$(rep '░' $(( w - lle )))" "$E_RST"
 }
- 
+
 # ================================================================ DATOS =====
 # Puertos en escucha. ss → netstat → /proc/net. El último siempre existe en
 # Linux, así que funciona hasta en imágenes mínimas sin iproute2.
@@ -107,13 +106,13 @@ cargar_puertos() {
   fi
 }
 puerto_activo() { grep -qx "$1" <<< "$LISTEN"; }
- 
+
 servicio_activo() { # $1=unidad systemd  $2=patrón de proceso (opcional)
   systemctl is-active --quiet "$1" 2>/dev/null && return 0
   [ -n "${2:-}" ] && pgrep -f "$2" >/dev/null 2>&1 && return 0
   return 1
 }
- 
+
 cpu_snap() { awk '/^cpu /{idle=$5; tot=0; for(i=2;i<=NF;i++) tot+=$i; print idle, tot}' /proc/stat; }
 cpu_pct() {
   # top -bn1 tarda ~1s y la primera muestra es basura. /proc/stat con una
@@ -124,7 +123,7 @@ cpu_pct() {
   (( dt <= 0 )) && { echo 0; return; }
   echo $(( (100 * (dt - di)) / dt ))
 }
- 
+
 IP_PUB="";  SSH_PORTS=""
 cargar_fijos() {   # lo que no cambia: se consulta una sola vez
   IP_PUB=$(curl -s --max-time 4 ifconfig.me 2>/dev/null)
@@ -137,7 +136,7 @@ cargar_fijos() {   # lo que no cambia: se consulta una sola vez
   SO=$(awk -F'"' '/^PRETTY_NAME/{print $2}' /etc/os-release 2>/dev/null)
   [ -z "$SO" ] && SO="Linux"
 }
- 
+
 cargar_vivos() {   # lo que cambia en cada refresco
   FECHA=$(date "+%d/%m/%Y %H:%M:%S")
   HORA=$(date "+%H:%M:%S")
@@ -157,7 +156,7 @@ cargar_vivos() {   # lo que cambia en cada refresco
   PROCS=$(ls -d /proc/[0-9]* 2>/dev/null | wc -l)
   SESIONES=$(who 2>/dev/null | wc -l)
   USUARIOS=$(awk -F: '$3>=1000 && $1!="nobody"{n++} END{print n+0}' /etc/passwd 2>/dev/null)
- 
+
   cargar_puertos
   servicio_activo ssh sshd          && ST_SSH=on   || ST_SSH=off
   servicio_activo dropbear          && ST_DROP=on  || ST_DROP=off
@@ -166,7 +165,7 @@ cargar_vivos() {   # lo que cambia en cada refresco
   pgrep -f badvpn >/dev/null 2>&1   && ST_BAD=on   || ST_BAD=off
   servicio_activo v2ray v2ray       && ST_V2=on    || ST_V2=off
   puerto_activo 80                  && ST_HTTP=on  || ST_HTTP=off
- 
+
   # Estado de cada módulo: existe el script / está habilitado el servicio
   [ -f "$MOD/user.sh" ]      && M_USER=on  || M_USER=off
   [ -f "$MOD/optimize.sh" ]  && M_OPT=on   || M_OPT=off
@@ -176,7 +175,7 @@ cargar_vivos() {   # lo que cambia en cada refresco
   [ -f "$DIR/monitor.sh" ]   && M_MON=on   || M_MON=off
   [ -f "$MOD/update.sh" ]    && M_UPD=on   || M_UPD=off
 }
- 
+
 # ============================================================= PANTALLA =====
 cabecera() {
   local L=(
@@ -202,19 +201,19 @@ cabecera() {
     printf '\n'
   done
 }
- 
+
 banda() {
   local t=" IP $IP_PUB    SO $SO    UPTIME $UPTIME    HORA $HORA"
   printf '%s%s%s\n' "$B_BAND" "$(pad "$t" $ANCHO)" "$E_RST"
 }
- 
+
 # Ambas cajas miden 37 columnas: bordes en 2, 38, 41 y 77. El contenido
 # entre bordes mide SIEMPRE 35. Se arma el cuerpo primero y se imprime con
 # un solo %s: si la cantidad de marcadores no coincide con la de argumentos,
 # printf repite el formato y mete líneas fantasma.
 caja_izq() { printf '  %s│%s%s%s│%s'   "$E_BOR" "$E_RST" "$1" "$E_BOR" "$E_RST"; }
 caja_der() { printf '  %s│%s%s%s│%s\n' "$E_BOR" "$E_RST" "$1" "$E_BOR" "$E_RST"; }
- 
+
 srv() { # $1=nombre $2=on/off $3=detalle · 1+11+5+18 = 35
   local e c
   if [ "$2" = "on" ]; then e="● ON "; c="$E_OK"; else e="○ OFF"; c="$E_ERR"; fi
@@ -226,18 +225,18 @@ rec() { # $1=etiqueta $2=pct $3=valor · 1+6+12+1+4+1+10 = 35
 rec_txt() { # fila sin barra · 1+6+18+10 = 35
   caja_der " $E_MUT$(pad "$1" 6)$E_RST$E_TXT$(pad "$2" 18)$E_RST$E_MUT$(pad "$3" 10)$E_RST"
 }
- 
+
 # Convierte megabytes a una forma corta que entre en la columna:
 # 522 8029 -> "0.5/7.8G"   (en bytes crudos la línea desborda)
 hum() { awk -v u="$1" -v t="$2" 'BEGIN{
   if (t >= 1024) printf "%.1f/%.1fG", u/1024, t/1024; else printf "%d/%dM", u, t }'; }
- 
+
 paneles() {
   printf '  %s╭─%s %s%sSERVICIOS%s %s───────────────────────╮%s  ' \
          "$E_BOR" "$E_RST" "$E_BLD" "$E_P1" "$E_RST" "$E_BOR" "$E_RST"
   printf '%s╭─%s %s%sRECURSOS%s %s────────────────────────╮%s\n' \
          "$E_BOR" "$E_RST" "$E_BLD" "$E_P2" "$E_RST" "$E_BOR" "$E_RST"
- 
+
   srv "SSH"       "$ST_SSH"  "${SSH_PORTS% }" ; rec "RAM"   "$RAM_PCT" "$(hum "$RAM_USA" "$RAM_TOT")"
   srv "DROPBEAR"  "$ST_DROP" "90 · 143"       ; rec "CPU"   "$CPU_PCT" "${NUCLEOS} vCPU"
   srv "SSL/TLS"   "$ST_SSL"  "443"            ; rec "DISCO" "$DSK_PCT" "${DSK_USA}/${DSK_TOT}"
@@ -245,13 +244,17 @@ paneles() {
   srv "BADVPN"    "$ST_BAD"  "7300"           ; rec_txt "CARGA" "$CARGA" "1m 5m 15m"
   srv "V2RAY"     "$ST_V2"   "10086"          ; rec_txt "PROC"  "$PROCS activos" ""
   srv "HTTP"      "$ST_HTTP" "80"             ; rec_txt "CONEX" "$SESIONES abiertas" ""
- 
+
   printf '  %s╰%s╯%s  %s╰%s╯%s\n' "$E_BOR" "$(rep '─' 35)" "$E_RST" "$E_BOR" "$(rep '─' 35)" "$E_RST"
 }
- 
+
 seccion() { printf '  %s▌%s %s%s%s %s%s%s\n' "$2" "$E_RST" "$E_BLD" "$E_TXT" "$1" \
                    "$E_OFF" "$(rep '─' $(( 73 - ${#1} )))" "$E_RST"; }
- 
+
+# La fila se resalta sólo si coincide con lo que el usuario está tecleando.
+# Antes la 01 estaba resaltada fija y parecía un error de pintado.
+sel_de() { [ -n "$BUF" ] && { [ "$BUF" = "$1" ] || [ "$BUF" = "${1#0}" ]; } && echo 1 || echo 0; }
+
 opcion() { # $1=nn $2=emoji $3=etiqueta $4=on|off|"" $5=sel
   # 2 + bar1 + sp1 + chip4 + sp1 + emoji2 + sp1 + sep1 + sp1 + etiq30
   #   + guía26 + sp1 + est7 = 78
@@ -273,35 +276,38 @@ opcion() { # $1=nn $2=emoji $3=etiqueta $4=on|off|"" $5=sel
     "$f" "$bar" "$chip $1 $E_RST$f" "$E_P2$2$E_RST$f" "$E_OFF│$E_RST$f" \
     "$E_BLD$E_TXT$(pad "$3" 30)$E_RST$f" "$pts$(rep '·' 26)$E_RST$f" "$est" "$E_RST"
 }
- 
+
 menu() {
   seccion "MENÚ PRINCIPAL" "$E_P1"
   echo
-  opcion 01 "👥" "CONTROL DE USUARIOS"      "$M_USER"   1
-  opcion 02 "⚡" "OPTIMIZAR VPS"            "$M_OPT"    0
-  opcion 03 "🌐" "USUARIOS ONLINE"          "$M_ONLINE" 0
-  opcion 04 "🚀" "AUTO INICIO"              "$M_AUTO"   0
-  opcion 05 "📦" "INSTALADOR DE PROTOCOLOS" "$M_PROTO"  0
-  opcion 06 "📊" "MONITOR EN TIEMPO REAL"   "$M_MON"    0
-  opcion 07 "🔄" "ACTUALIZAR SCRIPT"        "$M_UPD"    0
+  opcion 01 "👥" "CONTROL DE USUARIOS"      "$M_USER"   "$(sel_de 01)"
+  opcion 02 "⚡" "OPTIMIZAR VPS"            "$M_OPT"    "$(sel_de 02)"
+  opcion 03 "🌐" "USUARIOS ONLINE"          "$M_ONLINE" "$(sel_de 03)"
+  opcion 04 "🚀" "AUTO INICIO"              "$M_AUTO"   "$(sel_de 04)"
+  opcion 05 "📦" "INSTALADOR DE PROTOCOLOS" "$M_PROTO"  "$(sel_de 05)"
+  opcion 06 "📊" "MONITOR EN TIEMPO REAL"   "$M_MON"    "$(sel_de 06)"
+  opcion 07 "🔄" "ACTUALIZAR SCRIPT"        "$M_UPD"    "$(sel_de 07)"
   echo
   printf '  %s%s%s\n' "$E_OFF" "$(rep '─' 76)" "$E_RST"
-  opcion 00 "🚪" "SALIR"                    ""          0
+  opcion 00 "🚪" "SALIR"                    ""          "$(sel_de 00)"
 }
- 
+
+# Un solo prompt. El decorativo "KIRA@host:~#" sobraba: abajo ya aparecía
+# el "Opción:" real del read y se leían dos prompts encima del otro.
 prompt() {
-  local h; h="$(hostname -s 2>/dev/null || echo servidor)"
-  # El relleno se calcula sobre el hostname REAL, no sobre uno de ejemplo:
-  # "  KIRA@" 7 + host + ":~# " 4 + "❯" 1 + " " 1 + cursor 1 = 14 + host
-  local vis=$(( 14 + ${#h} ))
-  printf '  %s%sKIRA%s%s@%s%s%s%s:~#%s %s%s❯%s \e[48;2;%sm \e[0m%*s\n' \
-    "$E_BLD" "$E_P2" "$E_RST" "$E_MUT" "$E_RST" "$E_INFO" "$h" \
-    "$E_MUT" "$E_RST" "$E_BLD" "$E_P1" "$E_RST" "$C_P1" $(( 78 - vis )) ''
-  printf '  %s%s%s\n' "$E_MUT" "$(pad '↑↓ mover · ENTER abrir · 0 salir' 76)" "$E_RST"
+  # "  ❯ Opción: " = 12 columnas + lo tecleado + cursor
+  local vis=$(( 12 + ${#BUF} + 1 ))
+  printf '  %s%s❯%s %s%sOpción:%s %s%s%s\e[48;2;%sm \e[0m%*s\n' \
+    "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$E_RST" \
+    "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( 78 - vis )) ''
+  printf '  %s%s%s\n' "$E_MUT" \
+    "$(pad 'escribí el número y pulsá ENTER · 0 para salir' 76)" "$E_RST"
 }
- 
+
 pintar() {
-  clear
+  # \e[H lleva el cursor arriba sin borrar la pantalla. Con `clear` en cada
+  # refresco de 1s el menú parpadea; así se sobrescribe línea por línea.
+  printf '\e[H'
   echo
   regla '▀' 76
   cabecera
@@ -313,8 +319,9 @@ pintar() {
   menu
   echo
   prompt
+  printf '\e[0J'          # limpia cualquier resto por debajo
 }
- 
+
 # ============================================================== MÓDULOS =====
 abrir() { # $1=ruta $2=nombre
   if [ -f "$1" ]; then
@@ -325,7 +332,7 @@ abrir() { # $1=ruta $2=nombre
     read -rsn1 -p "  Pulsa una tecla para volver…"
   fi
 }
- 
+
 # ================================================================= MAIN =====
 # El ancho de la terminal importa: a menos de 78 columnas el marco se parte.
 cols=$(tput cols 2>/dev/null || echo 80)
@@ -334,14 +341,9 @@ if [ "$cols" -lt 78 ] 2>/dev/null; then
   printf '  Agrandá la ventana o reducí la letra, y volvé a entrar.\n'
   read -rsn1 -p "  ENTER para continuar igual…"
 fi
- 
-cargar_fijos
- 
-while true; do
-  cargar_vivos
-  pintar
-  read -rp "  Opción: " op
-  case "$op" in
+
+ejecutar() {
+  case "$1" in
     1|01) abrir "$MOD/user.sh"      "Control de usuarios" ;;
     2|02) abrir "$MOD/optimize.sh"  "Optimizar VPS" ;;
     3|03) abrir "$MOD/online.sh"    "Usuarios online" ;;
@@ -350,6 +352,29 @@ while true; do
     6|06) abrir "$DIR/monitor.sh"   "Monitor en tiempo real" ;;
     7|07) abrir "$MOD/update.sh"    "Actualizar script" ;;
     0|00) clear; exit 0 ;;
-    *)    printf '\n  %s%s✖ Opción inválida%s\n' "$E_BLD" "$E_ERR" "$E_RST"; sleep 1 ;;
+    "")   return ;;
+    *)    printf '\n  %s%s✖ Opción inválida%s\n\n' "$E_BLD" "$E_ERR" "$E_RST"; sleep 1 ;;
   esac
+  clear   # el módulo dejó su propia salida: pantalla limpia al volver
+}
+
+cargar_fijos
+clear
+BUF=""
+
+# El bucle NO se queda bloqueado en `read`: espera una tecla hasta 0.8s y si
+# no llega, repinta con datos frescos. Así la hora y los recursos avanzan
+# solos. Se lee tecla por tecla (en vez de `read -t` sobre la línea entera)
+# para no perder lo ya tecleado cuando vence el tiempo.
+while true; do
+  cargar_vivos
+  pintar
+  if read -rsn1 -t 0.8 tecla; then
+    case "$tecla" in
+      "")        ejecutar "$BUF"; BUF="" ;;   # ENTER
+      $'\177'|$'\b') BUF="${BUF%?}" ;;        # borrar
+      [0-9])     [ ${#BUF} -lt 2 ] && BUF="$BUF$tecla" ;;
+      $'\e')     read -rsn2 -t 0.05 _ || true ;;  # descarta flechas
+    esac
+  fi
 done

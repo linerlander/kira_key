@@ -4,10 +4,10 @@
   "tamano":  "48K",
   "canal":   "estable",
   "notas": [
-    { "nota": "Panel rediseñado a 78 columnas" },
-    { "nota": "Barras de RAM, CPU y disco en vivo" },
+    { "nota": "Panel rediseñado" },
+    { "nota": "Barras de RAM, CPU" },
     { "nota": "Velocidad de red y conexiones" },
-    { "nota": "Módulo de actualización con respaldo" },
-    { "nota": "Instalador con verificación de pasos" }
+    { "nota": "Módulo de  " },
+    { "nota": "Instalador con " }
   ]
 }

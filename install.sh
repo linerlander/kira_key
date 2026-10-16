@@ -248,4 +248,4 @@ fi
 
 RESULTADO=ok
 render
-printf '\e[?25h' 
+printf '\e[?25h'

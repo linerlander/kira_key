@@ -69,7 +69,7 @@ fila_paso() { # $1=indice · 2 + ▏1 + 1 + glifo1 + 1 + texto38 + 1 + detalle33
     curso) g="◐"; c="$E_P1"  ;;
     falla) g="✖"; c="$E_ERR" ;;
     salta) g="–"; c="$E_MUT" ;;
-    *)     g="○"; c="$E_OFF" ;;
+    *)     g="○"; c="$E_MUT" ;;
   esac
   printf '  %s▏%s %s%s%s %s%s%s %s%s%s\n' "$E_OFF" "$E_RST" "$c" "$g" "$E_RST" \
     "$E_TXT" "$(pad "${PASOS[i]}" 38)" "$E_RST" "$E_MUT" "$(rpad "${DET[i]}" 33)" "$E_RST"
@@ -122,7 +122,10 @@ ejec() { echo "+ $*" >> "$LOG"; "$@" >> "$LOG" 2>&1; }
 
 # ================================================================= MAIN =====
 cachear
-trap 'printf "\e[?25h\e[?2026l\e[0m\n"' EXIT INT TERM
+# El manejador de INT/TERM DEBE salir. Si sólo limpia, Ctrl+C ejecuta el
+# trap y el bucle sigue corriendo: no hay forma de cortar el script.
+trap 'printf "\e[?25h\e[?2026l\e[0m\n"' EXIT
+trap 'printf "\e[?25h\e[?2026l\e[0m\n"; exit 130' INT TERM
 printf '\e[?25l'; clear
 : > "$LOG"
 render
@@ -233,9 +236,13 @@ else
   if grep -qF "$MARCA" "$BASHRC" 2>/dev/null; then
     paso 5 ok "ya estaba"
   else
+    # Salida de emergencia: si el menú falla al arrancar, el usuario queda
+    # fuera de su propio VPS. Con ~/.kira-off el auto inicio se saltea, y ese
+    # archivo se puede crear por sftp o por ssh no interactivo.
     {
       printf '\n%s\n' "$MARCA"
-      printf 'if [[ $- == *i* ]] && [ -z "${KIRA_ADENTRO:-}" ]; then\n'
+      printf '# Para desactivar el auto inicio:  touch ~/.kira-off\n'
+      printf 'if [[ $- == *i* ]] && [ -z "${KIRA_ADENTRO:-}" ] && [ ! -e "$HOME/.kira-off" ]; then\n'
       printf '  export KIRA_ADENTRO=1\n'
       printf '  cd "%s" && bash menu.sh\n' "$DESTINO"
       printf 'fi\n'

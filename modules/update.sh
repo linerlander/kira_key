@@ -5,10 +5,15 @@
 #        DEMO=1 bash modules/update.sh     (sin red, para ver el diseño)
 # =============================================================================
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ ! -r "$DIR/lib/ui.sh" ]; then
+  printf '\e[1;38;2;255;95;109m✖ Falta el archivo lib/ui.sh\e[0m\n'
+  printf '  Tiene que estar en: \e[1m%s/lib/ui.sh\e[0m\n' "$DIR"
+  exit 1
+fi
 source "$DIR/lib/ui.sh"
 
 # ============================================================== AJUSTES =====
-ORIGEN="${KIRA_ORIGEN:-https://raw.githubusercontent.com/Loki-CC/kira/main}"
+ORIGEN="${KIRA_ORIGEN:-https://raw.githubusercontent.com/linerlander/kira_key/main}"
 ARCH_VER="$DIR/VERSION"
 RESPALDOS="$DIR/.respaldos"
 
@@ -80,7 +85,7 @@ fila_paso() { # $1=indice
     ok)    g="✔"; c="$E_OK"  ;;
     curso) g="◐"; c="$E_P1"  ;;
     falla) g="✖"; c="$E_ERR" ;;
-    *)     g="○"; c="$E_OFF" ;;
+    *)     g="○"; c="$E_MUT" ;;
   esac
   if [ "${EST[i]}" = "curso" ] && [ "${PCT[i]}" -gt 0 ]; then
     der="$(barra_fija "${PCT[i]}" 24 "$E_P1") $E_TXT$(rpad "${PCT[i]}%" 4)$E_RST    "
@@ -243,7 +248,10 @@ ver_cambios() {
 # ================================================================= MAIN =====
 exigir_ancho
 REGLA_FIJA="$(regla '▀' 76)"
-trap 'cursor_on; printf "\e[?2026l\e[0m\n"' EXIT INT TERM
+# El manejador de INT/TERM DEBE salir. Si sólo limpia, Ctrl+C ejecuta el
+# trap y el bucle sigue corriendo: no hay forma de cortar el script.
+trap 'cursor_on; printf "\e[?2026l\e[0m\n"' EXIT
+trap 'cursor_on; printf "\e[?2026l\e[0m\n"; exit 130' INT TERM
 cursor_off
 clear
 

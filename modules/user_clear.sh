@@ -121,7 +121,7 @@ cargar_cuentas() {
       '')        est="sin clave" ;;
       *)
         if   [ -n "${ES_DEMO[$nom]:-}" ]; then est="prueba"
-        elif (( dias == 99999 ));         then est="sin vencimiento"
+        elif (( dias == 99999 ));         then est="sin límite"
         elif (( dias < 0 ));              then est="vencida"
         elif (( dias <= UMBRAL_VENCE ));  then est="pronto"
         else                                   est="activa"; fi ;;
@@ -143,10 +143,16 @@ cuenta_regresiva() { # $1=epoch del vencimiento
   # y dice lo que hay que decir, que no le queda nada. Un "--:--:--" querría
   # decir "no se sabe", y sí se sabe.
   (( r <= 0 )) && { printf '00:00:00'; return; }
+  # El reloj sólo se muestra cuando falta menos de dos días. Todas las cuentas
+  # vencen en el MISMO instante del día (00:00 UTC), así que las horas,
+  # minutos y segundos son idénticos en todas las filas: repetirlos en cada
+  # renglón no dice nada y parece un error. Lo que de verdad distingue a una
+  # cuenta de otra son los días.
+  if (( r >= 172800 )); then printf '%d días' $(( r / 86400 )); return; fi
   d=$(( r / 86400 )); r=$(( r % 86400 ))
   h=$(( r / 3600 ));  r=$(( r % 3600 ))
   m=$(( r / 60 ));    sg=$(( r % 60 ))
-  if (( d > 0 )); then printf '%dd %02d:%02d:%02d' "$d" "$h" "$m" "$sg"
+  if (( d > 0 )); then printf '1d %02d:%02d:%02d' "$h" "$m" "$sg"
   else                 printf '%02d:%02d:%02d' "$h" "$m" "$sg"; fi
 }
 
@@ -161,9 +167,9 @@ paginas() { local n=${#U_NOM[@]}; printf '%s' $(( (n + POR_PAGINA - 1) / POR_PAG
 # Fila de 78: 2 + nº 2 + 1 + marca 3 + 1 + usuario 20 + 1 + fecha 11
 #             + 1 + días 9 + 1 + conex 7 + 1 + estado 18
 cab_tabla() {
-  printf '  %s%s %s %s %s %s %s %s%s\n' "$E_MUT" \
+  printf '  %s%s  %s  %s  %s  %s  %s  %s%s\n' "$E_MUT" \
     "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 19)" "$(pad 'CORTA EL' 11)" \
-    "$(pad 'LE QUEDA' 13)" "$(rpad 'CONEX' 5)" "$(pad 'ESTADO' 17)" "$E_RST"
+    "$(pad 'LE QUEDA' 10)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 14)" "$E_RST"
 }
 
 color_estado() {
@@ -195,14 +201,14 @@ fila_usuario() { # $1=índice global
   elif (( falta <= 0 ));          then colr="$E_BLD$E_ERR"
   elif (( falta < 172800 ));      then colr="$E_BLD$E_WARN"
   fi
-  printf '  %s%s%s%s %s%s%s %s%s%s %s%s %s%s%s %s%s %s%s%s%s\n' \
+  printf '  %s%s%s%s  %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s%s%s\n' \
     "$fondo" "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST$fondo" \
     "$E_BLD$E_ERR" "$marca" "$E_RST$fondo" \
     "$E_TXT" "$(pad "${U_NOM[i]}" 19)" "$E_RST$fondo" \
     "$E_MUT" "$(pad "${U_VENCE[i]}" 11)" \
-    "$colr" "$(pad "$resta" 13)" "$E_RST$fondo" \
+    "$colr" "$(pad "$resta" 10)" "$E_RST$fondo" \
     "$E_TXT" "$(rpad "${U_CONEX[i]}" 5)" \
-    "$col" "$(pad "${U_ESTADO[i]}" 17)" "$E_RST" "$E_RST"
+    "$col" "$(rpad "${U_ESTADO[i]}" 14)" "$E_RST" "$E_RST"
 }
 
 linea_aviso() {

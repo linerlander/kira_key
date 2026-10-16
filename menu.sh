@@ -10,91 +10,10 @@ ANCHO=78
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOD="$DIR/modules"
 
-# ============================================================== PALETA ======
-# \e[38;2;R;G;Bm = texto · \e[48;2;R;G;Bm = fondo. Si el cliente no soporta
-# color verdadero el degradado se ve plano, pero nada se rompe.
-C_P1="45;212;232"    # cian    · primario
-C_P2="155;140;255"   # violeta · marca
-C_OK="63;224;168"    # menta   · ON
-C_WARN="255;194;71"  # ámbar   · aviso
-C_ERR="255;95;109"   # coral   · OFF
-C_INFO="95;168;255"  # azul    · dato
-C_MUT="111;125;156"  # gris    · secundario
-C_TXT="220;228;245"  # texto
-C_BORDE="40;64;106"
-C_BAND="22;35;60"
-C_SEL="19;34;65"
-C_OFF="28;39;66"
-C_CHIP="25;41;70"
-G1=(45 212 232); G2=(199 125 238)   # degradado del logo
-
-E_RST=$'\e[0m'; E_BLD=$'\e[1m'
-E_P1=$'\e[38;2;'"$C_P1"'m';     E_P2=$'\e[38;2;'"$C_P2"'m'
-E_OK=$'\e[38;2;'"$C_OK"'m';     E_WARN=$'\e[38;2;'"$C_WARN"'m'
-E_ERR=$'\e[38;2;'"$C_ERR"'m';   E_INFO=$'\e[38;2;'"$C_INFO"'m'
-E_MUT=$'\e[38;2;'"$C_MUT"'m';   E_TXT=$'\e[38;2;'"$C_TXT"'m'
-E_BOR=$'\e[38;2;'"$C_BORDE"'m'; E_OFF=$'\e[38;2;'"$C_OFF"'m'
-B_BAND=$'\e[48;2;'"$C_BAND"'m'; B_SEL=$'\e[48;2;'"$C_SEL"'m'
-B_CHIP=$'\e[48;2;'"$C_CHIP"'m'
-
-# ============================================================ UTILERÍA ======
-# OJO: en `local a=$1 b=$((a+1))` bash expande TODAS las asignaciones antes de
-# aplicarlas, así que b NO ve a `a`. Siempre en líneas separadas.
-# OJO 2: printf "%-30s" cuenta BYTES. Con tildes (caché, tráfico, Menú) la
-# columna se descuadra. pad() usa ${#s}, que cuenta caracteres.
-# pad y rpad RECORTAN si el texto no entra. Antes sólo rellenaban, así que un
-# valor largo (un uptime de "2 weeks 3d 22h 45m", un SO con nombre extenso)
-# empujaba la fila más allá de las 78 columnas y rompía el marco.
-pad()  { local s="$1" w="$2"; (( ${#s} > w )) && s="${s:0:w}"
-         local n=$(( w - ${#s} )); printf '%s%*s' "$s" "$n" ''; }
-rpad() { local s="$1" w="$2"; (( ${#s} > w )) && s="${s:0:w}"
-         local n=$(( w - ${#s} )); printf '%*s%s' "$n" '' "$s"; }
-rep()  { local i; for ((i=0;i<$2;i++)); do printf '%s' "$1"; done; }
-
-mezcla() { # $1=i $2=n -> "R;G;B" interpolado entre G1 y G2
-  local i=$1 n=$2
-  (( n < 2 )) && n=2
-  local r=$(( G1[0] + (G2[0]-G1[0])*i/(n-1) ))
-  local g=$(( G1[1] + (G2[1]-G1[1])*i/(n-1) ))
-  local b=$(( G1[2] + (G2[2]-G1[2])*i/(n-1) ))
-  printf '%d;%d;%d' "$r" "$g" "$b"
-}
-
-regla() { # $1=caracter $2=ancho · regla con degradado
-  local i; printf '  '
-  for ((i=0;i<$2;i++)); do printf '\e[38;2;%sm%s' "$(mezcla "$i" "$2")" "$1"; done
-  printf '%s\n' "$E_RST"
-}
-
-grad_txt() { # $1=texto $2=fila · degradado en diagonal
-  local s="$1" fila="${2:-0}"
-  local n=${#s}
-  local i p
-  for ((i=0;i<n;i++)); do
-    p=$(( i + fila*3 )); (( p >= n )) && p=$(( n-1 ))
-    printf '\e[38;2;%sm%s' "$(mezcla "$p" "$n")" "${s:i:1}"
-  done
-  printf '%s' "$E_RST"
-}
-
-barra() { # $1=pct $2=ancho · verde → ámbar → rojo según la carga
-  local pct="$1" w="$2"
-  [[ "$pct" =~ ^[0-9]+$ ]] || pct=0
-  (( pct > 100 )) && pct=100
-  local lle=$(( pct * w / 100 ))
-  (( lle==0 && pct>0 )) && lle=1
-  local i p r g b
-  for ((i=0;i<lle;i++)); do
-    p=$(( i * 100 / (w-1) ))
-    if (( p < 55 )); then
-      r=$(( 63 + (255-63)*p/55 )); g=$(( 224 + (194-224)*p/55 )); b=$(( 168 + (71-168)*p/55 ))
-    else
-      r=255; g=$(( 194 + (95-194)*(p-55)/45 )); b=$(( 71 + (109-71)*(p-55)/45 ))
-    fi
-    printf '\e[38;2;%d;%d;%dm█' "$r" "$g" "$b"
-  done
-  printf '%s%s%s' "$E_OFF" "$(rep '░' $(( w - lle )))" "$E_RST"
-}
+# Paleta, utilería, marcos y volcado de pantalla viven en lib/ui.sh: una
+# sola copia para el menú y para todos los módulos. Si estuvieran
+# duplicados, cambiar un color acá dejaría los módulos con el viejo.
+source "$DIR/lib/ui.sh"
 
 # ================================================================ DATOS =====
 # Puertos en escucha. ss → netstat → /proc/net. El último siempre existe en
@@ -134,11 +53,6 @@ conexiones() {
     awk 'FNR>1 && $4=="01"{n++} END{print n+0}' "${f[@]}" 2>/dev/null
   fi
 }
-
-# Tamaños legibles: 1536 -> "1.5K", 4294967296 -> "4.0G"
-bytes_hum() { awk -v b="$1" 'BEGIN{
-  s="BKMGT"; i=1; while (b>=1024 && i<5) { b/=1024; i++ }
-  if (i==1) printf "%d%s", b, substr(s,i,1); else printf "%.1f%s", b, substr(s,i,1) }'; }
 
 # Velocidad de red por diferencia entre dos lecturas de /proc/net/dev.
 # Se descarta lo (loopback): si no, el tráfico local infla la cifra.
@@ -187,6 +101,10 @@ cargar_fijos() {   # lo que no cambia: se consulta una sola vez
   [ -z "${SSH_PORTS// }" ] && SSH_PORTS="22 "
   SO=$(awk -F'"' '/^PRETTY_NAME/{print $2}' /etc/os-release 2>/dev/null)
   [ -z "$SO" ] && SO="Linux"
+  # La versión sale del archivo VERSION, que escribe el instalador y actualiza
+  # el módulo 07. Escrita a mano en la cabecera quedaba desfasada al actualizar.
+  VER=$(cat "$DIR/VERSION" 2>/dev/null)
+  [ -z "$VER" ] && VER="1.0"
 }
 
 cargar_vivos() {   # lo que cambia en cada refresco
@@ -245,7 +163,7 @@ cabecera() {
   local I=(
     ""
     "$E_BLD$E_TXT$(pad 'ADMINISTRADOR DE VPS · SSH' 43)$E_RST"
-    "$E_BLD$E_P1$(pad 'v2.5 PREMIUM' 14)$E_RST$E_MUT$(pad 'LICENCIA' 9)$E_RST$E_OK$(pad '● ACTIVA' 20)$E_RST"
+    "$E_BLD$E_P1$(pad "v$VER PREMIUM" 14)$E_RST$E_MUT$(pad 'LICENCIA' 9)$E_RST$E_OK$(pad '● ACTIVA' 20)$E_RST"
     "$E_MUT$(pad 'EXPIRA' 14)$E_RST$E_TXT$(pad '2026-12-31' 14)$E_RST$E_MUT$(pad 'quedan 77 días' 15)$E_RST"
     "$E_MUT$(pad 'SOPORTE' 14)$E_RST$E_INFO$(pad '@Loki_CC' 29)$E_RST"
     ""
@@ -281,8 +199,6 @@ banda() {
 # entre bordes mide SIEMPRE 35. Se arma el cuerpo primero y se imprime con
 # un solo %s: si la cantidad de marcadores no coincide con la de argumentos,
 # printf repite el formato y mete líneas fantasma.
-caja_izq() { printf '  %s│%s%s%s│%s'   "$E_BOR" "$E_RST" "$1" "$E_BOR" "$E_RST"; }
-caja_der() { printf '  %s│%s%s%s│%s\n' "$E_BOR" "$E_RST" "$1" "$E_BOR" "$E_RST"; }
 
 srv() { # $1=nombre $2=on/off $3=detalle · 1+11+5+18 = 35
   local e c
@@ -302,10 +218,7 @@ hum() { awk -v u="$1" -v t="$2" 'BEGIN{
   if (t >= 1024) printf "%.1f/%.1fG", u/1024, t/1024; else printf "%d/%dM", u, t }'; }
 
 paneles() {
-  printf '  %s╭─%s %s%sSERVICIOS%s %s───────────────────────╮%s  ' \
-         "$E_BOR" "$E_RST" "$E_BLD" "$E_P1" "$E_RST" "$E_BOR" "$E_RST"
-  printf '%s╭─%s %s%sRECURSOS%s %s────────────────────────╮%s\n' \
-         "$E_BOR" "$E_RST" "$E_BLD" "$E_P2" "$E_RST" "$E_BOR" "$E_RST"
+  techo "SERVICIOS" "$E_P1" "RECURSOS" "$E_P2"
 
   srv "SSH"       "$ST_SSH"  "${SSH_PORTS% }" ; rec "RAM"   "$RAM_PCT" "$(hum "$RAM_USA" "$RAM_TOT")"
   srv "DROPBEAR"  "$ST_DROP" "90 · 143"       ; rec "CPU"   "$CPU_PCT" "${NUCLEOS} vCPU"
@@ -315,11 +228,9 @@ paneles() {
   srv "V2RAY"     "$ST_V2"   "10086"          ; rec_txt "RED ▲" "$NET_TX_VEL" "total $NET_TX_TOT"
   srv "HTTP"      "$ST_HTTP" "80"             ; rec_txt "CONEX" "$CONEX establecidas" ""
 
-  printf '  %s╰%s╯%s  %s╰%s╯%s\n' "$E_BOR" "$(rep '─' 35)" "$E_RST" "$E_BOR" "$(rep '─' 35)" "$E_RST"
+  piso
 }
 
-seccion() { printf '  %s▌%s %s%s%s %s%s%s\n' "$2" "$E_RST" "$E_BLD" "$E_TXT" "$1" \
-                   "$E_OFF" "$(rep '─' $(( 73 - ${#1} )))" "$E_RST"; }
 
 # TODOS los emoji van del bloque U+1F300 en adelante: ésos miden 2 columnas
 # en cualquier terminal. Los heredados U+26xx/U+27xx (⚡ ⚙ ✦ 🌐 de trazo fino)
@@ -410,10 +321,7 @@ pintar() {
 # pantalla se veía temblar mientras se dibujaba. Se arma todo en memoria y se
 # vuelca de golpe, con el cursor oculto y marcando el cuadro como atómico
 # (\e[?2026h/l) para los clientes que lo soportan.
-render() {
-  local f; f="$(pintar)"
-  printf '\e[?2026h\e[H%s\e[0J\e[?2026l' "$f"
-}
+render() { local f; f="$(pintar)"; volcar "$f"; }
 
 # ============================================================== MÓDULOS =====
 abrir() { # $1=ruta $2=nombre
@@ -427,13 +335,7 @@ abrir() { # $1=ruta $2=nombre
 }
 
 # ================================================================= MAIN =====
-# El ancho de la terminal importa: a menos de 78 columnas el marco se parte.
-cols=$(tput cols 2>/dev/null || echo 80)
-if [ "$cols" -lt 78 ] 2>/dev/null; then
-  printf '\e[38;2;255;194;71m⚠ Tu terminal tiene %s columnas. KIRA necesita 78.\e[0m\n' "$cols"
-  printf '  Agrandá la ventana o reducí la letra, y volvé a entrar.\n'
-  read -rsn1 -p "  ENTER para continuar igual…"
-fi
+exigir_ancho
 
 ejecutar() {
   case "$1" in
@@ -448,8 +350,8 @@ ejecutar() {
     "")   return ;;
     *)    printf '\n  %s%s✖ Opción inválida%s\n\n' "$E_BLD" "$E_ERR" "$E_RST"; sleep 1 ;;
   esac
-  clear            # el módulo dejó su propia salida: pantalla limpia al volver
-  printf '\e[?25l' # el módulo pudo mostrar el cursor: se vuelve a ocultar
+  clear        # el módulo dejó su propia salida: pantalla limpia al volver
+  cursor_off   # el módulo pudo mostrar el cursor: se vuelve a ocultar
 }
 
 procesar() {
@@ -466,8 +368,8 @@ cachear_estatico
 cachear_menu
 # El cursor real parpadeando mientras se repinta suma al temblor: se oculta
 # y se dibuja uno propio en el prompt. El trap lo devuelve pase lo que pase.
-trap 'printf "\e[?25h\e[?2026l\e[0m\n"; clear' EXIT INT TERM
-printf '\e[?25l'
+trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear' EXIT INT TERM
+cursor_off
 clear
 net_medir           # primera lectura: fija la base de red
 cpu_pct >/dev/null  # primera muestra de CPU: la siguiente ya mide un intervalo

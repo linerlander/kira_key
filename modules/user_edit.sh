@@ -365,6 +365,24 @@ clave_azar() {
   printf '%s' "$s"
 }
 
+# Corta las conexiones abiertas de un usuario. Devuelve cuántas cortó.
+cortar_conexiones() { # $1=usuario
+  local u="$1" uid p c k v n=0
+  uid=$(id -u "$u" 2>/dev/null) || { printf '0'; return; }
+  for p in /proc/[0-9]*; do
+    [ -r "$p/comm" ] || continue
+    read -r c < "$p/comm" 2>/dev/null || continue
+    case "$c" in
+      sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
+      *) continue ;;
+    esac
+    v=""
+    while read -r k v _; do [ "$k" = "Uid:" ] && break; done < "$p/status" 2>/dev/null
+    [ "$v" = "$uid" ] && { kill -9 "${p##*/}" 2>/dev/null && n=$(( n + 1 )); }
+  done
+  printf '%s' "$n"
+}
+
 renovar() { # $1=días a sumar
   local n="$1" hoy base nuevo fecha u="${U_NOM[$SEL]}"
   hoy=$(( $(date +%s) / 86400 ))
@@ -397,7 +415,16 @@ cambiar_clave() { # $1=clave
   (( ${#c} < 4 )) && { AVISO="Muy corta: mínimo 4 caracteres"; return 1; }
   # printf es builtin: la clave no aparece en la lista de procesos.
   if printf '%s:%s\n' "$u" "$c" | chpasswd 2>/tmp/kira-edit.err; then
-    MENSAJE="$u · contraseña nueva: $c"
+    # Y se le cortan las conexiones que ya tenía abiertas. Cambiar la clave
+    # NO las tira: siguen vivas con la clave vieja y siguen ocupando el cupo
+    # del límite, así que al reconectar con la clave nueva el control de
+    # conexiones lo rechaza y parece que la clave no funcionara.
+    local n; n=$(cortar_conexiones "$u")
+    if (( n > 0 )); then
+      MENSAJE="$u · clave nueva: $c · se cortaron $n conexiones viejas"
+    else
+      MENSAJE="$u · contraseña nueva: $c"
+    fi
     cargar_cuentas
     return 0
   fi

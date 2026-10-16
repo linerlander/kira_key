@@ -1,9 +1,19 @@
 #!/bin/bash
 # =============================================================================
 #  KIRA · módulo 01.06 · BANNER SSH
-#  El mensaje que ve el cliente al conectarse. Va en TEXTO PLANO: SSH manda
-#  texto, no una página web, así que las etiquetas HTML y los códigos de color
-#  llegan crudos al inyector y se ven como basura.
+#  El mensaje que ve el cliente al conectarse.
+#
+#  SOBRE EL COLOR. El banner viaja como texto antes de que el cliente se
+#  autentique, pero las apps de túnel (HTTP Injector y compañía) lo muestran
+#  en una ventana de Android y le pasan el texto por el intérprete de HTML del
+#  sistema. Por eso el color se pone con etiquetas <font color="#RRGGBB">, que
+#  es lo que usa todo el ambiente, y NO con códigos de color de terminal: esos
+#  sí llegan crudos y se ven como basura.
+#
+#  Una terminal común (PuTTY, el ssh de la compu) no interpreta HTML y muestra
+#  las etiquetas a la vista. Por eso el color se puede apagar con la opción 05
+#  y queda el mismo banner en texto pelado.
+#
 #  Uso:  bash modules/ssh_banner.sh
 # =============================================================================
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,20 +48,124 @@ SSHD="/etc/ssh/sshd_config"
 DROPIN="/etc/ssh/sshd_config.d"
 DB_DEFAULT="/etc/default/dropbear"
 MAX_LINEAS=8
-ANCHO_LINEA=60
+ANCHO_LINEA=48
 
 PANTALLA=inicio           # inicio · escribir · plantillas · confirmar
-ACCION=""                 # qué va a confirmar la pantalla de confirmar
+ACCION=""
 AVISO=""; MENSAJE=""
 BUF=""; SEG_ANT=0
-ORIGEN=""                 # de qué archivo sale el banner que se está usando
+ORIGEN=""; BANNER_FILE=""
 HAY_DROPBEAR=0; DB_LISTO=0
-declare -a LINEAS=()      # lo que hay guardado
+COLOR_ON=1                # 1 = se guarda con etiquetas de color
+PLANT_SEL=1
+PLANT_N=10
+declare -a LINEAS=()      # lo que hay guardado, tal cual está en el archivo
 declare -a NUEVO=()       # lo que se está escribiendo
 declare -a RESPALDOS=()   # "archivo|copia" para poder volver atrás
 
 M_TABLA=$'\e[38;2;110;46;84m'
 E_PINK=$'\e[38;2;255;111;181m'
+
+# ============================================================ PALETA WEB ====
+# Tonos medios a propósito: se leen tanto sobre fondo oscuro como sobre fondo
+# claro, porque no sabemos con qué tema tiene la app cada cliente. Por eso
+# tampoco se usa blanco ni negro: cualquiera de los dos desaparece en la mitad
+# de los equipos.
+declare -A BC=(
+  [cian]="00B8D4"  [azul]="1E88E5"  [violeta]="7C4DFF"
+  [rosa]="EC407A"  [verde]="00A86B" [ambar]="FF8F00"
+  [rojo]="E53935"
+)
+ansi_de_hex() { # $1=RRGGBB · el mismo tono, para la vista previa
+  local h="$1"
+  [ "${#h}" -ne 6 ] && h="00B8D4"
+  printf '\e[1m\e[38;2;%d;%d;%dm' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"
+}
+
+# ====================================================== TEXTO Y ETIQUETAS ===
+# Nombres de color que puede traer un banner viejo hecho con otro panel.
+nombre_a_hex() { # $1=nombre o #hex
+  local c="${1,,}"
+  case "$c" in
+    '#'*)              printf '%s' "${c#\#}" ;;
+    red)               printf 'E53935' ;;
+    green|lime)        printf '00A86B' ;;
+    blue)              printf '1E88E5' ;;
+    yellow|orange|gold) printf 'FF8F00' ;;
+    cyan|aqua)         printf '00B8D4' ;;
+    magenta|fuchsia|pink) printf 'EC407A' ;;
+    purple|violet)     printf '7C4DFF' ;;
+    white)             printf 'E2E8F0' ;;
+    gray|grey)         printf '64748B' ;;
+    *)                 printf '00B8D4' ;;
+  esac
+}
+
+# El texto sin ninguna etiqueta: es lo que hay que medir para que el marco de
+# la vista previa cierre donde tiene que cerrar.
+sin_etiquetas() { # $1=línea
+  local t="$1"
+  t="${t//<br>/ }"; t="${t//<BR>/ }"; t="${t//<br\/>/ }"; t="${t//<br \/>/ }"
+  while [[ "$t" == *"<"*">"* ]]; do t="${t%%<*}${t#*>}"; done
+  t="${t//$'\e'/}"
+  t="${t//&nbsp;/ }"; t="${t//&amp;/&}"; t="${t//&lt;/<}"; t="${t//&gt;/>}"
+  t="${t//$'\t'/ }"; t="${t//$'\r'/}"
+  while [[ "$t" == *' ' ]]; do t="${t% }"; done
+  printf '%s' "$t"
+}
+
+# Lo mismo, pero DEJANDO el color: las etiquetas HTML se cambian por los
+# códigos que entiende la terminal, nada más que para dibujar la vista previa.
+# Así lo que ves en el recuadro es lo que ve tu cliente en el celular, en vez
+# de un montón de etiquetas.
+colorear() { # $1=línea
+  local t="$1" salida="" resto eti hex
+  t="${t//<br>/ }"; t="${t//<BR>/ }"; t="${t//<br\/>/ }"; t="${t//<br \/>/ }"
+  t="${t//$'\e'/}"; t="${t//$'\t'/ }"; t="${t//$'\r'/}"
+  resto="$t"
+  while [[ "$resto" == *"<"*">"* ]]; do
+    salida="$salida${resto%%<*}"            # lo que hay antes de la etiqueta
+    resto="${resto#*<}"
+    eti="${resto%%>*}"                      # la etiqueta, sin < ni >
+    resto="${resto#*>}"
+    case "${eti,,}" in
+      font*color=*)
+        hex="${eti#*=}"; hex="${hex//\"/}"; hex="${hex//\'/}"; hex="${hex%% *}"
+        salida="$salida$(ansi_de_hex "$(nombre_a_hex "$hex")")" ;;
+      /font)      salida="$salida$E_RST$E_BLD$E_TXT" ;;
+      b|strong)   salida="$salida$E_BLD" ;;
+      /b|/strong) salida="$salida$E_RST$E_TXT" ;;
+    esac
+  done
+  salida="$salida$resto"
+  salida="${salida//&nbsp;/ }"; salida="${salida//&amp;/&}"
+  salida="${salida//&lt;/<}";   salida="${salida//&gt;/>}"
+  printf '%s' "$salida"
+}
+
+# ========================================================= ANCHO CON EMOJIS =
+# pad() de la librería cuenta CARACTERES, y un emoji ocupa DOS columnas. Con
+# tres emojis en un renglón, el borde derecho del marco se corre tres lugares.
+# El truco para medirlo barato: se sacan de un saque todos los caracteres
+# anchos con una sola expansión, y la diferencia de largo dice cuántos había.
+ANCHO_V=0
+ancho_visual() { # $1=texto -> deja el resultado en ANCHO_V
+  local s="$1" sin n
+  n=${#s}
+  sin="${s//[$'\U1F300'-$'\U1FAFF']/}"   # ahí viven casi todos los emojis
+  n=$(( n + ${#s} - ${#sin} ))
+  sin="${s//[✅⭐]/}"                      # los pocos que caen fuera del rango
+  n=$(( n + ${#s} - ${#sin} ))
+  ANCHO_V=$n
+}
+pad_v() { # $1=texto $2=columnas · recorta y rellena contando los emojis
+  local s="$1" w="$2"
+  ancho_visual "$s"
+  while (( ANCHO_V > w )) && (( ${#s} > 0 )); do
+    s="${s:0:${#s}-1}"; ancho_visual "$s"
+  done
+  printf '%s%*s' "$s" $(( w - ANCHO_V )) ''
+}
 
 # ================================================================ DATOS =====
 # De dónde sale el banner que se está usando DE VERDAD. No alcanza con mirar
@@ -61,12 +175,10 @@ E_PINK=$'\e[38;2;255;111;181m'
 #
 # OJO: esta función NO imprime el resultado, lo deja en dos variables. Si
 # imprimiera y se llamara con $( ), eso corre en un subshell y el ORIGEN que
-# asigna se perdería al volver: el panel diría siempre "ninguno".
-BANNER_FILE=""
+# asigna se perdería al volver.
 banner_actual() {
   ORIGEN=""; BANNER_FILE=""
   local f linea
-  # Primero los incluidos, en el orden en que los lee sshd.
   if [ -d "$DROPIN" ]; then
     for f in "$DROPIN"/*.conf; do
       [ -r "$f" ] || continue
@@ -85,7 +197,6 @@ cargar() {
   [ -n "$BANNER_FILE" ] && [ -r "$BANNER_FILE" ] && \
     while IFS= read -r l; do LINEAS+=("$l"); done < "$BANNER_FILE"
 
-  # ¿Hay dropbear? No usa sshd_config: el banner se le pasa por argumento.
   HAY_DROPBEAR=0; DB_LISTO=0
   if [ -s /etc/dropbear/dropbear.conf ] || [ -r "$DB_DEFAULT" ] || \
      command -v dropbear >/dev/null 2>&1; then
@@ -94,31 +205,22 @@ cargar() {
   fi
 }
 
-# ¿Tiene HTML adentro? Es el error más común: queda del panel anterior y el
-# cliente ve las etiquetas crudas.
-tiene_html() {
+tiene_color() {
+  local l
+  for l in "${LINEAS[@]}"; do case "${l,,}" in *'<font'*) return 0 ;; esac; done
+  return 1
+}
+tiene_etiquetas() {
   local l
   for l in "${LINEAS[@]}"; do case "$l" in *'<'*'>'*) return 0 ;; esac; done
   return 1
 }
+# Los códigos de color de TERMINAL sí son un problema: ninguna app de túnel
+# los interpreta y llegan crudos a la pantalla del cliente.
 tiene_ansi() {
   local l
   for l in "${LINEAS[@]}"; do case "$l" in *$'\e'*) return 0 ;; esac; done
   return 1
-}
-
-# Deja sólo lo que el cliente puede leer: fuera etiquetas y códigos de color.
-limpiar_texto() { # $1=línea
-  local t="$1"
-  t="${t//<br>/ }"; t="${t//<BR>/ }"; t="${t//<br\/>/ }"; t="${t//<br \/>/ }"
-  while [[ "$t" == *"<"*">"* ]]; do t="${t%%<*}${t#*>}"; done
-  t="${t//$'\e'/}"
-  t="${t//&nbsp;/ }"; t="${t//&amp;/&}"; t="${t//&lt;/<}"; t="${t//&gt;/>}"
-  t="${t//$'\t'/ }"; t="${t//$'\r'/}"
-  # Sólo se recorta por la derecha. Los espacios de la izquierda se respetan:
-  # son los que centran el texto, y comérselos desarma cualquier plantilla.
-  while [[ "$t" == *' ' ]]; do t="${t% }"; done
-  printf '%s' "$t"
 }
 
 # ====================================================== MARCO A LO ANCHO ===
@@ -138,7 +240,7 @@ opcion() { # $1=número $2=emoji $3=texto
   printf '%s%s%s %s%s%s %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST" \
          "$E_P2" "$2" "$E_RST" "$E_BLD$E_TXT" "$(pad "$3" 31)" "$E_RST"
 }
-opcion_off() { # una opción que ahora no se puede usar
+opcion_off() {
   printf '%s%s%s %s%s%s %s%s%s' "$E_MUT" "$(pad "$1" 2)" "$E_RST" \
          "$E_MUT" "$2" "$E_RST" "$E_MUT" "$(pad "$3" 31)" "$E_RST"
 }
@@ -161,13 +263,23 @@ prompt() {
 }
 
 # =============================================================== PANTALLA ===
-# El banner se muestra ya limpio: así como se ve acá es como se ve allá.
-vista_previa() { # $@ = líneas
-  local l n=0 limpio
+# El banner se muestra CON SUS COLORES. Lo que se ve en este recuadro es lo
+# que ve tu cliente en el celular.
+vista_previa() { # $@ = líneas tal cual van al archivo
+  local l n=0 txt pintada
   for l in "$@"; do
     (( n++ )); (( n > MAX_LINEAS )) && break
-    limpio="$(limpiar_texto "$l")"
-    fila_ancha "$(printf '   %s%s   ' "$E_BLD$E_TXT" "$(pad "$limpio" 68)")"
+    txt="$(sin_etiquetas "$l")"
+    ancho_visual "$txt"
+    if (( ANCHO_V > 68 )); then
+      # Demasiado larga para el recuadro: se muestra recortada y sin color.
+      # Es feo, pero mejor que romper el marco.
+      fila_ancha "$(printf '   %s%s   ' "$E_BLD$E_TXT" "$(pad_v "$txt" 68)")"
+    else
+      pintada="$(colorear "$l")"
+      fila_ancha "$(printf '   %s%s%s%*s   ' "$E_BLD$E_TXT" "$pintada" "$E_RST" \
+                   $(( 68 - ANCHO_V )) '')"
+    fi
   done
   if (( n == 0 )); then
     fila_ancha "$(printf ' %s%s ' "$E_MUT" "$(pad 'Sin banner: el cliente no ve ningún mensaje al conectarse.' 72)")"
@@ -178,27 +290,39 @@ vista_previa() { # $@ = líneas
 }
 
 diagnostico() {
-  if tiene_html; then
+  if tiene_ansi; then
     printf '  %s%s%s\n' "$E_BLD$E_ERR" \
-      "$(pad '✖ Tu banner tiene etiquetas HTML y el cliente las ve crudas.' 76)" "$E_RST"
+      "$(pad '✖ Tiene códigos de color de terminal: el celular los ve como basura.' 76)" "$E_RST"
     printf '  %s%s%s\n' "$E_MUT" \
-      "$(pad '  Arriba está ya limpio. La opción 03 lo deja así de verdad.' 76)" "$E_RST"
-  elif tiene_ansi; then
-    printf '  %s%s%s\n' "$E_BLD$E_WARN" \
-      "$(pad '▸ Tiene códigos de color: HTTP Injector los muestra como basura.' 76)" "$E_RST"
+      "$(pad '  La opción 03 los saca y deja el texto limpio.' 76)" "$E_RST"
+  elif tiene_color; then
+    printf '  %s%s%s\n' "$E_OK" \
+      "$(pad '✔ Con color: así lo ven HTTP Injector y las demás apps de túnel.' 76)" "$E_RST"
     printf '  %s%s%s\n' "$E_MUT" \
-      "$(pad '  La opción 03 los saca y deja sólo el texto.' 76)" "$E_RST"
+      "$(pad "  Puesto desde: ${ORIGEN:-ninguno}" 76)" "$E_RST"
   elif (( ${#LINEAS[@]} == 0 )); then
     printf '  %s%s%s\n' "$E_MUT" \
       "$(pad 'Un banner sirve para que el cliente sepa a quién escribirle si falla algo.' 76)" "$E_RST"
     printf '  %s\n' "$(pad '' 76)"
   else
-    printf '  %s%s%s\n' "$E_OK" "$(pad '✔ Texto plano: se ve igual en cualquier cliente.' 76)" "$E_RST"
-    printf '  %s%s%s\n' "$E_MUT" "$(pad "  Puesto desde: ${ORIGEN:-ninguno}" 76)" "$E_RST"
+    printf '  %s%s%s\n' "$E_TXT" \
+      "$(pad '▸ En texto pelado, sin color. Se ve igual en cualquier cliente.' 76)" "$E_RST"
+    printf '  %s%s%s\n' "$E_MUT" \
+      "$(pad "  Puesto desde: ${ORIGEN:-ninguno}" 76)" "$E_RST"
   fi
 }
 
-pintar_inicio() {
+# El interruptor de color, con su estado a la vista.
+fila_color() {
+  local e t c
+  if (( COLOR_ON )); then e="🎨"; t="COLOR: ENCENDIDO · para apps de túnel"; c="$E_BLD$E_OK"
+  else                    e="📄"; t="COLOR: APAGADO · texto pelado"; c="$E_BLD$E_WARN"; fi
+  printf '  %s%s%s %s%s%s %s%s%s\n' \
+    "$E_BLD$E_P1" "$(pad '88' 2)" "$E_RST" "$E_P2" "$e" "$E_RST" \
+    "$c" "$(pad "$t" 70)" "$E_RST"
+}
+
+marco_superior() {
   echo
   printf '%s\n' "$REGLA_FIJA"
   printf '%s\n' "$CABECERA_FIJA"
@@ -207,6 +331,10 @@ pintar_inicio() {
   echo
   encabezado "BANNER SSH" "KIRA v$KIRA_VER"
   echo
+}
+
+pintar_inicio() {
+  marco_superior
   techo_ancho "ASÍ LO VE TU CLIENTE"
   vista_previa "${LINEAS[@]}"
   piso_ancho
@@ -215,12 +343,13 @@ pintar_inicio() {
   echo
   seccion "QUÉ HACER" "$E_WARN"
   echo
-  printf '  %s  %s\n' "$(opcion '01' '📝' 'ESCRIBIR UNO NUEVO')" "$(opcion '02' '✨' 'USAR UNA PLANTILLA')"
-  if tiene_html || tiene_ansi; then
-    printf '  %s  %s\n' "$(opcion '03' '🧽' 'LIMPIAR EL QUE TENGO')" "$(opcion '04' '🧹' 'QUITAR EL BANNER')"
+  printf '  %s  %s\n' "$(opcion '01' '✨' 'USAR UNA PLANTILLA')" "$(opcion '02' '📝' 'ESCRIBIR UNO NUEVO')"
+  if tiene_etiquetas || tiene_ansi; then
+    printf '  %s  %s\n' "$(opcion '03' '🧽' 'SACARLE EL COLOR')" "$(opcion '04' '🧹' 'QUITAR EL BANNER')"
   else
-    printf '  %s  %s\n' "$(opcion_off '03' '🧽' 'LIMPIAR EL QUE TENGO')" "$(opcion '04' '🧹' 'QUITAR EL BANNER')"
+    printf '  %s  %s\n' "$(opcion_off '03' '🧽' 'SACARLE EL COLOR')" "$(opcion '04' '🧹' 'QUITAR EL BANNER')"
   fi
+  fila_color
   if (( HAY_DROPBEAR )) && (( ! DB_LISTO )); then
     printf '  %s  %s\n' "$(opcion '05' '🔗' 'APLICARLO EN DROPBEAR')" "$(pad '' 37)"
   elif (( DB_LISTO )); then
@@ -235,22 +364,18 @@ pintar_inicio() {
 }
 
 pintar_escribir() {
-  echo
-  printf '%s\n' "$REGLA_FIJA"
-  printf '%s\n' "$CABECERA_FIJA"
-  echo
-  banda
-  echo
-  encabezado "BANNER SSH" "KIRA v$KIRA_VER"
-  echo
+  local -a v=()
+  local l
+  for l in "${NUEVO[@]}"; do v+=("$(vestir "$l" cian)"); done
+  marco_superior
   techo_ancho "LO QUE LLEVÁS ESCRITO · ${#NUEVO[@]} DE $MAX_LINEAS LÍNEAS"
-  vista_previa "${NUEVO[@]}"
+  vista_previa "${v[@]}"
   piso_ancho
   echo
   printf '  %s%s%s\n' "$E_TXT" \
     "$(pad "Escribí una línea y dale ENTER. Entran hasta $MAX_LINEAS de $ANCHO_LINEA caracteres." 76)" "$E_RST"
   printf '  %s%s%s\n' "$E_MUT" \
-    "$(pad 'ENTER en blanco termina y guarda. Nada de HTML ni de colores.' 76)" "$E_RST"
+    "$(pad 'ENTER en blanco termina y guarda. El color se lo pone el panel solo.' 76)" "$E_RST"
   echo
   printf '  %s  %s\n' "$(opcion '99' '🔙' 'BORRAR LA ÚLTIMA LÍNEA')" "$(pad '' 37)"
   opcion_salir "CANCELAR SIN GUARDAR"
@@ -259,9 +384,8 @@ pintar_escribir() {
   prompt "Línea:"
 }
 
-# Media fila de plantilla. La elegida va en rosa; las que usan caracteres
-# especiales, en ámbar, para que de un vistazo sepas cuáles pueden verse mal
-# en un celular viejo.
+# Media fila de plantilla. La elegida va en rosa; las que usan caracteres de
+# dibujo, en ámbar.
 opcion_plant() { # $1=número
   local n="$1" c nn
   printf -v nn '%02d' "$n"
@@ -275,27 +399,20 @@ opcion_plant() { # $1=número
 pintar_plantillas() {
   local -a muestra=()
   mapfile -t muestra < <(plantilla "$PLANT_SEL")
-  echo
-  printf '%s\n' "$REGLA_FIJA"
-  printf '%s\n' "$CABECERA_FIJA"
-  echo
-  banda
-  echo
-  encabezado "BANNER SSH" "KIRA v$KIRA_VER"
-  echo
+  marco_superior
   techo_ancho "ASÍ LA VERÍA TU CLIENTE · $(plant_nombre "$PLANT_SEL")"
   vista_previa "${muestra[@]}"
   piso_ancho
   echo
   if plant_especial "$PLANT_SEL"; then
     printf '  %s%s%s\n' "$E_BLD$E_WARN" \
-      "$(pad '▸ Usa caracteres especiales: hay celulares que los muestran mal.' 76)" "$E_RST"
+      "$(pad '▸ Usa caracteres de dibujo: hay celulares que los muestran mal.' 76)" "$E_RST"
   else
     printf '  %s%s%s\n' "$E_OK" \
-      "$(pad '✔ Sólo caracteres de teclado: se ve igual en cualquier celular.' 76)" "$E_RST"
+      "$(pad '✔ Sólo emojis y teclado: se ve igual en cualquier celular.' 76)" "$E_RST"
   fi
   echo
-  seccion "ELEGÍ UNA · LAS DE ÁMBAR USAN CARACTERES ESPECIALES" "$E_P1"
+  seccion "ELEGÍ UNA · LAS DE ÁMBAR USAN CARACTERES DE DIBUJO" "$E_P1"
   echo
   printf '  %s  %s\n' "$(opcion_plant 1)" "$(opcion_plant 2)"
   printf '  %s  %s\n' "$(opcion_plant 3)" "$(opcion_plant 4)"
@@ -303,6 +420,7 @@ pintar_plantillas() {
   printf '  %s  %s\n' "$(opcion_plant 7)" "$(opcion_plant 8)"
   printf '  %s  %s\n' "$(opcion_plant 9)" "$(opcion_plant 10)"
   echo
+  fila_color
   printf '  %s%s%s %s%s%s %s%s%s\n' \
     "$E_BLD$E_OK" "$(pad '99' 2)" "$E_RST" "$E_P2" "💾" "$E_RST" \
     "$E_BLD$E_TXT" "$(pad 'DEJAR ESTA PUESTA' 70)" "$E_RST"
@@ -321,24 +439,17 @@ pintar_confirmar() {
       t3=""
       bot="SÍ, QUITARLO" ;;
     limpiar)
-      t1="Se le sacan las etiquetas y los colores, y queda el texto de arriba."
-      t2="Es exactamente lo que ya se ve en la vista previa."
-      t3=""
-      bot="SÍ, LIMPIARLO" ;;
+      t1="Se le sacan las etiquetas y queda el texto pelado, sin color."
+      t2="Sirve si tus clientes entran con una terminal y no con una app."
+      t3="Se le puede volver a poner color desde las plantillas."
+      bot="SÍ, SACARLE EL COLOR" ;;
     dropbear)
       t1="Dropbear necesita que el archivo se le pase al arrancar."
       t2="Para eso hay que reiniciarlo, y eso CORTA las conexiones que tenga."
       t3="Las de OpenSSH no se tocan. Después, cambiar el texto ya no corta nada."
       bot="SÍ, REINICIAR DROPBEAR" ;;
   esac
-  echo
-  printf '%s\n' "$REGLA_FIJA"
-  printf '%s\n' "$CABECERA_FIJA"
-  echo
-  banda
-  echo
-  encabezado "BANNER SSH" "KIRA v$KIRA_VER"
-  echo
+  marco_superior
   seccion "CONFIRMÁ" "$E_ERR"
   echo
   printf '  %s%s%s\n' "$E_BLD$E_TXT" "$(pad "$t1" 76)" "$E_RST"
@@ -364,133 +475,143 @@ pintar() {
 render() { local f; f="$(pintar)"; volcar "$f"; }
 
 # =============================================================== PLANTILLAS =
-# Diez diseños. Las que llevan ╔ ║ █ ─ se ven preciosas en una terminal, pero
-# dependen de la tipografía del celular: en HTTP Injector algunos equipos las
-# muestran como cuadraditos. Por eso cada plantilla dice de qué tipo es y las
-# "especiales" aparecen en ámbar en la lista.
+# Cada renglón se declara como "color|texto". De esa única definición salen
+# las dos versiones: la de color, con etiquetas, y la pelada. Así no hay dos
+# listas que mantener a la par, que es como se desfasan las cosas.
 #
-# OJO con el ancho: el nombre del servidor y el de soporte cambian de largo,
-# así que dentro de los marcos NO se escriben a mano con espacios contados —
-# se pasan por pad(), que recorta y rellena. Si no, el día que cambiés la IP
-# el marco te queda chueco.
-PLANT_SEL=1
-PLANT_N=10
-
+# Los emojis son todos de Unicode 6.0 (2010): están en cualquier Android o
+# iPhone que se siga usando. Los nuevitos salen como cuadradito en equipos de
+# hace cuatro años, así que no entra ninguno.
+#
+# Y nada de marcos cerrados con emojis adentro: el ancho de un emoji cambia
+# con la tipografía del equipo y el borde derecho nunca cerraría parejo. Por
+# eso los marcos son reglas de arriba y abajo, que siempre salen derechas.
 plant_nombre() { # $1=número
   case "$1" in
-    1)  printf 'CLÁSICA' ;;
-    2)  printf 'LOGO EN BLOQUES' ;;
-    3)  printf 'LOGO ASCII' ;;
-    4)  printf 'MARCO DOBLE' ;;
-    5)  printf 'MARCO FINO' ;;
-    6)  printf 'PREMIUM' ;;
-    7)  printf 'FLECHAS' ;;
-    8)  printf 'LAS REGLAS' ;;
-    9)  printf 'MINIMAL' ;;
-    10) printf 'VELOCIDAD' ;;
+    1)  printf 'NEÓN' ;;            2)  printf 'LOGO EN BLOQUES' ;;
+    3)  printf 'TARJETA VIP' ;;     4)  printf 'LÍNEAS DOBLES' ;;
+    5)  printf 'BARRAS' ;;          6)  printf 'LAS REGLAS' ;;
+    7)  printf 'VELOCIDAD' ;;       8)  printf 'MINIMAL' ;;
+    9)  printf 'BIENVENIDA' ;;      10) printf 'PANEL DE ESTADO' ;;
   esac
 }
 plant_emoji() { # $1=número
   case "$1" in
-    1) printf '📄' ;; 2) printf '🔳' ;; 3) printf '🔤' ;; 4) printf '📦' ;;
-    5) printf '📐' ;; 6) printf '⭐' ;; 7) printf '🚀' ;; 8) printf '📜' ;;
-    9) printf '📌' ;; 10) printf '🏁' ;;
+    1) printf '🔥' ;; 2) printf '🔳' ;; 3) printf '👑' ;; 4) printf '📦' ;;
+    5) printf '🚀' ;; 6) printf '📜' ;; 7) printf '📶' ;; 8) printf '📌' ;;
+    9) printf '🎉' ;; 10) printf '📊' ;;
   esac
 }
-# 0 = sólo caracteres de teclado, se ve igual en cualquier celular
-# 1 = usa caracteres especiales, puede verse mal en equipos viejos
-plant_especial() { # $1=número
-  case "$1" in 2|4|5) return 0 ;; *) return 1 ;; esac
+plant_especial() { # usa caracteres de dibujo (█ ═ ━ ─)
+  case "$1" in 2|4|5|10) return 0 ;; *) return 1 ;; esac
 }
 
-plantilla() { # $1=número · imprime las líneas del banner
-  local ip="${IP_PUB:-tu servidor}" b
+plant_def() { # $1=número · imprime "color|texto" por renglón
+  local ip="${IP_PUB:-tu servidor}"
   case "$1" in
     2)  printf '%s\n' \
-          ' ██╗  ██╗██╗██████╗  █████╗' \
-          ' ██║ ██╔╝██║██╔══██╗██╔══██╗' \
-          ' █████╔╝ ██║██████╔╝███████║' \
-          ' ██╔═██╗ ██║██╔══██╗██╔══██║' \
-          ' ██║  ██╗██║██║  ██║██║  ██║' \
-          ' ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝' \
-          '    A D M I N I S T R A D O R   V P S' \
-          "    Soporte: $KIRA_SOP" ;;
+          'cian|  ██╗  ██╗██╗██████╗  █████╗' \
+          'cian|  ██║ ██╔╝██║██╔══██╗██╔══██╗' \
+          'azul|  █████╔╝ ██║██████╔╝███████║' \
+          'azul|  ██╔═██╗ ██║██╔══██╗██╔══██║' \
+          'violeta|  ██║  ██╗██║██║  ██║██║  ██║' \
+          'violeta|  ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝' \
+          "ambar|  💎 PREMIUM   ·   📡 $ip" \
+          "verde|  💬 Soporte: $KIRA_SOP" ;;
 
     3)  printf '%s\n' \
-          '   _  _____ ____       _' \
-          '  | |/ /_ _|  _ \     / \' \
-          "  | ' / | || |_) |   / _ \\" \
-          '  | . \ | ||  _ <   / ___ \' \
-          '  |_|\_\___|_| \_\ /_/   \_\' \
-          '  ---------------------------' \
-          '   Conexion estable 24/7' \
-          "   Soporte: $KIRA_SOP" ;;
+          'ambar|*************************************' \
+          'rosa|      👑  K I R A   V I P  👑' \
+          'ambar|*************************************' \
+          'violeta|  💎 Acceso premium activado' \
+          'cian|  📶 Alta velocidad, sin cortes' \
+          "verde|  🌐 Servidor : $ip" \
+          "azul|  💬 Soporte  : $KIRA_SOP" \
+          'ambar|*************************************' ;;
 
-    4)  b="$(rep '═' 44)"
-        printf '%s\n' "╔${b}╗"
-        printf '║%s║\n' "$(pad '           K I R A   S S H' 44)"
-        printf '%s\n' "╠${b}╣"
-        printf '║%s║\n' "$(pad "   Servidor : $ip" 44)"
-        printf '║%s║\n' "$(pad "   Soporte  : $KIRA_SOP" 44)"
-        printf '║%s║\n' "$(pad '   Una sola conexion por cuenta' 44)"
-        printf '%s\n' "╚${b}╝" ;;
+    4)  printf '%s\n' \
+          'cian|═════════════════════════════════════' \
+          'rosa|      🔐  K I R A   S S H  🔐' \
+          'cian|═════════════════════════════════════' \
+          "verde|  🌐 Servidor : $ip" \
+          "azul|  💬 Soporte  : $KIRA_SOP" \
+          'rojo|  🚫 Prohibido compartir la cuenta' \
+          'cian|═════════════════════════════════════' ;;
 
-    5)  b="$(rep '─' 44)"
-        printf '%s\n' "┌${b}┐"
-        printf '│%s│\n' "$(pad '            KIRA · SSH VPN' 44)"
-        printf '%s\n' "├${b}┤"
-        printf '│%s│\n' "$(pad "   Soporte    $KIRA_SOP" 44)"
-        printf '│%s│\n' "$(pad "   Servidor   $ip" 44)"
-        printf '│%s│\n' "$(pad '   Gracias por confiar' 44)"
-        printf '%s\n' "└${b}┘" ;;
+    5)  printf '%s\n' \
+          'violeta|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' \
+          'cian|      🚀  K I R A   S S H  🚀' \
+          'violeta|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' \
+          "azul|  📡 Servidor : $ip" \
+          "ambar|  🔑 Soporte  : $KIRA_SOP" \
+          'verde|  ✅ Conexion establecida' \
+          'violeta|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' ;;
 
     6)  printf '%s\n' \
-          '  * * * * * * * * * * * * * * * * * * * *' \
-          '           K I R A   P R E M I U M' \
-          '  * * * * * * * * * * * * * * * * * * * *' \
-          '     Alta velocidad  -  Sin cortes' \
-          "     Servidor : $ip" \
-          "     Soporte  : $KIRA_SOP" \
-          '  * * * * * * * * * * * * * * * * * * * *' ;;
+          'ambar|-------------------------------------' \
+          'cian|     📜  K I R A   ·   R E G L A S' \
+          'ambar|-------------------------------------' \
+          'verde|  🔒 Una sola conexion por cuenta' \
+          'rojo|  🚫 Prohibido revender el acceso' \
+          'rojo|  🚫 Prohibido el abuso de la red' \
+          'ambar|-------------------------------------' \
+          "azul|  💬 Soporte: $KIRA_SOP" ;;
 
     7)  printf '%s\n' \
-          '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' \
-          '>>>           K I R A   S S H          <<<' \
-          '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' \
-          "    Conectado a : $ip" \
-          "    Soporte     : $KIRA_SOP" ;;
+          'cian|     🚀  K I R A   S S H' \
+          'verde| [##############################] 100%' \
+          'ambar|  📶 Velocidad al maximo' \
+          "azul|  🌐 Servidor : $ip" \
+          "violeta|  💬 Soporte  : $KIRA_SOP" \
+          'rosa|  🔥 Gracias por elegirnos' ;;
 
     8)  printf '%s\n' \
-          '------------------------------------------' \
-          '        K I R A   S S H   -   REGLAS' \
-          '------------------------------------------' \
-          '  1. Una sola conexion por cuenta' \
-          '  2. Prohibido revender el acceso' \
-          '  3. Prohibido el abuso de la red' \
-          '------------------------------------------' \
-          "  Soporte: $KIRA_SOP" ;;
+          'cian|🔥 KIRA SSH  ·  conexion establecida' \
+          "verde|💬 soporte $KIRA_SOP" ;;
 
     9)  printf '%s\n' \
-          'KIRA SSH  -  conexion establecida' \
-          "soporte $KIRA_SOP" ;;
+          'rosa|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' \
+          'ambar|     🎉  B I E N V E N I D O  🎉' \
+          'cian|           K I R A   S S H' \
+          'rosa|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' \
+          "verde|  🌍 Servidor : $ip" \
+          "azul|  💬 Soporte  : $KIRA_SOP" \
+          'violeta|  🙌 Gracias por confiar en nosotros' ;;
 
     10) printf '%s\n' \
-          ' [########################################]' \
-          '             K I R A   S S H' \
-          ' [########################################]' \
-          "   Servidor : $ip" \
-          "   Soporte  : $KIRA_SOP" \
-          '   Gracias por elegirnos' ;;
+          'cian|  💠  K I R A   S S H' \
+          'azul|─────────────────────────────────────' \
+          "violeta|  📡 Servidor    $ip" \
+          'verde|  ✅ Estado      ACTIVO' \
+          "ambar|  🔑 Soporte     $KIRA_SOP" \
+          'cian|  🕐 Disponible  24 / 7' \
+          'azul|─────────────────────────────────────' \
+          'rosa|  🔥 Alta velocidad garantizada' ;;
 
     *)  printf '%s\n' \
-          '==============================================' \
-          '             B I E N V E N I D O' \
-          '               K I R A   S S H' \
-          '==============================================' \
-          "  Servidor : $ip" \
-          "  Soporte  : $KIRA_SOP" \
-          '==============================================' ;;
+          'cian|=====================================' \
+          'rosa|      🔥  K I R A   S S H  🔥' \
+          'cian|=====================================' \
+          "verde|  🌐 Servidor : $ip" \
+          "azul|  💬 Soporte  : $KIRA_SOP" \
+          'ambar|  🚀 Conexion estable 24 / 7' \
+          'cian|=====================================' ;;
   esac
+}
+
+# Le pone (o no) la etiqueta de color a un renglón, según el interruptor.
+vestir() { # $1=texto $2=nombre del color
+  if (( COLOR_ON )); then printf '<font color="#%s">%s</font>' "${BC[$2]:-00B8D4}" "$1"
+  else                    printf '%s' "$1"; fi
+}
+
+plantilla() { # $1=número · las líneas finales, listas para guardar
+  local linea col txt
+  while IFS= read -r linea; do
+    col="${linea%%|*}"; txt="${linea#*|}"
+    vestir "$txt" "$col"
+    printf '\n'
+  done < <(plant_def "$1")
 }
 
 # ================================================================ ACCIONES ==
@@ -561,10 +682,13 @@ sacar_directiva() {
   return 0
 }
 
+# OJO: acá NO se limpia nada. Las etiquetas de color son parte del banner y
+# sacárselas al guardar sería borrar justo lo que se quiso poner. Lo que el
+# dueño escribe a mano ya viene filtrado desde el teclado.
 escribir_archivo() { # $@ = líneas
   local l
   : > "$ARCHIVO" 2>/dev/null || { AVISO="No pude escribir $ARCHIVO"; return 1; }
-  for l in "$@"; do printf '%s\n' "$(limpiar_texto "$l")" >> "$ARCHIVO"; done
+  for l in "$@"; do printf '%s\n' "$l" >> "$ARCHIVO"; done
   chmod 644 "$ARCHIVO" 2>/dev/null
   return 0
 }
@@ -611,7 +735,6 @@ poner_dropbear() {
   respaldar "$DB_DEFAULT"
   local tmp="$DB_DEFAULT.kira.tmp" actual
   actual=$(awk -F'"' '/^[[:space:]]*DROPBEAR_EXTRA_ARGS=/{print $2; exit}' "$DB_DEFAULT" 2>/dev/null)
-  # Se saca cualquier -b anterior para no acumular argumentos repetidos.
   actual=$(printf '%s' "$actual" | sed -E 's/-b[[:space:]]+[^[:space:]]+//g; s/  +/ /g; s/^ //; s/ $//')
   {
     grep -v "^[[:space:]]*DROPBEAR_EXTRA_ARGS=" "$DB_DEFAULT"
@@ -635,14 +758,17 @@ ejecutar() {
     inicio)
       case "$entrada" in
         ""|0|00) clear; exit 0 ;;
-        1|01) NUEVO=(); PANTALLA=escribir ;;
-        2|02) PLANT_SEL=1; PANTALLA=plantillas ;;
+        1|01) PANTALLA=plantillas ;;
+        2|02) NUEVO=(); PANTALLA=escribir ;;
         3|03)
-          if tiene_html || tiene_ansi; then ACCION=limpiar; PANTALLA=confirmar
-          else AVISO="Tu banner ya está en texto plano, no hay nada que limpiar"; fi ;;
+          if tiene_etiquetas || tiene_ansi; then ACCION=limpiar; PANTALLA=confirmar
+          else AVISO="Tu banner ya está pelado, no tiene nada que sacarle"; fi ;;
         4|04)
           if (( ${#LINEAS[@]} == 0 )); then AVISO="No hay ningún banner puesto"
           else ACCION=quitar; PANTALLA=confirmar; fi ;;
+        88)
+          if (( COLOR_ON )); then COLOR_ON=0; MENSAJE="Color apagado · las plantillas se guardan peladas"
+          else COLOR_ON=1; MENSAJE="Color encendido · las plantillas se guardan con etiquetas"; fi ;;
         5|05)
           if (( ! HAY_DROPBEAR )); then AVISO="No veo dropbear instalado en esta VPS"
           elif (( DB_LISTO ));     then AVISO="Dropbear ya está usando este banner"
@@ -661,9 +787,14 @@ ejecutar() {
       if [ -z "$entrada" ]; then
         if (( ${#NUEVO[@]} == 0 )); then
           AVISO="No escribiste nada todavía · 00 para cancelar"
-        elif guardar_banner "${NUEVO[@]}"; then
-          MENSAJE="Banner guardado · ${#NUEVO[@]} líneas · ya lo ven los que entren"
-          NUEVO=(); PANTALLA=inicio
+        else
+          local -a l=()
+          local x
+          for x in "${NUEVO[@]}"; do l+=("$(vestir "$x" cian)"); done
+          if guardar_banner "${l[@]}"; then
+            MENSAJE="Banner guardado · ${#NUEVO[@]} líneas · ya lo ven los que entren"
+            NUEVO=(); PANTALLA=inicio
+          fi
         fi
         return
       fi
@@ -676,6 +807,9 @@ ejecutar() {
     plantillas)
       case "$entrada" in
         ""|0|00) PANTALLA=inicio ;;
+        88)
+          if (( COLOR_ON )); then COLOR_ON=0; MENSAJE="Color apagado"
+          else COLOR_ON=1; MENSAJE="Color encendido"; fi ;;
         99)
           local -a m=()
           mapfile -t m < <(plantilla "$PLANT_SEL")
@@ -687,7 +821,7 @@ ejecutar() {
           if [[ "$entrada" =~ ^[0-9]+$ ]] && (( 10#$entrada >= 1 && 10#$entrada <= PLANT_N )); then
             PLANT_SEL=$(( 10#$entrada ))
           else
-            AVISO="Elegí del 01 al $PLANT_N para verla · 99 para dejarla puesta"
+            AVISO="Elegí del 01 al $PLANT_N · 88 color · 99 para dejarla puesta"
           fi ;;
       esac ;;
 
@@ -699,8 +833,9 @@ ejecutar() {
             limpiar)
               local -a l=()
               local x
-              for x in "${LINEAS[@]}"; do l+=("$(limpiar_texto "$x")"); done
-              guardar_banner "${l[@]}" && MENSAJE="Banner limpio · ya sin HTML ni colores" ;;
+              for x in "${LINEAS[@]}"; do l+=("$(sin_etiquetas "$x")"); done
+              COLOR_ON=0
+              guardar_banner "${l[@]}" && MENSAJE="Banner pelado · ya sin etiquetas" ;;
             dropbear) poner_dropbear && MENSAJE="Dropbear también muestra el banner" ;;
           esac
           [ -z "$AVISO" ] && PANTALLA=inicio ;;
@@ -717,8 +852,14 @@ procesar() {
     $'\e')         read -rsn2 -t 0.05 _ || true ;;
     *)
       # En la pantalla de escribir entran letras; en el resto, sólo números.
+      # Los signos < y > se descartan al teclearlos: si el dueño escribe una
+      # etiqueta a mano, lo único que logra es romper el color que el módulo
+      # le pone solo.
       if [ "$PANTALLA" = escribir ]; then
-        case "$1" in [[:print:]]) (( ${#BUF} < ANCHO_LINEA )) && BUF="$BUF$1" ;; esac
+        case "$1" in
+          '<'|'>') ;;
+          [[:print:]]) (( ${#BUF} < ANCHO_LINEA )) && BUF="$BUF$1" ;;
+        esac
       else
         case "$1" in [0-9]) (( ${#BUF} < 4 )) && BUF="$BUF$1" ;; esac
       fi ;;
@@ -734,6 +875,10 @@ trap 'cursor_on; printf "\e[?2026l\e[0m\n"; clear; exit 130' INT TERM
 cursor_off
 clear
 cargar
+# Si el banner que ya hay está pelado, el interruptor arranca apagado; si
+# tiene color, encendido. Así el módulo respeta lo que el dueño venía usando
+# en vez de imponerle una preferencia.
+if (( ${#LINEAS[@]} > 0 )) && ! tiene_color; then COLOR_ON=0; fi
 
 while true; do
   printf -v ahora '%(%s)T' -1

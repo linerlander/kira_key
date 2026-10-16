@@ -110,7 +110,7 @@ cargar_cuentas() {
     # se muestra en hora local: así la fecha que ves es cuando corta de verdad.
     if [[ "$vto" =~ ^[0-9]+$ ]]; then
       epoca=$(( vto * 86400 ))
-      fecha=$(date -d "@$epoca" '+%d/%m %H:%M' 2>/dev/null)
+      fecha=$(date -d "@$epoca" '+%d/%m/%Y %H:%M:%S' 2>/dev/null)
       dias=$(( vto - hoy ))
     else
       epoca=0; fecha="sin fecha"; dias=99999
@@ -148,12 +148,17 @@ cuenta_regresiva() { # $1=epoch del vencimiento
   # minutos y segundos son idénticos en todas las filas: repetirlos en cada
   # renglón no dice nada y parece un error. Lo que de verdad distingue a una
   # cuenta de otra son los días.
-  if (( r >= 172800 )); then printf '%d días' $(( r / 86400 )); return; fi
-  d=$(( r / 86400 )); r=$(( r % 86400 ))
+  if (( r >= 172800 )); then
+    d=$(( r / 86400 ))
+    (( d >= 1000 )) && { printf '%dd' "$d"; return; }
+    printf '%d días' "$d"; return
+  fi
+  # Menos de dos días: las horas NO se cortan en 24, siguen contando (31:20:59).
+  # Así entra en la columna y encima se lee mejor: "le quedan 31 horas" dice
+  # más que "1 día y 7 horas".
   h=$(( r / 3600 ));  r=$(( r % 3600 ))
   m=$(( r / 60 ));    sg=$(( r % 60 ))
-  if (( d > 0 )); then printf '1d %02d:%02d:%02d' "$h" "$m" "$sg"
-  else                 printf '%02d:%02d:%02d' "$h" "$m" "$sg"; fi
+  printf '%02d:%02d:%02d' "$h" "$m" "$sg"
 }
 
 marcadas_total() {
@@ -168,8 +173,8 @@ paginas() { local n=${#U_NOM[@]}; printf '%s' $(( (n + POR_PAGINA - 1) / POR_PAG
 #             + 1 + días 9 + 1 + conex 7 + 1 + estado 18
 cab_tabla() {
   printf '  %s%s  %s  %s  %s  %s  %s  %s%s\n' "$E_MUT" \
-    "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 19)" "$(pad 'CORTA EL' 11)" \
-    "$(pad 'LE QUEDA' 10)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 14)" "$E_RST"
+    "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 17)" "$(pad 'FINALIZA' 19)" \
+    "$(pad 'TERMINA' 8)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 10)" "$E_RST"
 }
 
 color_estado() {
@@ -204,11 +209,11 @@ fila_usuario() { # $1=índice global
   printf '  %s%s%s%s  %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s%s%s\n' \
     "$fondo" "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST$fondo" \
     "$E_BLD$E_ERR" "$marca" "$E_RST$fondo" \
-    "$E_TXT" "$(pad "${U_NOM[i]}" 19)" "$E_RST$fondo" \
-    "$E_MUT" "$(pad "${U_VENCE[i]}" 11)" \
-    "$colr" "$(pad "$resta" 10)" "$E_RST$fondo" \
+    "$E_TXT" "$(pad "${U_NOM[i]}" 17)" "$E_RST$fondo" \
+    "$E_MUT" "$(pad "${U_VENCE[i]}" 19)" \
+    "$colr" "$(pad "$resta" 8)" "$E_RST$fondo" \
     "$E_TXT" "$(rpad "${U_CONEX[i]}" 5)" \
-    "$col" "$(rpad "${U_ESTADO[i]}" 14)" "$E_RST" "$E_RST"
+    "$col" "$(rpad "${U_ESTADO[i]}" 10)" "$E_RST" "$E_RST"
 }
 
 linea_aviso() {

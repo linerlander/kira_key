@@ -37,7 +37,7 @@ AVISO=""
 PANTALLA=lista            # lista · confirmar · resultado
 UMBRAL_VENCE=7
 
-declare -a U_NOM=() U_VENCE=() U_DIAS=() U_CONEX=() U_ESTADO=()
+declare -a U_NOM=() U_VENCE=() U_VTO=() U_CONEX=() U_ESTADO=()
 # OJO: las marcas van por NOMBRE DE USUARIO, no por posición en la lista.
 # La pantalla se refresca sola, y si una cuenta vence o alguien se conecta,
 # el orden puede cambiar entre un refresco y otro. Guardadas por posición,
@@ -74,7 +74,7 @@ cargar_conexiones() {
 }
 
 cargar_cuentas() {
-  U_NOM=(); U_VENCE=(); U_DIAS=(); U_CONEX=(); U_ESTADO=(); NOM_DE_UID=()
+  U_NOM=(); U_VENCE=(); U_VTO=(); U_CONEX=(); U_ESTADO=(); NOM_DE_UID=()
   declare -A ES_CLIENTE=()
 
   local n uid resto
@@ -95,7 +95,7 @@ cargar_cuentas() {
   fi
 
   local hoy; hoy=$(( $(date +%s) / 86400 ))
-  local nom clave c3 c4 c5 c6 c7 vto est dias fecha txt_dias
+  local nom clave c3 c4 c5 c6 c7 vto est dias fecha epoca
 
   # Se recorre /etc/shadow, que es donde están la clave y el vencimiento.
   # OJO: shadow NO tiene el UID. Los campos son nombre, clave, último cambio,
@@ -104,13 +104,16 @@ cargar_cuentas() {
   while IFS=: read -r nom clave c3 c4 c5 c6 c7 vto resto; do
     [ -n "${ES_CLIENTE[$nom]:-}" ] || continue
 
+    # shadow guarda el vencimiento como NÚMERO DE DÍA, no como fecha y hora.
+    # La cuenta deja de andar a las 00:00 UTC de ese día, que en Lima son las
+    # 19:00 del día anterior. Por eso se guarda el instante exacto en epoch y
+    # se muestra en hora local: así la fecha que ves es cuando corta de verdad.
     if [[ "$vto" =~ ^[0-9]+$ ]]; then
-      # El campo cuenta días desde 1970 en UTC. Hay que convertirlo con -u:
-      # con husos como el de Lima, sin eso la fecha sale corrida un día.
-      fecha=$(date -u -d "@$(( vto * 86400 ))" +%F 2>/dev/null)
+      epoca=$(( vto * 86400 ))
+      fecha=$(date -d "@$epoca" '+%d/%m %H:%M' 2>/dev/null)
       dias=$(( vto - hoy ))
     else
-      fecha="sin fecha"; dias=99999
+      epoca=0; fecha="sin fecha"; dias=99999
     fi
 
     case "$clave" in
@@ -124,13 +127,27 @@ cargar_cuentas() {
         else                                   est="activa"; fi ;;
     esac
 
-    if   (( dias == 99999 )); then txt_dias="—"
-    elif (( dias < 0 ));      then txt_dias="hace $(( -dias ))d"
-    else                           txt_dias="en ${dias}d"; fi
-
-    U_NOM+=("$nom"); U_VENCE+=("$fecha"); U_DIAS+=("$txt_dias")
+    U_NOM+=("$nom"); U_VENCE+=("$fecha"); U_VTO+=("$epoca")
     U_CONEX+=("${CON_USR[$nom]:-0}"); U_ESTADO+=("$est")
   done < /etc/shadow
+}
+
+# Lo que falta para que la cuenta deje de andar. Se calcula al DIBUJAR, no
+# al cargar: así baja de a un segundo sin tener que releer /etc/shadow.
+cuenta_regresiva() { # $1=epoch del vencimiento
+  local v="$1" ahora r d h m sg
+  (( v == 0 )) && { printf '—'; return; }
+  printf -v ahora '%(%s)T' -1
+  r=$(( v - ahora ))
+  # Ya vencida: 00:00:00 en vez de un texto. Mantiene la forma de la columna
+  # y dice lo que hay que decir, que no le queda nada. Un "--:--:--" querría
+  # decir "no se sabe", y sí se sabe.
+  (( r <= 0 )) && { printf '00:00:00'; return; }
+  d=$(( r / 86400 )); r=$(( r % 86400 ))
+  h=$(( r / 3600 ));  r=$(( r % 3600 ))
+  m=$(( r / 60 ));    sg=$(( r % 60 ))
+  if (( d > 0 )); then printf '%dd %02d:%02d:%02d' "$d" "$h" "$m" "$sg"
+  else                 printf '%02d:%02d:%02d' "$h" "$m" "$sg"; fi
 }
 
 marcadas_total() {
@@ -145,8 +162,8 @@ paginas() { local n=${#U_NOM[@]}; printf '%s' $(( (n + POR_PAGINA - 1) / POR_PAG
 #             + 1 + días 9 + 1 + conex 7 + 1 + estado 18
 cab_tabla() {
   printf '  %s%s %s %s %s %s %s %s%s\n' "$E_MUT" \
-    "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 20)" "$(pad 'VENCE' 11)" \
-    "$(pad 'DÍAS' 9)" "$(rpad 'CONEX' 7)" "$(pad 'ESTADO' 18)" "$E_RST"
+    "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 19)" "$(pad 'CORTA EL' 11)" \
+    "$(pad 'LE QUEDA' 13)" "$(rpad 'CONEX' 5)" "$(pad 'ESTADO' 17)" "$E_RST"
 }
 
 color_estado() {
@@ -168,13 +185,24 @@ fila_usuario() { # $1=índice global
   n=$(( i + 1 ))
   if [ "${MARCADA[${U_NOM[i]}]:-}" = 1 ]; then marca="[x]"; fondo="$B_SEL"; else marca="[ ]"; fi
   col="$(color_estado "${U_ESTADO[i]}")"
-  printf '  %s%s%s%s %s%s%s %s%s%s %s%s %s %s%s %s%s%s%s\n' \
+  local resta; resta="$(cuenta_regresiva "${U_VTO[i]}")"
+  # El color sale de la FECHA, no del texto: ahora que una vencida se escribe
+  # 00:00:00, mirar la cadena ya no alcanza para distinguirla.
+  local colr="$E_TXT" ahora_f falta
+  printf -v ahora_f '%(%s)T' -1
+  falta=$(( ${U_VTO[i]:-0} - ahora_f ))
+  if   (( ${U_VTO[i]:-0} == 0 )); then colr="$E_MUT"
+  elif (( falta <= 0 ));          then colr="$E_BLD$E_ERR"
+  elif (( falta < 172800 ));      then colr="$E_BLD$E_WARN"
+  fi
+  printf '  %s%s%s%s %s%s%s %s%s%s %s%s %s%s%s %s%s %s%s%s%s\n' \
     "$fondo" "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST$fondo" \
     "$E_BLD$E_ERR" "$marca" "$E_RST$fondo" \
-    "$E_TXT" "$(pad "${U_NOM[i]}" 20)" "$E_RST$fondo" \
-    "$E_MUT" "$(pad "${U_VENCE[i]}" 11)" "$(pad "${U_DIAS[i]}" 9)" \
-    "$E_TXT" "$(rpad "${U_CONEX[i]}" 7)" \
-    "$col" "$(pad "${U_ESTADO[i]}" 18)" "$E_RST" "$E_RST"
+    "$E_TXT" "$(pad "${U_NOM[i]}" 19)" "$E_RST$fondo" \
+    "$E_MUT" "$(pad "${U_VENCE[i]}" 11)" \
+    "$colr" "$(pad "$resta" 13)" "$E_RST$fondo" \
+    "$E_TXT" "$(rpad "${U_CONEX[i]}" 5)" \
+    "$col" "$(pad "${U_ESTADO[i]}" 17)" "$E_RST" "$E_RST"
 }
 
 linea_aviso() {
@@ -434,6 +462,7 @@ cargar_cuentas
 
 BUF=""
 SEG_ANT=0
+CARGA_ANT=0
 
 # Lo que hace cada opción, una vez que se apretó ENTER.
 ejecutar() {
@@ -473,13 +502,21 @@ ejecutar() {
 }
 
 while true; do
-  # Las cuentas se releen cada 2 segundos: así las conexiones abiertas y los
-  # días que faltan se ven moverse, en vez de quedar como estaban al entrar.
-  # En la pantalla de confirmación NO se refresca: ahí ya se decidió qué se
+  # Dos ritmos distintos, a propósito:
+  #  · se REDIBUJA cada segundo, para que la cuenta regresiva baje de a uno;
+  #    eso es sólo aritmética con la fecha ya guardada, no cuesta nada.
+  #  · se RELEE /etc/shadow cada 5 segundos, que es lo caro y lo que casi
+  #    nunca cambia. Releerlo una vez por segundo con 90 cuentas sería gastar
+  #    al pedo para ver el mismo dato.
+  # En la pantalla de confirmación no se recarga: ahí ya se decidió qué se
   # borra y la lista no debe cambiarse debajo de los pies.
   printf -v ahora '%(%s)T' -1
-  if [ "$PANTALLA" = lista ] && (( ahora - SEG_ANT >= 2 )); then
+  redibujar=0
+  if (( ahora != SEG_ANT )); then SEG_ANT=$ahora; redibujar=1; fi
+  if [ "$PANTALLA" = lista ] && (( ahora - CARGA_ANT >= 5 )); then
     cargar_cuentas
+    CARGA_ANT=$ahora
+    redibujar=1
     # Se sueltan las marcas de cuentas que ya no existen, para que no quede
     # elegida una que alguien borró por otro lado.
     for nom_sel in "${!MARCADA[@]}"; do
@@ -487,10 +524,9 @@ while true; do
       for tok in "${U_NOM[@]}"; do [ "$tok" = "$nom_sel" ] && { hay=1; break; }; done
       (( hay )) || unset "MARCADA[$nom_sel]"
     done
-    SEG_ANT=$ahora
   fi
 
-  render
+  (( redibujar )) && render
   read -rsn1 -t 0.25 tecla; rc=$?
   if (( rc == 0 )); then
     procesar "$tecla"

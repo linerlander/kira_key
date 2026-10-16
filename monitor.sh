@@ -113,7 +113,8 @@ medir() {
     CPU_PCT=$(( RANDOM % 70 + 10 )); RAM_PCT=$(( RANDOM % 30 + 20 ))
     CORES=($(( RANDOM % 80 )) $(( RANDOM % 80 )))
     NUCLEOS=2; RAM_USA=1843; RAM_TOT=8029; SWP_USA=0; SWP_TOT=1024; SWP_PCT=0
-    DSK_PCT=31; DSK_USA="14G"; DSK_TOT="40G"
+    DSK_PCT=31; DSK_USA="14G"; DSK_TOT="40G"; DSK_DEC="31.4"; DSK_LIBRE="26G"
+    RAM_DEC=$(awk -v r="$RAM_PCT" 'BEGIN{printf "%.1f", r+0.3}')
     NET_RX_VEL=$(( RANDOM % 2000000 )); NET_TX_VEL=$(( RANDOM % 400000 ))
     NET_RX_TOT=4500000000; NET_TX_TOT=880000000
     CARGA="0.42 0.38 0.30"; NPROC=132; SESIONES=3; CONEX=17; ACTIVO="14d 06h"
@@ -127,11 +128,18 @@ medir() {
     read -r RAM_USA RAM_TOT < <(free -m 2>/dev/null | awk '/^Mem:/{print $3, $2}')
     : "${RAM_USA:=0}"; : "${RAM_TOT:=1}"
     RAM_PCT=$(( RAM_USA * 100 / (RAM_TOT>0?RAM_TOT:1) ))
+    # Con un entero la RAM se ve congelada: pasa de 506MB a 491MB y el
+    # porcentaje sigue marcando 6%. Un decimal ya muestra el movimiento.
+    RAM_DEC=$(awk -v u="$RAM_USA" -v t="$RAM_TOT" 'BEGIN{printf "%.1f", (t>0? u*100/t : 0)}')
     read -r SWP_USA SWP_TOT < <(free -m 2>/dev/null | awk '/^Swap:/{print $3, $2}')
     : "${SWP_USA:=0}"; : "${SWP_TOT:=0}"
     SWP_PCT=$(( SWP_TOT>0 ? SWP_USA*100/SWP_TOT : 0 ))
     read -r DSK_USA DSK_TOT DSK_PCT < <(df -h --output=used,size,pcent / 2>/dev/null | awk 'NR==2{gsub("%","",$3); print $1, $2, $3}')
     : "${DSK_USA:=0}"; : "${DSK_TOT:=0}"; : "${DSK_PCT:=0}"
+    # df redondea a entero: con un decimal se nota cuando se escriben archivos
+    read -r DSK_UK DSK_TK < <(df -k --output=used,size / 2>/dev/null | awk 'NR==2{print $1, $2}')
+    DSK_DEC=$(awk -v u="${DSK_UK:-0}" -v t="${DSK_TK:-1}" 'BEGIN{printf "%.1f", (t>0? u*100/t : 0)}')
+    DSK_LIBRE=$(df -h --output=avail / 2>/dev/null | awk 'NR==2{print $1}')
     net_medir
     CARGA=$(awk '{printf "%s %s %s", $1, $2, $3}' /proc/loadavg 2>/dev/null)
     NPROC=$(ls -d /proc/[0-9]* 2>/dev/null | wc -l)
@@ -150,17 +158,18 @@ f_izq() { caja_izq " $E_MUT$(pad "$1" 9)$E_RST$2" "$MARCO_I"; }
 f_der() { caja_der " $E_MUT$(pad "$1" 9)$E_RST$2" "$MARCO_D"; }
 
 # Contenido de 35 columnas: 1 + etiqueta 9 + cuerpo 25
-cuerpo_barra() { # $1=pct $2=sufijo
-  printf '%s %s%s%s' "$(medidor "$1" 12)" "$E_BLD$E_TXT" "$(rpad "$1%" 5)" "$E_RST$E_MUT$(pad " $2" 7)$E_RST"
+cuerpo_barra() { # $1=pct(entero, para el medidor) $2=texto a mostrar
+  local t="${2:-$1%}"
+  printf '%s %s%s%s' "$(medidor "$1" 12)" "$E_BLD$E_TXT" "$(rpad "$t" 7)" "$E_RST$E_MUT$(pad '' 5)$E_RST"
 }
 cuerpo_txt() { printf '%s%s%s' "$E_TXT" "$(pad "$1" 25)" "$E_RST"; }
 
 paneles_arriba() {
   MARCO_I="$M_CPU"; MARCO_D="$M_MEM"
   techo "PROCESADOR" "$E_P1" "MEMORIA" "$E_P2" "$M_CPU" "$M_MEM"
-  f_izq "USO"     "$(cuerpo_barra "$CPU_PCT" "")"            ; f_der "RAM"   "$(cuerpo_barra "$RAM_PCT" "")"
+  f_izq "USO"     "$(cuerpo_barra "$CPU_PCT" "")"            ; f_der "RAM"   "$(cuerpo_barra "$RAM_PCT" "$RAM_DEC%")"
   f_izq "PICO 1m" "$(cuerpo_barra "$PICO_CPU" "")"            ; f_der "PICO 1m" "$(cuerpo_barra "$PICO_RAM" "")"
-  f_izq "NÚCLEOS" "$(cuerpo_txt "$(nucleos_txt)")"            ; f_der "USADA" "$(cuerpo_txt "$(hum_mb "$RAM_USA") de $(hum_mb "$RAM_TOT")")"
+  f_izq "NÚCLEOS" "$(cuerpo_txt "$(nucleos_txt)")"            ; f_der "USADA" "$(cuerpo_txt "${RAM_USA}M de $(hum_mb "$RAM_TOT")")"
   f_izq "CARGA"   "$(cuerpo_txt "$CARGA")"                    ; f_der "SWAP"  "$(cuerpo_barra "$SWP_PCT" "")"
   f_izq "TAREAS"  "$(cuerpo_txt "$NPROC procesos")"           ; f_der "LIBRE" "$(cuerpo_txt "$(hum_mb $(( RAM_TOT - RAM_USA )))")"
   piso "$M_CPU" "$M_MEM"
@@ -177,8 +186,8 @@ hum_mb() { awk -v m="$1" 'BEGIN{ if (m>=1024) printf "%.1fG", m/1024; else print
 paneles_abajo() {
   MARCO_I="$M_RED"; MARCO_D="$M_DSK"
   techo "RED VPS" "$E_PINK" "DISCO Y SISTEMA" "$E_WARN" "$M_RED" "$M_DSK"
-  f_izq "BAJADA"  "$(cuerpo_txt "$(bytes_hum "$NET_RX_VEL")/s")" ; f_der "USO"     "$(cuerpo_barra "$DSK_PCT" "")"
-  f_izq "SUBIDA"  "$(cuerpo_txt "$(bytes_hum "$NET_TX_VEL")/s")" ; f_der "ESPACIO" "$(cuerpo_txt "$DSK_USA de $DSK_TOT")"
+  f_izq "BAJADA"  "$(cuerpo_txt "$(bytes_hum "$NET_RX_VEL")/s")" ; f_der "USO"     "$(cuerpo_barra "$DSK_PCT" "$DSK_DEC%")"
+  f_izq "SUBIDA"  "$(cuerpo_txt "$(bytes_hum "$NET_TX_VEL")/s")" ; f_der "ESPACIO" "$(cuerpo_txt "$DSK_USA de $DSK_TOT · libre ${DSK_LIBRE:-?}")"
   f_izq "TOTAL ▼" "$(cuerpo_txt "$(bytes_hum "$NET_RX_TOT")")" ; f_der "SESIONES" "$(cuerpo_txt "$SESIONES abiertas")"
   f_izq "TOTAL ▲" "$(cuerpo_txt "$(bytes_hum "$NET_TX_TOT")")" ; f_der "ACTIVO"   "$(cuerpo_txt "$ACTIVO")"
   f_izq "CONEX"  "$(cuerpo_txt "$CONEX establecidas")"         ; f_der "ESTADO"   "$(cuerpo_txt "$(estado_txt)")"
@@ -208,23 +217,21 @@ tabla_procesos() {
   for ((; i<5; i++)); do printf '  %s\n' "$(pad '' 76)"; done
 }
 
-# El pie es una fila de opción como las demás, más el prompt donde se teclea.
-# 2 + bar1 + sp + chip4 + sp + emoji2 + sp + sep1 + sp + texto 64 = 78
+# El pie arranca en la columna 2, igual que la tabla de procesos de arriba.
+# Con la barra ▏ y la pastilla quedaba metido hacia adentro y se veía corrido.
+# 2 + nn2 + 2 + emoji2 + 2 + texto 56 + estado 12 = 78
 pie() {
   local etxt col
   if [ "$PAUSA" = 1 ]; then etxt="⏸ PAUSADO"; col="$E_WARN"; else etxt="▶ EN VIVO"; col="$E_OK"; fi
-  printf '  %s▏%s %s %s %s %s%s\n' \
-    "$E_OFF" "$E_RST" \
-    "$B_CHIP$E_P1 00 $E_RST" \
-    "$E_P2🚪$E_RST" \
-    "$E_OFF│$E_RST" \
-    "$E_BLD$E_TXT$(pad 'VOLVER AL MENÚ' 64)" "$E_RST"
-  # "  ❯ Opción: " ocupa 12 columnas, más lo tecleado y el cursor
-  local vis=$(( 12 + ${#BUF} + 1 ))
-  printf '  %s%s❯%s %s%sOpción:%s %s%s%s\e[48;2;%sm \e[0m%*s%s%s%s\n' \
-    "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$E_RST" \
-    "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( ANCHO - vis - 12 )) '' \
+  printf '  %s%s%s  %s%s%s  %s%s%s%s%s%s\n' \
+    "$E_BLD$E_P1" "00" "$E_RST" \
+    "$E_P2" "🚪" "$E_RST" \
+    "$E_BLD$E_TXT" "$(pad 'VOLVER AL MENÚ' 56)" "$E_RST" \
     "$E_BLD$col" "$(rpad "$etxt" 12)" "$E_RST"
+  local vis=$(( 12 + ${#BUF} + 1 ))
+  printf '  %s%s❯%s %s%sOpción:%s %s%s%s\e[48;2;%sm \e[0m%*s\n' \
+    "$E_BLD" "$E_P1" "$E_RST" "$E_BLD" "$E_TXT" "$E_RST" \
+    "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( ANCHO - vis )) ''
 }
 
 pintar() {

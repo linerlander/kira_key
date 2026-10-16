@@ -30,7 +30,7 @@ BUF=""
 SELLO=""
 
 PASOS=("Comprobar versión remota" "Respaldar la versión actual" "Traer cambios de GitHub"
-       "Verificar archivos"       "Anotar la nueva versión"     "Reiniciar servicios")
+       "Verificar archivos"       "Confirmar versión"           "Reiniciar servicios")
 EST=(pend pend pend pend pend pend)
 DET=("" "" "" "" "" "")
 PCT=(0 0 0 0 0 0)
@@ -50,12 +50,32 @@ revisar() {
   if [ -z "$meta" ]; then
     ESTADO="error"; MENSAJE="No se pudo contactar al servidor de actualizaciones"; return
   fi
-  # Se lee con awk y no con jq: jq no viene instalado en la mayoría de los VPS
-  VER_REMOTA=$(awk -F'"' '/"version"/{print $4; exit}' <<< "$meta")
-  FECHA_REM=$(awk -F'"' '/"fecha"/{print $4; exit}'    <<< "$meta")
-  TAM_REM=$(awk -F'"'  '/"tamano"/{print $4; exit}'    <<< "$meta")
-  CANAL=$(awk -F'"'    '/"canal"/{print $4; exit}'     <<< "$meta")
-  mapfile -t NOVEDADES < <(awk -F'"' '/"nota"/{print $4}' <<< "$meta")
+  # Se lee con awk y no con jq: jq no viene instalado en la mayoría de los VPS.
+  # El `tr` parte por comas para que funcione igual si el JSON viene en una
+  # sola línea; sin eso, awk toma el primer campo de la línea y devuelve el
+  # valor equivocado en todas las claves menos la primera.
+  # Se busca la clave ENTRE COMILLAS seguida de dos puntos, y se recorre cada
+  # línea buscando TODAS las coincidencias. Dos trampas que esto evita:
+  #  - partir por comillas y contar campos falla, porque la clave "notas"
+  #    contiene "nota" y corre las posiciones;
+  #  - partir por comas rompe los valores que llevan coma adentro
+  #    ("Barras de RAM, CPU y disco" se cortaba al medio).
+  jval() { awk -v k="$1" '
+    match($0, "\""k"\"[[:space:]]*:[[:space:]]*\"[^\"]*\"") {
+      v = substr($0, RSTART, RLENGTH)
+      sub("^\""k"\"[[:space:]]*:[[:space:]]*\"", "", v); sub("\"$", "", v)
+      print v; exit }' <<< "$meta"; }
+  VER_REMOTA=$(jval version)
+  FECHA_REM=$(jval fecha)
+  TAM_REM=$(jval tamano)
+  CANAL=$(jval canal)
+  mapfile -t NOVEDADES < <(awk '
+    { s = $0
+      while (match(s, "\"nota\"[[:space:]]*:[[:space:]]*\"[^\"]*\"")) {
+        v = substr(s, RSTART, RLENGTH)
+        sub("^\"nota\"[[:space:]]*:[[:space:]]*\"", "", v); sub("\"$", "", v)
+        print v
+        s = substr(s, RSTART + RLENGTH) } }' <<< "$meta")
   [ -z "$VER_REMOTA" ] && { ESTADO="error"; MENSAJE="Respuesta inválida del servidor"; return; }
   [ "$VER_LOCAL" = "$VER_REMOTA" ] && ESTADO="al_dia" || ESTADO="disponible"
 }
@@ -190,6 +210,11 @@ actualizar() {
   if [ -n "${DEMO:-}" ]; then
     sleep 0.7; paso 2 ok "5 archivos"
   elif [ -d "$DIR/.git" ]; then
+    # El respaldo ya está hecho, así que se descartan los cambios locales: un
+    # archivo tocado a mano no debe bloquear la actualización.
+    if [ -n "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]; then
+      ejec git -C "$DIR" checkout -- .
+    fi
     if ejec git -C "$DIR" pull --ff-only; then
       paso 2 ok "$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null)"
     else
@@ -217,9 +242,17 @@ actualizar() {
   fi
   paso 3 ok "sintaxis correcta"
 
+  # El archivo VERSION viene EN el repo, así que el pull ya lo actualizó.
+  # Antes lo escribía este script y, al estar versionado, el siguiente pull
+  # chocaba con "local changes would be overwritten". Sólo se lee.
   paso 4 curso
-  if [ -z "${DEMO:-}" ]; then printf '%s\n' "$VER_REMOTA" > "$ARCH_VER"; fi
-  paso 4 ok "v$VER_REMOTA"
+  if [ -z "${DEMO:-}" ]; then
+    VER_LOCAL="$(cat "$ARCH_VER" 2>/dev/null)"
+    [ -z "$VER_LOCAL" ] && VER_LOCAL="$VER_REMOTA"
+  else
+    VER_LOCAL="$VER_REMOTA"
+  fi
+  paso 4 ok "v$VER_LOCAL"
 
   paso 5 curso
   if [ -z "${DEMO:-}" ]; then
@@ -227,7 +260,7 @@ actualizar() {
   else sleep 0.3; fi
   paso 5 ok "al día"
 
-  VER_LOCAL="$VER_REMOTA"; ESTADO="listo"; render
+  ESTADO="listo"; render
 
   # Bash ya tiene el código viejo en memoria: sin reiniciar, el usuario
   # actualiza y sigue usando la versión anterior sin notarlo.

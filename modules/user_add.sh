@@ -108,7 +108,19 @@ clave_servicio() {
   esac
 }
 
+# Rango de puertos que el kernel reparte al azar para los flujos salientes.
+# Todo lo que cae ahí NO es un servicio configurado.
+EFIMERO_INI=32768
+leer_rango_efimero() {
+  local a b
+  read -r a b < /proc/sys/net/ipv4/ip_local_port_range 2>/dev/null || return
+  [[ "$a" =~ ^[0-9]+$ ]] && EFIMERO_INI="$a"
+}
+
+MAX_PTOS=8          # tope por servicio, para que un caso raro no desborde
+
 declare -A PTO_VISTO=()
+declare -A CUANTOS=()
 agrega_puerto() { # $1=clave del servicio $2=puerto
   local c="$1" p="$2"
   # Sin clave es un programa que no nos interesa (systemd-resolve, postgres…).
@@ -119,7 +131,9 @@ agrega_puerto() { # $1=clave del servicio $2=puerto
   [[ "$p" =~ ^[0-9]+$ ]] || return
   (( p >= 1 && p <= 65535 )) || return
   [ -n "${PTO_VISTO[$p]:-}" ] && return      # un puerto, un solo servicio
+  (( ${CUANTOS[$c]:-0} >= MAX_PTOS )) && return
   PTO_VISTO[$p]=1
+  CUANTOS[$c]=$(( ${CUANTOS[$c]:-0} + 1 ))
   if [ -z "${PUERTO_DE[$c]:-}" ]; then PUERTO_DE[$c]="$p"
   else PUERTO_DE[$c]="${PUERTO_DE[$c]} $p"; fi
 }
@@ -128,19 +142,27 @@ agrega_puerto() { # $1=clave del servicio $2=puerto
 # Es la fuente buena: dice lo que el sistema está haciendo AHORA, no lo que
 # algún archivo dice que debería hacer.
 puertos_de_sockets() {
-  local pto prog
-  while read -r pto prog; do
+  local proto pto prog
+  while read -r proto pto prog; do
     [ -z "$prog" ] && continue
+    # OJO con UDP: no existe el estado "escuchando". `ss -uln` lista TODOS
+    # los sockets UDP, incluidos los que el kernel abre al vuelo para cada
+    # flujo que udpgw reenvía. En un servidor con 900 clientes aparecen 900
+    # "puertos" que no son el servicio, y el panel mostraba +909.
+    # El puerto configurado siempre está por debajo del rango efímero.
+    if [ "$proto" = u ] && (( pto >= EFIMERO_INI )); then continue; fi
     agrega_puerto "$(clave_servicio "$prog")" "$pto"
   done < <(
-    { ss -tlnpH 2>/dev/null; ss -ulnpH 2>/dev/null; } | awk '
-      {
-        n = split($4, a, ":"); p = a[n]
-        prog = ""
-        # el campo de proceso viene como:  users:(("sshd",pid=811,fd=3))
-        if (match($0, /users:\(\("[^"]+"/)) prog = substr($0, RSTART+9, RLENGTH-10)
-        if (p ~ /^[0-9]+$/ && prog != "") print p, prog
-      }')
+    # El campo de proceso viene como:  users:(("sshd",pid=811,fd=3))
+    { ss -tlnpH 2>/dev/null | awk -v P=t '
+        { n = split($4, a, ":"); p = a[n]; prog = ""
+          if (match($0, /users:\(\("[^"]+"/)) prog = substr($0, RSTART+9, RLENGTH-10)
+          if (p ~ /^[0-9]+$/ && prog != "") print P, p, prog }'
+      ss -ulnpH 2>/dev/null | awk -v P=u '
+        { n = split($4, a, ":"); p = a[n]; prog = ""
+          if (match($0, /users:\(\("[^"]+"/)) prog = substr($0, RSTART+9, RLENGTH-10)
+          if (p ~ /^[0-9]+$/ && prog != "") print P, p, prog }'
+    })
 }
 
 # --- fuente 2: la línea de comandos de cada demonio ----------------------
@@ -195,7 +217,8 @@ puertos_de_config() {
 }
 
 detectar_puertos() {
-  PUERTO_DE=(); PTO_VISTO=(); PUERTOS=""
+  PUERTO_DE=(); PTO_VISTO=(); CUANTOS=(); PUERTOS=""
+  leer_rango_efimero
   puertos_de_sockets
   puertos_de_procesos
   puertos_de_config
@@ -345,19 +368,21 @@ linea_aviso() {
 # La ayuda cambia según el paso: explica qué se espera ANTES de que escriba,
 # no después de que se equivoque.
 AYUDA=("" \
-  "Letras minúsculas, números y guiones. Escribí  demo  para una cuenta de prueba." \
+  "Minúsculas, números y guiones. Escribí  demo  para una cuenta de prueba." \
   "ENTER solo = genero una al azar, fácil de dictar." \
   "Cuántos días dura la cuenta. Lo normal: 30." \
   "Cuántos dispositivos puede usar a la vez. Lo normal: 1 o 2." \
   "Revisá que esté todo bien. S para crear, N para empezar de nuevo." \
   "Copiá los datos de la derecha y mandáselos al cliente.")
 
-# Recordatorio fijo de cómo salir. Antes se podía volver atrás, pero no estaba
-# escrito en ningún lado, que para el que lo usa es lo mismo que no existir.
-salida_txt() {
-  if (( PASO == 1 ));    then printf '0 o ENTER vacío · salir al panel'
-  elif (( PASO <= 5 ));  then printf '0 · volver al paso anterior      ·      ENTER vacío en el usuario · salir'
-  else printf ''; fi
+# La salida va como una opción más, con su número, igual que en el resto del
+# panel. Antes era una nota al pie en gris apagado: sobre el fondo oscuro no
+# se leía, así que el que entraba veía que le pedían un usuario y no sabía
+# cómo salir. Escrito pero invisible es lo mismo que no estar.
+opcion_volver() {
+  local t
+  if (( PASO == 1 )); then t="VOLVER AL PANEL"; else t="VOLVER AL PASO ANTERIOR"; fi
+  printf '  %s00%s %s%s%s\n' "$E_BLD$E_P1" "$E_RST" "$E_BLD$E_TXT" "$(pad "$t" 73)" "$E_RST"
 }
 
 pintar() {
@@ -377,7 +402,8 @@ pintar() {
     seccion "PASO $PASO · ${NOMBRE_PASO[$PASO]}" "$E_P2"
     echo
     printf '  %s%s%s\n' "$E_MUT" "$(pad "${AYUDA[$PASO]}" 76)" "$E_RST"
-    printf '  %s%s%s\n' "$E_OFF" "$(pad "$(salida_txt)" 76)" "$E_RST"
+    echo
+    opcion_volver
   fi
   echo
   linea_aviso
@@ -536,7 +562,7 @@ while true; do
       AVISO=""
       [ -z "$RESP" ] && { clear; exit 0; }          # ENTER vacío = salir
       case "${RESP,,}" in
-        0)    clear; exit 0 ;;
+        0|00) clear; exit 0 ;;
         demo|prueba|test)
               if crear_demo; then PASO=6; fi ;;
         *)    if val_usuario "$RESP"; then USUARIO="$RESP"; PASO=2; fi ;;
@@ -545,14 +571,14 @@ while true; do
     2)
       preguntar "Contraseña:"
       AVISO=""
-      [ "$RESP" = "0" ] && { atras; continue; }
+      case "$RESP" in 0|00) atras; continue ;; esac
       [ -z "$RESP" ] && RESP="$(clave_azar)"        # ENTER solo = al azar
       if val_clave "$RESP"; then CLAVE="$RESP"; PASO=3; fi
       ;;
     3)
       preguntar "Días:"
       AVISO=""
-      [ "$RESP" = "0" ] && { atras; continue; }
+      case "$RESP" in 0|00) atras; continue ;; esac
       [ -z "$RESP" ] && RESP=30                     # ENTER solo = 30 días
       if val_numero "$RESP" "$MAX_DIAS" "Días"; then
         DIAS=$(( 10#$RESP ))
@@ -564,7 +590,7 @@ while true; do
     4)
       preguntar "Límite:"
       AVISO=""
-      [ "$RESP" = "0" ] && { atras; continue; }
+      case "$RESP" in 0|00) atras; continue ;; esac
       [ -z "$RESP" ] && RESP=1                      # ENTER solo = 1 conexión
       if val_numero "$RESP" "$MAX_CONEX" "Límite"; then
         LIMITE=$(( 10#$RESP )); PASO=5
@@ -574,7 +600,7 @@ while true; do
       preguntar "¿Creo la cuenta? (s/n):"
       AVISO=""
       case "${RESP,,}" in
-        0)          atras ;;
+        0|00)       atras ;;
         s|si|sí|"") if crear; then PASO=6; fi ;;
         n|no)       limpiar_campos ;;
         *)          AVISO="Respondé s para crear, n para empezar de nuevo o 0 para volver" ;;

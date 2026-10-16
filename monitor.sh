@@ -43,28 +43,40 @@ IFACE=$(ip route 2>/dev/null | awk '/^default/{print $5; exit}')
 [ -z "$IFACE" ] && IFACE="red" 
 
 # ================================================================= PICOS ====
-# El medidor muestra el AHORA. El pico del último minuto es el único dato de
-# historial que de verdad se usa: "¿se exigió hace poco?".
-PICO_CPU=0; PICO_RAM=0; PICO_SEG=0
+# Ventana deslizante de 60 lecturas (≈1 minuto). Antes se reiniciaba a cero
+# cada minuto, así que justo después del corte el pico valía lo mismo que el
+# valor actual y parecía que no se movía.
+VENT_CPU=""; VENT_RAM=""; PICO_CPU=0; PICO_RAM=0
+ventana() { # $1=lista $2=valor nuevo -> lista recortada a 60
+  local -a v=($1 $2)
+  local n=${#v[@]}
+  (( n > 60 )) && printf '%s' "${v[*]:n-60:60}" || printf '%s' "${v[*]}"
+}
+maximo() { awk '{ m=0; for(i=1;i<=NF;i++) if($i>m) m=$i; print m+0 }' <<< "$1"; }
+
 anotar_pico() {
-  printf -v ahora '%(%s)T' -1
-  if (( ahora - PICO_SEG > 60 )); then PICO_CPU=0; PICO_RAM=0; PICO_SEG=$ahora; fi
-  (( CPU_PCT > PICO_CPU )) && PICO_CPU=$CPU_PCT
-  (( RAM_PCT > PICO_RAM )) && PICO_RAM=$RAM_PCT
+  VENT_CPU="$(ventana "$VENT_CPU" "$CPU_PCT")"
+  VENT_RAM="$(ventana "$VENT_RAM" "$RAM_PCT")"
+  PICO_CPU="$(maximo "$VENT_CPU")"
+  PICO_RAM="$(maximo "$VENT_RAM")"
 }
 
 # ================================================================ DATOS =====
 # CPU por diferencia entre dos lecturas de /proc/stat, guardando la anterior
 # entre vueltas. top -bn1 tarda ~1s y su primera muestra es basura.
 declare -A CPU_I CPU_T
-cpu_de() { # $1=cpu|cpu0|cpu1... -> porcentaje
+# OJO: deja el resultado en CPU_RES en vez de imprimirlo. Si se llamara con
+# $( ), correría en un SUBSHELL y las muestras guardadas en CPU_I/CPU_T se
+# perderían al volver: cada lectura se compararía contra el arranque del
+# sistema y el porcentaje saldría casi fijo (el promedio desde el booteo).
+CPU_RES=0
+cpu_de() { # $1=cpu|cpu0|cpu1...  -> resultado en CPU_RES
   local k="$1" i2 t2
   read -r i2 t2 < <(awk -v k="$k" '$1==k{idle=$5; tot=0; for(i=2;i<=NF;i++) tot+=$i; print idle, tot; exit}' /proc/stat)
-  [ -z "$t2" ] && { echo 0; return; }
+  [ -z "$t2" ] && { CPU_RES=0; return; }
   local dt=$(( t2 - ${CPU_T[$k]:-0} )) di=$(( i2 - ${CPU_I[$k]:-0} ))
   CPU_I[$k]=$i2; CPU_T[$k]=$t2
-  (( dt <= 0 )) && { echo 0; return; }
-  echo $(( (100 * (dt - di)) / dt ))
+  if (( dt <= 0 )); then CPU_RES=0; else CPU_RES=$(( (100 * (dt - di)) / dt )); fi
 }
 
 NET_RX_ANT=0; NET_TX_ANT=0; NET_T_ANT=0
@@ -109,10 +121,10 @@ medir() {
     PROCS=("1234|root|sshd|12.3|1.2" "2201|nobody|v2ray|8.1|3.4" "994|root|dropbear|4.2|0.8"
            "5120|kira|python3|2.0|2.1" "77|root|systemd|0.7|0.4")
   else
-    CPU_PCT=$(cpu_de cpu)
+    cpu_de cpu; CPU_PCT=$CPU_RES
     NUCLEOS=$(nproc 2>/dev/null || echo 1)
     CORES=()
-    local c; for ((c=0; c<NUCLEOS && c<8; c++)); do CORES+=("$(cpu_de "cpu$c")"); done
+    local c; for ((c=0; c<NUCLEOS && c<8; c++)); do cpu_de "cpu$c"; CORES+=("$CPU_RES"); done
     read -r RAM_USA RAM_TOT < <(free -m 2>/dev/null | awk '/^Mem:/{print $3, $2}')
     : "${RAM_USA:=0}"; : "${RAM_TOT:=1}"
     RAM_PCT=$(( RAM_USA * 100 / (RAM_TOT>0?RAM_TOT:1) ))
@@ -197,13 +209,20 @@ tabla_procesos() {
   for ((; i<5; i++)); do printf '  %s\n' "$(pad '' 76)"; done
 }
 
+# El pie usa el MISMO formato de fila que las opciones del menú, para que la
+# salida se vea como una opción más y no como una nota al pie.
+# 2 + bar1 + sp + chip4 + sp + emoji2 + sp + sep1 + sp + texto 52 + estado 12 = 78
 pie() {
   local etxt col
   if [ "$PAUSA" = 1 ]; then etxt="⏸ PAUSADO"; col="$E_WARN"; else etxt="▶ EN VIVO"; col="$E_OK"; fi
-  local izq="❯ 0 volver · P pausar · se actualiza cada segundo"
-  local hueco=$(( ANCHO - 2 - ${#izq} - ${#etxt} ))
-  (( hueco < 1 )) && hueco=1
-  printf '  %s%s%s%*s%s%s%s\n' "$E_MUT" "$izq" "$E_RST" "$hueco" '' "$E_BLD$col" "$etxt" "$E_RST"
+  printf '  %s▏%s %s %s %s %s%s%s\n' \
+    "$E_OFF" "$E_RST" \
+    "$B_CHIP$E_P1 00 $E_RST" \
+    "$E_P2🚪$E_RST" \
+    "$E_OFF│$E_RST" \
+    "$E_BLD$E_TXT$(pad 'VOLVER AL MENÚ' 32)$E_RST" \
+    "$E_MUT$(pad 'P pausar' 20)$E_RST" \
+    "$E_BLD$col$(rpad "$etxt" 12)$E_RST"
 }
 
 pintar() {

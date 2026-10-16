@@ -101,8 +101,10 @@ cargar_puertos() {
   elif command -v netstat >/dev/null 2>&1; then
     LISTEN=$(netstat -tuln 2>/dev/null | awk '/^(tcp|udp)/{n=split($4,a,":"); print a[n]}')
   else
-    LISTEN=$(awk 'NR>1 && ($4=="0A" || $4=="07"){split($2,a,":"); print strtonum("0x" a[2])}' \
-             /proc/net/tcp /proc/net/tcp6 /proc/net/udp /proc/net/udp6 2>/dev/null)
+    local f; mapfile -t f < <(procnet /proc/net/tcp /proc/net/tcp6 /proc/net/udp /proc/net/udp6)
+    [ ${#f[@]} -eq 0 ] && { LISTEN=""; return; }
+    LISTEN=$(awk 'FNR>1 && ($4=="0A" || $4=="07"){split($2,a,":"); print strtonum("0x" a[2])}' \
+             "${f[@]}" 2>/dev/null)
   fi
 }
 puerto_activo() { grep -qx "$1" <<< "$LISTEN"; }
@@ -111,6 +113,47 @@ servicio_activo() { # $1=unidad systemd  $2=patrón de proceso (opcional)
   systemctl is-active --quiet "$1" 2>/dev/null && return 0
   [ -n "${2:-}" ] && pgrep -f "$2" >/dev/null 2>&1 && return 0
   return 1
+}
+
+# Con IPv6 apagado /proc/net/tcp6 no existe y awk aborta SIN imprimir nada:
+# hay que pasarle sólo los archivos presentes.
+procnet() { local f o=(); for f in "$@"; do [ -r "$f" ] && o+=("$f"); done; printf '%s\n' "${o[@]}"; }
+
+# Conexiones TCP establecidas. ss → /proc/net/tcp (estado 01 = ESTABLISHED).
+conexiones() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -tn state established 2>/dev/null | tail -n +2 | wc -l
+  else
+    local f; mapfile -t f < <(procnet /proc/net/tcp /proc/net/tcp6)
+    [ ${#f[@]} -eq 0 ] && { echo 0; return; }
+    awk 'FNR>1 && $4=="01"{n++} END{print n+0}' "${f[@]}" 2>/dev/null
+  fi
+}
+
+# Tamaños legibles: 1536 -> "1.5K", 4294967296 -> "4.0G"
+bytes_hum() { awk -v b="$1" 'BEGIN{
+  s="BKMGT"; i=1; while (b>=1024 && i<5) { b/=1024; i++ }
+  if (i==1) printf "%d%s", b, substr(s,i,1); else printf "%.1f%s", b, substr(s,i,1) }'; }
+
+# Velocidad de red por diferencia entre dos lecturas de /proc/net/dev.
+# Se descarta lo (loopback): si no, el tráfico local infla la cifra.
+NET_RX_ANT=0; NET_TX_ANT=0; NET_T_ANT=0
+net_medir() {
+  local rx tx up
+  read -r rx tx < <(awk '/:/{split($0,a,":"); f=a[1]; gsub(/ /,"",f);
+      if (f=="lo") next; n=split(a[2],b," "); rx+=b[1]; tx+=b[9] }
+      END{print rx+0, tx+0}' /proc/net/dev 2>/dev/null)
+  read -r up _ < /proc/uptime
+  NET_RX_TOT=$(bytes_hum "${rx:-0}")
+  NET_TX_TOT=$(bytes_hum "${tx:-0}")
+  local dt; dt=$(awk -v a="$up" -v b="$NET_T_ANT" 'BEGIN{printf "%.2f", a-b}')
+  if awk -v d="$dt" 'BEGIN{exit !(d>0.1)}' && [ "$NET_T_ANT" != "0" ]; then
+    NET_RX_VEL="$(bytes_hum "$(awk -v a="$rx" -v b="$NET_RX_ANT" -v d="$dt" 'BEGIN{printf "%d", (a-b)/d}')")/s"
+    NET_TX_VEL="$(bytes_hum "$(awk -v a="$tx" -v b="$NET_TX_ANT" -v d="$dt" 'BEGIN{printf "%d", (a-b)/d}')")/s"
+  else
+    NET_RX_VEL="—"; NET_TX_VEL="—"
+  fi
+  NET_RX_ANT="$rx"; NET_TX_ANT="$tx"; NET_T_ANT="$up"
 }
 
 cpu_snap() { awk '/^cpu /{idle=$5; tot=0; for(i=2;i<=NF;i++) tot+=$i; print idle, tot}' /proc/stat; }
@@ -152,9 +195,8 @@ cargar_vivos() {   # lo que cambia en cada refresco
   NUCLEOS=$(nproc 2>/dev/null || echo 1)
   UPTIME=$(uptime -p 2>/dev/null | sed 's/^up //; s/ days\?/d/; s/ hours\?/h/; s/ minutes\?/m/; s/,//g')
   [ -z "$UPTIME" ] && UPTIME="?"
-  CARGA=$(awk '{printf "%s %s %s", $1, $2, $3}' /proc/loadavg 2>/dev/null)
-  PROCS=$(ls -d /proc/[0-9]* 2>/dev/null | wc -l)
-  SESIONES=$(who 2>/dev/null | wc -l)
+  net_medir
+  CONEX=$(conexiones)
   USUARIOS=$(awk -F: '$3>=1000 && $1!="nobody"{n++} END{print n+0}' /etc/passwd 2>/dev/null)
 
   cargar_puertos
@@ -222,8 +264,8 @@ srv() { # $1=nombre $2=on/off $3=detalle · 1+11+5+18 = 35
 rec() { # $1=etiqueta $2=pct $3=valor · 1+6+12+1+4+1+10 = 35
   caja_der " $E_MUT$(pad "$1" 6)$E_RST$(barra "$2" 12) $E_TXT$(rpad "$2" 4)%$E_RST$E_MUT$(pad " $3" 10)$E_RST"
 }
-rec_txt() { # fila sin barra · 1+6+18+10 = 35
-  caja_der " $E_MUT$(pad "$1" 6)$E_RST$E_TXT$(pad "$2" 18)$E_RST$E_MUT$(pad "$3" 10)$E_RST"
+rec_txt() { # fila sin barra · 1+6+16+12 = 35
+  caja_der " $E_MUT$(pad "$1" 6)$E_RST$E_TXT$(pad "$2" 16)$E_RST$E_MUT$(pad "$3" 12)$E_RST"
 }
 
 # Convierte megabytes a una forma corta que entre en la columna:
@@ -241,9 +283,9 @@ paneles() {
   srv "DROPBEAR"  "$ST_DROP" "90 · 143"       ; rec "CPU"   "$CPU_PCT" "${NUCLEOS} vCPU"
   srv "SSL/TLS"   "$ST_SSL"  "443"            ; rec "DISCO" "$DSK_PCT" "${DSK_USA}/${DSK_TOT}"
   srv "SLOWDNS"   "$ST_DNS"  "53"             ; rec "SWAP"  "$SWP_PCT" "$(hum "$SWP_USA" "$SWP_TOT")"
-  srv "BADVPN"    "$ST_BAD"  "7300"           ; rec_txt "CARGA" "$CARGA" "1m 5m 15m"
-  srv "V2RAY"     "$ST_V2"   "10086"          ; rec_txt "PROC"  "$PROCS activos" ""
-  srv "HTTP"      "$ST_HTTP" "80"             ; rec_txt "CONEX" "$SESIONES abiertas" ""
+  srv "BADVPN"    "$ST_BAD"  "7300"           ; rec_txt "RED ▼" "$NET_RX_VEL" "total $NET_RX_TOT"
+  srv "V2RAY"     "$ST_V2"   "10086"          ; rec_txt "RED ▲" "$NET_TX_VEL" "total $NET_TX_TOT"
+  srv "HTTP"      "$ST_HTTP" "80"             ; rec_txt "CONEX" "$CONEX establecidas" ""
 
   printf '  %s╰%s╯%s  %s╰%s╯%s\n' "$E_BOR" "$(rep '─' 35)" "$E_RST" "$E_BOR" "$(rep '─' 35)" "$E_RST"
 }
@@ -304,13 +346,18 @@ prompt() {
     "$(pad 'escribí el número y pulsá ENTER · 0 para salir' 76)" "$E_RST"
 }
 
+# El logo y la regla son fijos y cuestan caro: grad_txt y regla lanzan un
+# subshell por carácter (≈240 por cuadro). Se arman una sola vez al arrancar.
+REGLA_FIJA=""; CABECERA_FIJA=""
+cachear_estatico() {
+  REGLA_FIJA="$(regla '▀' 76)"
+  CABECERA_FIJA="$(cabecera)"
+}
+
 pintar() {
-  # \e[H lleva el cursor arriba sin borrar la pantalla. Con `clear` en cada
-  # refresco de 1s el menú parpadea; así se sobrescribe línea por línea.
-  printf '\e[H'
   echo
-  regla '▀' 76
-  cabecera
+  printf '%s\n' "$REGLA_FIJA"
+  printf '%s\n' "$CABECERA_FIJA"
   echo
   banda
   echo
@@ -319,7 +366,15 @@ pintar() {
   menu
   echo
   prompt
-  printf '\e[0J'          # limpia cualquier resto por debajo
+}
+
+# Un cuadro = UNA escritura. Antes cada printf llegaba suelto por la red y la
+# pantalla se veía temblar mientras se dibujaba. Se arma todo en memoria y se
+# vuelca de golpe, con el cursor oculto y marcando el cuadro como atómico
+# (\e[?2026h/l) para los clientes que lo soportan.
+render() {
+  local f; f="$(pintar)"
+  printf '\e[?2026h\e[H%s\e[0J\e[?2026l' "$f"
 }
 
 # ============================================================== MÓDULOS =====
@@ -355,11 +410,18 @@ ejecutar() {
     "")   return ;;
     *)    printf '\n  %s%s✖ Opción inválida%s\n\n' "$E_BLD" "$E_ERR" "$E_RST"; sleep 1 ;;
   esac
-  clear   # el módulo dejó su propia salida: pantalla limpia al volver
+  clear            # el módulo dejó su propia salida: pantalla limpia al volver
+  printf '\e[?25l' # el módulo pudo mostrar el cursor: se vuelve a ocultar
 }
 
 cargar_fijos
+cachear_estatico
+# El cursor real parpadeando mientras se repinta suma al temblor: se oculta
+# y se dibuja uno propio en el prompt. El trap lo devuelve pase lo que pase.
+trap 'printf "\e[?25h\e[?2026l\e[0m\n"; clear' EXIT INT TERM
+printf '\e[?25l'
 clear
+net_medir           # primera lectura: fija la base para calcular velocidad
 BUF=""
 
 # El bucle NO se queda bloqueado en `read`: espera una tecla hasta 0.8s y si
@@ -368,7 +430,7 @@ BUF=""
 # para no perder lo ya tecleado cuando vence el tiempo.
 while true; do
   cargar_vivos
-  pintar
+  render
   if read -rsn1 -t 0.8 tecla; then
     case "$tecla" in
       "")        ejecutar "$BUF"; BUF="" ;;   # ENTER

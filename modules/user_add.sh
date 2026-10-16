@@ -218,7 +218,9 @@ srv_der() { # $1=índice del catálogo
     v="$(lista_corta 2 $v)"; col="$E_BLD$E_OK"
   fi
   # 1 de sangría + nombre 19 + puerto 15 = 35
-  caja_der " $E_TXT$(pad "${CAT_NOM[i]}" 19)$E_RST$col$(rpad "$v" 15)$E_RST" "$M_CLI"
+  # El nombre va en el mismo gris que IP, USUARIO y CLAVE: son todas
+  # etiquetas, y el color fuerte queda para el dato, que es lo que se copia.
+  caja_der " $E_MUT$(pad "${CAT_NOM[i]}" 19)$E_RST$col$(rpad "$v" 15)$E_RST" "$M_CLI"
 }
 
 paneles() {

@@ -22,6 +22,7 @@ if [ ! -r "$DIR/lib/ui.sh" ]; then
   printf '  y pegá ahí el archivo ui.sh.\n'
   exit 1
 fi
+KIRA_DIR="$DIR"
 source "$DIR/lib/ui.sh"
 
 # ================================================================ DATOS =====
@@ -106,10 +107,6 @@ cargar_fijos() {   # lo que no cambia: se consulta una sola vez
   SSH_PORTS=$(awk '/^[[:space:]]*Port[[:space:]]+[0-9]+/{print $2}' \
               /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | sort -un | tr '\n' ' ')
   [ -z "${SSH_PORTS// }" ] && SSH_PORTS="22 "
-  # La versión sale del archivo VERSION, que escribe el instalador y actualiza
-  # el módulo 07. Escrita a mano en la cabecera quedaba desfasada al actualizar.
-  VER=$(cat "$DIR/VERSION" 2>/dev/null)
-  [ -z "$VER" ] && VER="1.0"
 }
 
 cargar_vivos() {   # lo que cambia en cada refresco
@@ -155,32 +152,8 @@ cargar_vivos() {   # lo que cambia en cada refresco
 }
 
 # ============================================================= PANTALLA =====
-cabecera() {
-  local L=(
-    "██╗  ██╗██╗██████╗  █████╗ "
-    "██║ ██╔╝██║██╔══██╗██╔══██╗"
-    "█████╔╝ ██║██████╔╝███████║"
-    "██╔═██╗ ██║██╔══██╗██╔══██║"
-    "██║  ██╗██║██║  ██║██║  ██║"
-    "╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝"
-  )
-  local I=(
-    ""
-    "$E_BLD$E_TXT$(pad 'ADMINISTRADOR DE VPS · SSH' 43)$E_RST"
-    "$E_BLD$E_P1$(pad "v$VER PREMIUM" 14)$E_RST$E_MUT$(pad 'LICENCIA' 9)$E_RST$E_OK$(pad '● ACTIVA' 20)$E_RST"
-    "$E_MUT$(pad 'EXPIRA' 14)$E_RST$E_TXT$(pad '2026-12-31' 14)$E_RST$E_MUT$(pad 'quedan 77 días' 15)$E_RST"
-    "$E_MUT$(pad 'SOPORTE' 14)$E_RST$E_INFO$(pad '@Loki_CC' 29)$E_RST"
-    ""
-  )
-  local i
-  for ((i=0;i<6;i++)); do
-    printf '  %s   %s┃%s  ' "$(grad_txt "${L[i]}" "$i")" "$E_BOR" "$E_RST"
-    if [ -z "${I[i]}" ]; then printf '%*s' 43 ''; else printf '%b' "${I[i]}"; fi
-    printf '\n'
-  done
-}
-
-# banda() y datos_sistema() viven en lib/ui.sh: los módulos usan la misma.
+# cabecera(), banda() y datos_sistema() viven en lib/ui.sh: una sola copia
+# para el menú y para todos los módulos.
 
 # Ambas cajas miden 37 columnas: bordes en 2, 38, 41 y 77. El contenido
 # entre bordes mide SIEMPRE 35. Se arma el cuerpo primero y se imprime con
@@ -282,14 +255,6 @@ prompt() {
     "$E_BLD" "$E_P1" "$BUF" "$C_P1" $(( 78 - vis )) ''
 }
 
-# El logo y la regla son fijos y cuestan caro: grad_txt y regla lanzan un
-# subshell por carácter (≈240 por cuadro). Se arman una sola vez al arrancar.
-REGLA_FIJA=""; CABECERA_FIJA=""
-cachear_estatico() {
-  REGLA_FIJA="$(regla '▀' 76)"
-  CABECERA_FIJA="$(cabecera)"
-}
-
 # Al teclear sólo cambian el menú y el prompt. Los paneles se reusan desde
 # la caché: rearmarlos en cada tecla costaba ~40ms de más.
 pintar() {
@@ -351,7 +316,7 @@ procesar() {
 }
 
 cargar_fijos
-cachear_estatico
+cachear_cabecera
 cachear_menu
 # El cursor real parpadeando mientras se repinta suma al temblor: se oculta
 # y se dibuja uno propio en el prompt. El trap lo devuelve pase lo que pase.

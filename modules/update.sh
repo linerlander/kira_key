@@ -13,6 +13,7 @@ if [ ! -r "$DIR/lib/ui.sh" ]; then
   printf '  Tiene que estar en: \e[1m%s/lib/ui.sh\e[0m\n' "$DIR"
   exit 1
 fi
+KIRA_DIR="$DIR"
 source "$DIR/lib/ui.sh"
 
 # ============================================================== AJUSTES =====
@@ -175,6 +176,7 @@ prompt() {
 pintar() {
   echo
   printf '%s\n' "$REGLA_FIJA"
+  printf '%s\n' "$CABECERA_FIJA"
   echo
   banda
   echo
@@ -299,8 +301,8 @@ ver_cambios() {
 
 # ================================================================= MAIN =====
 exigir_ancho
-REGLA_FIJA="$(regla '▀' 76)"
 datos_sistema
+cachear_cabecera
 # El manejador de INT/TERM DEBE salir. Si sólo limpia, Ctrl+C ejecuta el
 # trap y el bucle sigue corriendo: no hay forma de cortar el script.
 trap 'cursor_on; printf "\e[?2026l\e[0m\n"' EXIT

@@ -141,6 +141,59 @@ encabezado() { # $1=titulo $2=texto derecho
          "$E_OFF" "$(rep '─' "$d")" "$E_RST" "$E_BLD$E_P2" "$2" "$E_RST"
 }
 
+# ============================================================= CABECERA =====
+# El logo y la ficha de licencia. Vive acá para que el menú y TODOS los
+# módulos muestren exactamente la misma, sin copiarla en cada archivo.
+KIRA_LIC="ACTIVA"
+KIRA_EXP="2026-12-31"
+KIRA_SOP="@Loki_CC"
+KIRA_VER=""
+REGLA_FIJA=""; CABECERA_FIJA=""
+
+# Los días que faltan se calculan: escritos a mano quedan mal al día siguiente.
+dias_restantes() {
+  local hoy exp
+  hoy=$(date +%s)
+  exp=$(date -d "$KIRA_EXP" +%s 2>/dev/null) || { printf '—'; return; }
+  local d=$(( (exp - hoy) / 86400 ))
+  (( d < 0 )) && { printf 'vencida'; return; }
+  printf 'quedan %s días' "$d"
+}
+
+cabecera() {
+  [ -z "$KIRA_VER" ] && KIRA_VER="$(cat "${KIRA_DIR:-.}/VERSION" 2>/dev/null)"
+  [ -z "$KIRA_VER" ] && KIRA_VER="1.0"
+  local L=(
+    "██╗  ██╗██╗██████╗  █████╗ "
+    "██║ ██╔╝██║██╔══██╗██╔══██╗"
+    "█████╔╝ ██║██████╔╝███████║"
+    "██╔═██╗ ██║██╔══██╗██╔══██║"
+    "██║  ██╗██║██║  ██║██║  ██║"
+    "╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝"
+  )
+  local I=(
+    ""
+    "$E_BLD$E_TXT$(pad 'ADMINISTRADOR DE VPS · SSH' 43)$E_RST"
+    "$E_BLD$E_P1$(pad "v$KIRA_VER PREMIUM" 14)$E_RST$E_MUT$(pad 'LICENCIA' 9)$E_RST$E_OK$(pad "● $KIRA_LIC" 20)$E_RST"
+    "$E_MUT$(pad 'EXPIRA' 14)$E_RST$E_TXT$(pad "$KIRA_EXP" 14)$E_RST$E_MUT$(pad "$(dias_restantes)" 15)$E_RST"
+    "$E_MUT$(pad 'SOPORTE' 14)$E_RST$E_INFO$(pad "$KIRA_SOP" 29)$E_RST"
+    ""
+  )
+  local i
+  for ((i=0;i<6;i++)); do
+    printf '  %s   %s┃%s  ' "$(grad_txt "${L[i]}" "$i")" "$E_BOR" "$E_RST"
+    if [ -z "${I[i]}" ]; then printf '%*s' 43 ''; else printf '%b' "${I[i]}"; fi
+    printf '\n'
+  done
+}
+
+# El logo y la regla cuestan caro: grad_txt y regla lanzan un subshell por
+# carácter (≈240 por cuadro). Se arman una sola vez al arrancar.
+cachear_cabecera() {
+  REGLA_FIJA="$(regla '▀' 76)"
+  CABECERA_FIJA="$(cabecera)"
+}
+
 # ======================================================= BANDA DEL SISTEMA ==
 # La usan el menú y los módulos, para que todas las pantallas lleven la misma
 # cabecera. La IP se guarda en caché: consultarla cuesta segundos y no cambia.

@@ -35,13 +35,22 @@ UMBRAL_VENCE=7      # días para considerar que una cuenta "está por vencer"
 # empieza con ! la cuenta está bloqueada) y campo 8 = día de expiración,
 # contado en días desde 1970.
 TOTAL=0; ACTIVOS=0; POR_VENCER=0; VENCIDOS=0; BLOQUEADOS=0
-EN_LINEA=0; SESIONES=0; EXCEDIDOS=0; ULTIMO="—"; CONSUMO="—"; SIN_ROOT=0
+EN_LINEA=0; CONEXIONES=0; EXCEDIDOS=0; HAY_LIMITES=0
+ULTIMO="—"; TRAFICO="—"; SIN_ROOT=0
+declare -A CON_USR      # usuario -> cuántas conexiones tiene abiertas
+declare -A ES_CLIENTE   # usuarios vendibles (UID >= 1000)
+
+# Dónde registra el sistema los logins. Cambia según la distro.
+LOG_AUTH=""
+for _f in /var/log/auth.log /var/log/secure; do
+  [ -r "$_f" ] && { LOG_AUTH="$_f"; break; }
+done
 
 cargar_cuentas() {
   if [ -n "${DEMO:-}" ]; then
     TOTAL=42; ACTIVOS=38; POR_VENCER=3; VENCIDOS=1; BLOQUEADOS=1
-    EN_LINEA=8; SESIONES=11; EXCEDIDOS=2; ULTIMO="juanperez · hace 2m"
-    CONSUMO="4.2G este mes"
+    EN_LINEA=8; CONEXIONES=23; EXCEDIDOS=2; HAY_LIMITES=1
+    ULTIMO="juanperez · hace 2m"; TRAFICO="47.9G desde arranque"
     return
   fi
 
@@ -81,29 +90,135 @@ cargar_cuentas() {
     : "${TOTAL:=0}" "${ACTIVOS:=0}" "${POR_VENCER:=0}" "${VENCIDOS:=0}" "${BLOQUEADOS:=0}"
   fi
 
-  # Conectados: una sesión por proceso de sshd/dropbear con usuario asignado
-  mapfile -t SES < <(who 2>/dev/null | awk '{print $1}')
-  SESIONES=${#SES[@]}
-  EN_LINEA=$(printf '%s\n' "${SES[@]}" | sort -u | grep -c . 2>/dev/null)
-  [ -z "$EN_LINEA" ] && EN_LINEA=0
+  # Quiénes son clientes: los de UID >= 1000. Sirve para descartar root y las
+  # cuentas de sistema de todo lo que viene después.
+  ES_CLIENTE=()
+  local u
+  while read -r u; do ES_CLIENTE[$u]=1; done < <(
+    awk -F: '$3>=1000 && $1!="nobody" && $1!="nogroup" {print $1}' /etc/passwd 2>/dev/null)
 
-  # Quién pasa su límite de sesiones: necesita el límite por usuario, que
-  # guarda el módulo de multilogin. Si no existe, no se puede saber.
-  EXCEDIDOS=0
-  if [ -r "$DIR/db/limites" ]; then
-    local lu ll n
-    while IFS=' ' read -r lu ll; do
-      [ -z "$lu" ] && continue
-      n=$(printf '%s\n' "${SES[@]}" | grep -cx "$lu")
-      (( n > ll )) && EXCEDIDOS=$((EXCEDIDOS+1))
-    done < "$DIR/db/limites"
+  cargar_conexiones
+  cargar_ultimo
+  TRAFICO="$(trafico_total)"
+}
+
+# ========================================================== CONEXIONES ======
+# OJO: `who` y `last` NO sirven acá. Los dos leen utmp/wtmp, donde sólo se
+# anota la sesión que pide una TERMINAL. El cliente de HTTP Injector (y
+# cualquier túnel) se conecta con `ssh -N`: no pide terminal, así que para
+# `who` no existe. Hay que contar las conexiones de verdad, una por una.
+cargar_conexiones() {
+  CON_USR=(); CONEXIONES=0; EN_LINEA=0; EXCEDIDOS=0; HAY_LIMITES=0
+  local u pid
+
+  # --- OpenSSH -------------------------------------------------------------
+  # sshd forja un proceso hijo por cada conexión y lo renombra
+  # "sshd: usuario@pts/0" (con terminal) o "sshd: usuario@notty" (túnel).
+  # Se cuentan SÓLO las que llevan @: por cada conexión sshd deja además un
+  # "sshd: usuario [priv]" que corre como root, y contarlo sería contar doble.
+  # Desde OpenSSH 9.8 el binario de sesión se llama sshd-session, de ahí el
+  # (-session)? del patrón.
+  while read -r u; do
+    [ -n "${ES_CLIENTE[$u]:-}" ] && (( CON_USR[$u]++ ))
+  done < <(ps -eo args= 2>/dev/null | awk '
+      $1 ~ /^sshd(-session)?:$/ && $2 ~ /@/ { s=$2; sub(/@.*/,"",s); print s }')
+
+  # --- Dropbear ------------------------------------------------------------
+  # Dropbear no pone el usuario en la línea del proceso, así que no se puede
+  # leer de `ps`. Hay que cruzarlo con el log: cada PID que autenticó bien y
+  # todavía está vivo es una conexión abierta. El PID se puede reciclar, por
+  # eso se comprueba que el proceso vivo sea realmente dropbear.
+  if [ -n "$LOG_AUTH" ] && pgrep -x dropbear >/dev/null 2>&1; then
+    local comm
+    while read -r pid u; do
+      [ -r "/proc/$pid/comm" ] || continue
+      read -r comm < "/proc/$pid/comm" 2>/dev/null || continue
+      [ "$comm" = "dropbear" ] || continue
+      [ -n "${ES_CLIENTE[$u]:-}" ] && (( CON_USR[$u]++ ))
+    done < <(tail -n 3000 "$LOG_AUTH" 2>/dev/null | awk '
+        /dropbear\[[0-9]+\]: Password auth succeeded for/ {
+          p=$5; gsub(/[^0-9]/,"",p)
+          u=""; for(i=1;i<=NF;i++) if($i=="for"){u=$(i+1);break}
+          gsub(/[^A-Za-z0-9._-]/,"",u)
+          if (p!="" && u!="") m[p]=u          # último usuario visto por PID
+        }
+        END { for (p in m) print p, m[p] }')
   fi
 
-  ULTIMO=$(last -n 1 -F 2>/dev/null | awk 'NR==1 && $1!="" {print $1}')
-  [ -z "$ULTIMO" ] && ULTIMO="—"
+  # --- OpenVPN -------------------------------------------------------------
+  # OpenVPN publica sus clientes conectados en el archivo de estado.
+  local ovpn
+  for ovpn in /etc/openvpn/openvpn-status.log /etc/openvpn/server/openvpn-status.log \
+              /var/log/openvpn/status.log /var/log/openvpn-status.log; do
+    [ -r "$ovpn" ] || continue
+    while read -r u; do
+      [ -n "${ES_CLIENTE[$u]:-}" ] && (( CON_USR[$u]++ ))
+    done < <(awk -F, '/^CLIENT_LIST/ {print $2}' "$ovpn" 2>/dev/null)
+    break
+  done
 
-  CONSUMO="—"
-  [ -r "$DIR/db/consumo" ] && CONSUMO=$(awk '{s+=$2} END{printf "%.1fG este mes", s/1073741824}' "$DIR/db/consumo" 2>/dev/null)
+  for u in "${!CON_USR[@]}"; do
+    (( CONEXIONES += CON_USR[$u] ))
+    (( EN_LINEA++ ))
+  done
+
+  # Quién pasa su límite de conexiones simultáneas. El límite por usuario lo
+  # guarda el módulo 14; sin ese archivo no hay con qué comparar.
+  if [ -r "$DIR/db/limites" ]; then
+    HAY_LIMITES=1
+    local lu ll
+    while read -r lu ll; do
+      [ -z "$lu" ] && continue
+      [[ "$ll" =~ ^[0-9]+$ ]] || continue
+      (( ${CON_USR[$lu]:-0} > ll )) && (( EXCEDIDOS++ ))
+    done < "$DIR/db/limites"
+  fi
+}
+
+# Último cliente que entró. Por lo mismo de arriba `last` no sirve: un túnel
+# sin terminal no deja rastro en wtmp. Se lee del log de autenticación, que sí
+# anota todos los logins, con o sin terminal.
+cargar_ultimo() {
+  ULTIMO="—"
+  [ -n "$LOG_AUTH" ] || return
+  local t u ult_t="" ult_u=""
+  while IFS='|' read -r t u; do
+    [ -n "${ES_CLIENTE[$u]:-}" ] || continue
+    ult_t="$t"; ult_u="$u"          # se recorre hacia adelante: queda el último
+  done < <(tail -n 3000 "$LOG_AUTH" 2>/dev/null | awk '
+      /sshd(-session)?\[[0-9]+\]: Accepted / ||
+      /dropbear\[[0-9]+\]: Password auth succeeded for/ {
+        u=""; for (i=1; i<=NF; i++) if ($i == "for") { u=$(i+1); break }
+        gsub(/[^A-Za-z0-9._-]/, "", u)
+        if (u != "") print $1" "$2" "$3 "|" u
+      }')
+  [ -z "$ult_u" ] && return
+  local e ahora d
+  e=$(date -d "$ult_t" +%s 2>/dev/null) || { ULTIMO="$ult_u"; return; }
+  ahora=$(date +%s); d=$(( ahora - e ))
+  (( d < 0 )) && d=0
+  if   (( d < 60 ));    then ULTIMO="$ult_u · recién"
+  elif (( d < 3600 ));  then ULTIMO="$ult_u · hace $(( d/60 ))m"
+  elif (( d < 86400 )); then ULTIMO="$ult_u · hace $(( d/3600 ))h"
+  else                       ULTIMO="$ult_u · hace $(( d/86400 ))d"
+  fi
+}
+
+# Tráfico que movió la VPS. Los contadores del kernel se ponen en cero cuando
+# la máquina reinicia, por eso dice "desde arranque" y no "este mes": decir
+# mes sería mentir. El consumo por usuario necesita contabilidad con iptables,
+# que es lo que va a armar el módulo 07.
+trafico_total() {
+  local t=0 n rx tx
+  for n in /sys/class/net/*; do
+    [ "${n##*/}" = "lo" ] && continue
+    [ -r "$n/statistics/rx_bytes" ] || continue
+    read -r rx < "$n/statistics/rx_bytes" 2>/dev/null || continue
+    read -r tx < "$n/statistics/tx_bytes" 2>/dev/null || continue
+    t=$(( t + rx + tx ))
+  done
+  (( t == 0 )) && { printf '—'; return; }
+  printf '%s desde arranque' "$(bytes_hum "$t")"
 }
 
 # ============================================================== PANTALLA ====
@@ -123,18 +238,22 @@ paneles() {
   (( BLOQUEADOS > 0 )) && c_bloq="$E_BLD$E_ERR"
   local c_exc="$E_TXT"; (( EXCEDIDOS > 0 )) && c_exc="$E_BLD$E_WARN"
 
+  local c_lin="$E_MUT"; (( EN_LINEA > 0 )) && c_lin="$E_BLD$E_OK"
+  local c_con="$E_MUT"; (( CONEXIONES > 0 )) && c_con="$E_BLD$E_TXT"
+
   techo "CUENTAS" "$E_P1" "ACTIVIDAD" "$E_P2" "$M_CTA" "$M_ACT"
-  fila_izq "TOTAL"      "$E_BLD$E_TXT" "$TOTAL"      ""                        ; fila_der "EN LÍNEA"   "$E_BLD$E_OK"  "$EN_LINEA"
-  fila_izq "ACTIVOS"    "$E_BLD$E_OK"  "$ACTIVOS"    ""                        ; fila_der "SESIONES"   "$E_TXT"       "$SESIONES"
-  fila_izq "POR VENCER" "$c_vence"     "$POR_VENCER" "en $UMBRAL_VENCE días"   ; fila_der "MULTILOGIN" "$c_exc"       "$(excedidos_txt)"
-  fila_izq "VENCIDOS"   "$c_venc"      "$VENCIDOS"   ""                        ; fila_der "ÚLTIMO"     "$E_INFO"      "$ULTIMO"
-  fila_izq "BLOQUEADOS" "$c_bloq"      "$BLOQUEADOS" ""                        ; fila_der "CONSUMO"    "$E_TXT"       "$CONSUMO"
+  fila_izq "TOTAL"      "$E_BLD$E_TXT" "$TOTAL"      ""                        ; fila_der "EN LÍNEA"   "$c_lin"  "$EN_LINEA"
+  fila_izq "ACTIVOS"    "$E_BLD$E_OK"  "$ACTIVOS"    ""                        ; fila_der "CONEXIONES" "$c_con"  "$CONEXIONES"
+  fila_izq "POR VENCER" "$c_vence"     "$POR_VENCER" "en $UMBRAL_VENCE días"   ; fila_der "MULTILOGIN" "$c_exc"  "$(excedidos_txt)"
+  fila_izq "VENCIDOS"   "$c_venc"      "$VENCIDOS"   ""                        ; fila_der "ÚLTIMO"     "$E_INFO" "$ULTIMO"
+  fila_izq "BLOQUEADOS" "$c_bloq"      "$BLOQUEADOS" ""                        ; fila_der "TRÁFICO"    "$E_TXT"  "$TRAFICO"
   piso "$M_CTA" "$M_ACT"
 }
 plural() { (( $1 == 1 )) && printf '%s' "$2" || printf '%s' "$3"; }
 excedidos_txt() {
-  (( EXCEDIDOS > 0 )) && printf '%s %s' "$EXCEDIDOS" "$(plural "$EXCEDIDOS" excedido excedidos)" \
-                      || printf 'sin excesos'
+  if (( ! HAY_LIMITES )); then printf 'sin límites fijados'
+  elif (( EXCEDIDOS > 0 )); then printf '%s %s' "$EXCEDIDOS" "$(plural "$EXCEDIDOS" excedido excedidos)"
+  else printf 'sin excesos'; fi
 }
 
 # Dos columnas. Cada celda = nn 2 + sp + emoji 2 + sp + texto 31 = 37

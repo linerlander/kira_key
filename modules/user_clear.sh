@@ -174,7 +174,7 @@ paginas() { local n=${#U_NOM[@]}; printf '%s' $(( (n + POR_PAGINA - 1) / POR_PAG
 cab_tabla() {
   printf '  %s%s  %s  %s  %s  %s  %s  %s%s\n' "$E_MUT" \
     "$(pad 'Nº' 2)" "$(pad 'SEL' 3)" "$(pad 'USUARIO' 20)" "$(pad 'FINALIZA' 10)" \
-    "$(pad 'TERMINA' 10)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 14)" "$E_RST"
+    "$(rpad 'TERMINA' 10)" "$(rpad 'CONEX' 5)" "$(rpad 'ESTADO' 14)" "$E_RST"
 }
 
 color_estado() {
@@ -211,7 +211,7 @@ fila_usuario() { # $1=índice global
     "$E_BLD$E_ERR" "$marca" "$E_RST$fondo" \
     "$E_TXT" "$(pad "${U_NOM[i]}" 20)" "$E_RST$fondo" \
     "$E_MUT" "$(pad "${U_VENCE[i]}" 10)" \
-    "$colr" "$(pad "$resta" 10)" "$E_RST$fondo" \
+    "$colr" "$(rpad "$resta" 10)" "$E_RST$fondo" \
     "$E_TXT" "$(rpad "${U_CONEX[i]}" 5)" \
     "$col" "$(rpad "${U_ESTADO[i]}" 14)" "$E_RST" "$E_RST"
 }

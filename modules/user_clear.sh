@@ -243,14 +243,26 @@ piso_ancho() { printf '  %s╰%s╯%s\n' "$M_TABLA" "$(rep '─' 74)" "$E_RST"; 
 # Media fila de opción: 5 del número + 1 + 31 del texto = 37.
 # El número va a ancho fijo porque "99" y "01-10" miden distinto y, sin
 # igualarlos, la segunda columna queda escalonada.
-opcion() { # $1=número $2=texto
-  printf '%s%s%s %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 5)" "$E_RST" \
-         "$E_BLD$E_TXT" "$(pad "$2" 31)" "$E_RST"
+opcion() { # $1=número $2=emoji $3=texto
+  # 5 del número + 1 + 2 del emoji + 2 + 27 del texto = 37
+  printf '%s%s%s %s%s%s  %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 5)" "$E_RST" \
+         "$E_P2" "$2" "$E_RST" "$E_BLD$E_TXT" "$(pad "$3" 27)" "$E_RST"
 }
 # Fila entera: 2 + 5 + 1 + 70 = 78
 opcion_ancha() { # $1=número $2=texto
   printf '  %s%s%s %s%s%s\n' "$E_BLD$E_P1" "$(pad "$1" 5)" "$E_RST" \
          "$E_BLD$E_TXT" "$(pad "$2" 70)" "$E_RST"
+}
+
+# La salida va sola, abajo y a todo el ancho, igual que en el menú principal:
+# el 00 en rojo y con puerta. Compartiendo renglón con otra opción, el emoji
+# le comería 3 columnas al texto y las dos columnas quedarían escalonadas.
+# 2 + 5 del número + 1 + 2 del emoji + 2 + 66 del texto = 78
+opcion_salir() {
+  printf '  %s%s%s %s%s%s  %s%s%s\n' \
+    "$E_BLD$E_ERR" "$(pad '00' 5)" "$E_RST" \
+    "$E_P2" "🚪" "$E_RST" \
+    "$E_BLD$E_TXT" "$(pad 'VOLVER AL PANEL' 66)" "$E_RST"
 }
 
 # Debajo de la lista, de un vistazo: en qué página estás, cuántas hay y qué
@@ -321,8 +333,9 @@ pintar_lista() {
   local nsel; nsel=$(marcadas_total)
   local txt99='BORRAR LAS ELEGIDAS'
   (( nsel > 0 )) && txt99="BORRAR LAS ELEGIDAS ($nsel)"
-  printf '  %s  %s\n' "$(opcion '99' "$txt99")" "$(opcion '00' 'VOLVER AL PANEL')"
-  printf '  %s  %s\n' "$(opcion '77' 'PÁGINA ANTERIOR')"    "$(opcion '88' 'PÁGINA SIGUIENTE')"
+  printf '  %s  %s\n' "$(opcion '99' '🧹' "$txt99")" "$(opcion '88' '⏩' 'PÁGINA SIGUIENTE')"
+  printf '  %s  %s\n' "$(opcion '77' '⏪' 'PÁGINA ANTERIOR')" "$(pad '' 37)"
+  opcion_salir
   echo
   linea_aviso
   prompt
@@ -358,7 +371,8 @@ pintar_confirmar() {
   echo
   printf '  %s%s%s\n' "$E_WARN" "$(pad 'Si están conectados, se les corta la conexión en el momento.' 76)" "$E_RST"
   echo
-  printf '  %s  %s\n' "$(opcion '01' 'SÍ, BORRARLAS')" "$(opcion '00' 'NO, VOLVER')"
+  printf '  %s  %s\n' "$(opcion '01' '✅' 'SÍ, BORRARLAS')" "$(pad '' 37)"
+  opcion_salir
   echo
   linea_aviso
   prompt
@@ -389,7 +403,7 @@ pintar_resultado() {
   done
   for ((i=n; i<14; i++)); do printf '  %s\n' "$(pad '' 76)"; done
   echo
-  opcion_ancha '00' 'VOLVER AL PANEL' 
+  opcion_salir
   echo
   linea_aviso
   prompt

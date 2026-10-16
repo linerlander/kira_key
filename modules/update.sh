@@ -46,7 +46,14 @@ revisar() {
                "Corrige lectura de sshd_config")
     ESTADO="disponible"; return
   fi
-  local meta; meta=$(curl -fsS --max-time 8 "$ORIGEN/VERSION.json" 2>/dev/null)
+  # raw.githubusercontent.com cachea los archivos unos 5 minutos. Sin romper
+  # esa caché, publicás una versión y tus clientes siguen viendo la anterior
+  # un buen rato. El parámetro cambiante y el encabezado la saltean.
+  local meta
+  meta=$(curl -fsS --max-time 8 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+              "$ORIGEN/VERSION.json?t=$(date +%s)" 2>/dev/null)
+  # Si el origen es un archivo local (pruebas), el ?t= no aplica
+  [ -z "$meta" ] && meta=$(curl -fsS --max-time 8 "$ORIGEN/VERSION.json" 2>/dev/null)
   if [ -z "$meta" ]; then
     ESTADO="error"; MENSAJE="No se pudo contactar al servidor de actualizaciones"; return
   fi

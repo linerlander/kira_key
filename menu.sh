@@ -207,7 +207,6 @@ cargar_vivos() {   # lo que cambia en cada refresco
   net_medir
   CONEX=$(conexiones)
   USUARIOS=$(awk -F: '$3>=1000 && $1!="nobody"{n++} END{print n+0}' /etc/passwd 2>/dev/null)
-  PANELES_CACHE="$(banda; echo; paneles)"   # se rearma sólo al refrescar datos
 
   cargar_puertos
   servicio_activo ssh sshd          && ST_SSH=on   || ST_SSH=off
@@ -226,6 +225,11 @@ cargar_vivos() {   # lo que cambia en cada refresco
   [ -f "$MOD/protocols.sh" ] && M_PROTO=on || M_PROTO=off
   [ -f "$DIR/monitor.sh" ]   && M_MON=on   || M_MON=off
   [ -f "$MOD/update.sh" ]    && M_UPD=on   || M_UPD=off
+  OPC_EST=("$M_USER" "$M_OPT" "$M_ONLINE" "$M_AUTO" "$M_PROTO" "$M_MON" "$M_UPD" "")
+
+  # Al final de todo: si se arma antes, la caché guarda los estados de la
+  # vuelta ANTERIOR y los servicios se ven con un segundo de atraso.
+  PANELES_CACHE="$(banda; echo; paneles)"
 }
 
 # ============================================================= PANTALLA =====
@@ -317,48 +321,57 @@ paneles() {
 seccion() { printf '  %s▌%s %s%s%s %s%s%s\n' "$2" "$E_RST" "$E_BLD" "$E_TXT" "$1" \
                    "$E_OFF" "$(rep '─' $(( 73 - ${#1} )))" "$E_RST"; }
 
-# La fila se resalta sólo si coincide con lo que el usuario está tecleando.
-# Antes la 01 estaba resaltada fija y parecía un error de pintado.
-sel_de() { [ -n "$BUF" ] && { [ "$BUF" = "$1" ] || [ "$BUF" = "${1#0}" ]; } && echo 1 || echo 0; }
+# TODOS los emoji van del bloque U+1F300 en adelante: ésos miden 2 columnas
+# en cualquier terminal. Los heredados U+26xx/U+27xx (⚡ ⚙ ✦ 🌐 de trazo fino)
+# cambian de ancho o de tamaño según el cliente y desalinean la columna.
+OPC_NUM=(01 02 03 04 05 06 07 00)
+OPC_EMO=("👥" "🔧" "📡" "🚀" "📦" "📊" "🔄" "🚪")
+OPC_TXT=("CONTROL DE USUARIOS" "OPTIMIZAR VPS" "USUARIOS ONLINE" "AUTO INICIO"
+         "INSTALADOR DE PROTOCOLOS" "MONITOR EN TIEMPO REAL" "ACTUALIZAR SCRIPT" "SALIR")
+OPC_PAD=(); OPC_EST=()
+PUNTOS=""; RAYA=""; EST_ON=""; EST_OFF=""; EST_NADA=""; SECCION_FIJA=""
 
-opcion() { # $1=nn $2=emoji $3=etiqueta $4=on|off|"" $5=sel
-  # 2 + bar1 + sp1 + chip4 + sp1 + emoji2 + sp1 + sep1 + sp1 + etiq30
-  #   + guía26 + sp1 + est7 = 78
-  local f bar chip est pts
-  if [ "$5" = "1" ]; then
-    f="$B_SEL"; bar="$E_P1▌$E_RST$f"; chip="$B_CHIP$E_BLD$E_P1"; pts="$E_MUT"
-  else
-    f=""; bar="$E_OFF▏$E_RST"; chip="$B_CHIP$E_P1"; pts="$E_OFF"
-  fi
+# Las etiquetas rellenadas, los puntos, la raya y los tres estados posibles
+# son CONSTANTES: se arman una sola vez. Antes cada repintado lanzaba ~40
+# subshells (uno por cada pad/rep/sel_de) y eso era todo el costo del cuadro.
+cachear_menu() {
+  local i
+  for i in "${!OPC_TXT[@]}"; do OPC_PAD[i]="$(pad "${OPC_TXT[i]}" 30)"; done
+  PUNTOS="$(rep '·' 26)"
+  RAYA="$(rep '─' 76)"
   # El círculo va SIEMPRE en la misma columna: bullet a la izquierda y la
   # palabra rellenada a 3. Alineando "● ON" y "○ OFF" a la derecha, ON mide 2
   # y OFF mide 3, y los círculos quedan escalonados.
-  case "$4" in
-    on)  est="$E_BLD$E_OK  ● $(pad 'ON' 3)$E_RST" ;;
-    off) est="$E_BLD$E_ERR  ○ $(pad 'OFF' 3)$E_RST" ;;
-    *)   est="$(rpad '' 7)" ;;
-  esac
-  printf '%s  %s %s %s %s %s%s %s%s\n' \
-    "$f" "$bar" "$chip $1 $E_RST$f" "$E_P2$2$E_RST$f" "$E_OFF│$E_RST$f" \
-    "$E_BLD$E_TXT$(pad "$3" 30)$E_RST$f" "$pts$(rep '·' 26)$E_RST$f" "$est" "$E_RST"
+  EST_ON="$E_BLD$E_OK  ● $(pad 'ON' 3)$E_RST"
+  EST_OFF="$E_BLD$E_ERR  ○ $(pad 'OFF' 3)$E_RST"
+  EST_NADA="$(rpad '' 7)"
+  SECCION_FIJA="$(seccion 'MENÚ PRINCIPAL' "$E_P1")"
 }
 
+# Sin una sola sustitución de comando: todo sale de las tablas de arriba.
+# 2 + bar1 + sp1 + chip4 + sp1 + emoji2 + sp1 + sep1 + sp1 + etiq30
+#   + guía26 + sp1 + est7 = 78
 menu() {
-  seccion "MENÚ PRINCIPAL" "$E_P1"
-  echo
-  # TODOS los emoji van del bloque U+1F300 en adelante: ésos miden 2 columnas
-  # en cualquier terminal. Los heredados U+26xx/U+27xx (⚡ ⚙ ✦) cambian de
-  # ancho según el cliente y desalinean la columna.
-  opcion 01 "👥" "CONTROL DE USUARIOS"      "$M_USER"   "$(sel_de 01)"
-  opcion 02 "🔧" "OPTIMIZAR VPS"            "$M_OPT"    "$(sel_de 02)"
-  opcion 03 "📡" "USUARIOS ONLINE"          "$M_ONLINE" "$(sel_de 03)"
-  opcion 04 "🚀" "AUTO INICIO"              "$M_AUTO"   "$(sel_de 04)"
-  opcion 05 "📦" "INSTALADOR DE PROTOCOLOS" "$M_PROTO"  "$(sel_de 05)"
-  opcion 06 "📊" "MONITOR EN TIEMPO REAL"   "$M_MON"    "$(sel_de 06)"
-  opcion 07 "🔄" "ACTUALIZAR SCRIPT"        "$M_UPD"    "$(sel_de 07)"
-  echo
-  printf '  %s%s%s\n' "$E_OFF" "$(rep '─' 76)" "$E_RST"
-  opcion 00 "🚪" "SALIR"                    ""          "$(sel_de 00)"
+  printf '%s\n\n' "$SECCION_FIJA"
+  local i est f bar chip pts n
+  for i in 0 1 2 3 4 5 6 7; do
+    (( i == 7 )) && printf '\n  %s%s%s\n' "$E_OFF" "$RAYA" "$E_RST"
+    case "${OPC_EST[i]}" in
+      on)  est="$EST_ON" ;;
+      off) est="$EST_OFF" ;;
+      *)   est="$EST_NADA" ;;
+    esac
+    n="${OPC_NUM[i]}"
+    # La fila se resalta sólo si coincide con lo que se está tecleando.
+    if [ -n "$BUF" ] && { [ "$BUF" = "$n" ] || [ "$BUF" = "${n#0}" ]; }; then
+      f="$B_SEL"; bar="$E_P1▌$E_RST$f"; chip="$B_CHIP$E_BLD$E_P1"; pts="$E_MUT"
+    else
+      f=""; bar="$E_OFF▏$E_RST"; chip="$B_CHIP$E_P1"; pts="$E_OFF"
+    fi
+    printf '%s  %s %s %s %s %s%s %s%s\n' \
+      "$f" "$bar" "$chip $n $E_RST$f" "$E_P2${OPC_EMO[i]}$E_RST$f" "$E_OFF│$E_RST$f" \
+      "$E_BLD$E_TXT${OPC_PAD[i]}$E_RST$f" "$pts$PUNTOS$E_RST$f" "$est" "$E_RST"
+  done
 }
 
 # Un solo prompt. El decorativo "KIRA@host:~#" sobraba: abajo ya aparecía
@@ -439,8 +452,18 @@ ejecutar() {
   printf '\e[?25l' # el módulo pudo mostrar el cursor: se vuelve a ocultar
 }
 
+procesar() {
+  case "$1" in
+    "")            ejecutar "$BUF"; BUF="" ;;   # ENTER
+    $'\177'|$'\b') BUF="${BUF%?}" ;;            # borrar
+    [0-9])         [ ${#BUF} -lt 2 ] && BUF="$BUF$1" ;;
+    $'\e')         read -rsn2 -t 0.05 _ || true ;;  # descarta flechas
+  esac
+}
+
 cargar_fijos
 cachear_estatico
+cachear_menu
 # El cursor real parpadeando mientras se repinta suma al temblor: se oculta
 # y se dibuja uno propio en el prompt. El trap lo devuelve pase lo que pase.
 trap 'printf "\e[?25h\e[?2026l\e[0m\n"; clear' EXIT INT TERM
@@ -466,15 +489,11 @@ while true; do
   # los dos casos, al cerrarse la sesión el bucle gira a máxima velocidad y
   # clava la CPU en 100%.
   if (( rc == 0 )); then
-    case "$tecla" in
-      "")            ejecutar "$BUF"; BUF="" ;;   # ENTER
-      $'\177'|$'\b') BUF="${BUF%?}" ;;            # borrar
-      [0-9])         [ ${#BUF} -lt 2 ] && BUF="$BUF$tecla" ;;
-      $'\e')         read -rsn2 -t 0.05 _ || true ;;  # descarta flechas
-    esac
-    # Eco INMEDIATO. Sin esto, si la tecla cae justo cuando cambia el segundo,
-    # la vuelta siguiente recolecta datos (~96ms) ANTES de repintar y la tecla
-    # tarda en aparecer. Pasaba a veces sí y a veces no, según el momento.
+    procesar "$tecla"
+    # Vacía lo que quedó en el búfer del teclado ANTES de repintar. Al borrar
+    # se pulsa la tecla dos o tres veces seguidas; sin esto cada pulsación
+    # pagaba un repintado entero y la segunda se sentía trabada.
+    while read -rsn1 -t 0.01 extra; do procesar "$extra"; done
     render
   elif (( rc <= 128 )); then
     exit 0          # stdin cerrado: salir en vez de girar en vacío

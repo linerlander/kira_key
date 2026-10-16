@@ -46,36 +46,88 @@ DEMO_MIN=60                 # cuánto dura la cuenta de prueba, en minutos
 NOMBRE_PASO=("" "NOMBRE DE USUARIO" "CONTRASEÑA" "DURACIÓN" "LÍMITE DE CONEXIONES" \
              "CONFIRMAR" "CUENTA CREADA")
 
-M_DAT=$'\e[38;2;22;92;110m'      # marco cian apagado
-M_CLI=$'\e[38;2;74;64;130m'      # marco violeta apagado
+# Mismos colores que RED VPS y DISCO del monitor: el marco va en la versión
+# apagada y la pastilla del título en la encendida, así el título salta y el
+# marco acompaña sin competir.
+M_DAT=$'\e[38;2;110;46;84m'      # marco rosa apagado
+M_CLI=$'\e[38;2;96;76;28m'       # marco ámbar apagado
+E_PINK=$'\e[38;2;255;111;181m'   # rosa encendido, para la pastilla
 
-# ============================================================== PUERTOS =====
-# Los puertos que el cliente tiene que poner en HTTP Injector. Se leen de lo
-# que está escuchando de verdad, no de la configuración: si alguien cambió el
-# puerto y no reinició el servicio, la configuración miente y el proceso no.
-PUERTOS="22"
+# ===================================================== PUERTOS Y SERVICIOS ==
+# Lo que el cliente necesita para configurar HTTP Injector. Se lee de lo que
+# está ESCUCHANDO de verdad, no de los archivos de configuración: si alguien
+# cambió un puerto y no reinició el servicio, la configuración miente y el
+# proceso no. Se miran TCP y UDP, porque OpenVPN y udpgw son UDP.
+#
+# La lista es FIJA: siempre se muestran los ocho servicios, con su puerto o
+# con OFF. Así el cliente ve de una qué tiene y qué no, en vez de tener que
+# deducir que lo que no aparece es porque no está.
+CAT_NOM=("SSH" "SSH · DROPBEAR" "SSL / TLS" "WEBSOCKET" "V2RAY" "SHADOWSOCKS" "OPENVPN" "UDPGW")
+CAT_CLA=(SSH   DROPBEAR         SSL         WS          V2RAY   SS            OVPN      UDPGW)
+declare -A PUERTO_DE=()
+PUERTOS="—"
+
+# Qué programa corresponde a qué servicio del catálogo.
+clave_servicio() {
+  case "${1,,}" in
+    sshd|sshd-session)                          printf 'SSH' ;;
+    dropbear|dropbearmulti)                     printf 'DROPBEAR' ;;
+    stunnel|stunnel4|stunnel5)                  printf 'SSL' ;;
+    python|python3|websocket|ws|wsproxy|nginx|apache2|httpd|caddy) printf 'WS' ;;
+    v2ray|xray)                                 printf 'V2RAY' ;;
+    ss-server|ssserver|ssr-server|shadowsocks*) printf 'SS' ;;
+    openvpn)                                    printf 'OVPN' ;;
+    badvpn-udpgw|udpgw)                         printf 'UDPGW' ;;
+    *)                                          printf '' ;;
+  esac
+}
+
 detectar_puertos() {
-  local p lista
-  lista=$(ss -tlnpH 2>/dev/null | awk '
-    /"sshd"|"dropbear"/ {
-      n = split($4, a, ":")
-      if (a[n] ~ /^[0-9]+$/ && !(a[n] in v)) { v[a[n]]=1; print a[n] }
-    }' | sort -n | head -4)
-  if [ -z "$lista" ] && [ -r /etc/ssh/sshd_config ]; then
-    # Sin ss, se cae a la configuración. Default 22 si no dice nada.
-    lista=$(awk 'tolower($1)=="port" && $2 ~ /^[0-9]+$/ {print $2}' /etc/ssh/sshd_config | head -4)
+  PUERTO_DE=(); PUERTOS=""
+  local pto prog cla
+  declare -A visto=()
+
+  while read -r pto prog; do
+    [ -z "$pto" ] && continue
+    cla="$(clave_servicio "$prog")"
+    [ -z "$cla" ] && continue              # programa que no es un servicio nuestro
+    [ -n "${visto[$pto]:-}" ] && continue  # un puerto, una sola vez (IPv4 e IPv6 repiten)
+    visto[$pto]=1
+    if [ -z "${PUERTO_DE[$cla]:-}" ]; then PUERTO_DE[$cla]="$pto"
+    else PUERTO_DE[$cla]="${PUERTO_DE[$cla]} · $pto"; fi
+  done < <(
+    { ss -tlnpH 2>/dev/null; ss -ulnpH 2>/dev/null; } | awk '
+      {
+        n = split($4, a, ":"); p = a[n]
+        prog = ""
+        # el campo de proceso viene como:  users:(("sshd",pid=811,fd=3))
+        if (match($0, /users:\(\("[^"]+"/)) prog = substr($0, RSTART+9, RLENGTH-10)
+        if (p ~ /^[0-9]+$/ && prog != "") print p, prog
+      }' | sort -n -u)
+
+  # Sin ss, o sin permiso para ver el proceso, al menos el SSH de la
+  # configuración. Es lo mínimo que el cliente necesita.
+  if [ -z "${PUERTO_DE[SSH]:-}" ]; then
+    local p
+    p=$(awk 'tolower($1)=="port" && $2 ~ /^[0-9]+$/ {print $2; exit}' /etc/ssh/sshd_config 2>/dev/null)
+    [ -z "$p" ] && p=22
+    PUERTO_DE[SSH]="$p"
   fi
-  [ -z "$lista" ] && lista="22"
-  PUERTOS=""
-  while read -r p; do
-    [ -z "$p" ] && continue
+
+  # Resumen corto para la caja de la derecha mientras se carga el formulario
+  local i c
+  for i in "${!CAT_CLA[@]}"; do
+    c="${PUERTO_DE[${CAT_CLA[i]}]:-}"
+    [ -z "$c" ] && continue
     [ -n "$PUERTOS" ] && PUERTOS="$PUERTOS · "
-    PUERTOS="$PUERTOS$p"
-  done <<< "$lista"
+    PUERTOS="$PUERTOS$c"
+  done
+  [ -z "$PUERTOS" ] && PUERTOS="—"
+  (( ${#PUERTOS} > 22 )) && PUERTOS="${PUERTOS:0:21}…"
 }
 
 # Clave sugerida. Se sacan las letras y números que se confunden al dictarla
-# por WhatsApp: 0/O, 1/l/I. Si el cliente la tipea mal, te escribe a vos.
+# por WhatsApp: 0/O, 1/l/i. Si el cliente la tipea mal, te escribe a vos.
 clave_azar() {
   local s
   s=$(LC_ALL=C tr -dc 'a-km-np-z2-9' < /dev/urandom 2>/dev/null | head -c 8)
@@ -123,14 +175,63 @@ vence_txt() {
   elif [ -n "$VENCE" ]; then printf '%s' "$VENCE"; fi
 }
 
+# Prefijos de la columna izquierda. Tienen que medir EXACTAMENTE 39 columnas,
+# porque caja_der aporta las otras 39 (2 de separación + borde + 35 + borde).
+# Sirven para que la caja de la izquierda cierre antes y la de la derecha siga
+# sola hacia abajo.
+izq_cierra() { printf '  %s╰%s╯%s' "$M_DAT" "$(rep '─' 35)" "$E_RST"; }
+izq_nada()   { printf '%*s' 39 ''; }
+izq_titulo() { # $1=título, a lo ancho de la columna izquierda
+  printf '  %s▌%s %s%s%s %s%s%s' "$E_PINK" "$E_RST" "$E_BLD" "$E_TXT" "$1" \
+         "$E_OFF" "$(rep '─' $(( 34 - ${#1} )))" "$E_RST"
+}
+izq_opcion() { # $1=número $2=texto
+  # 2 de sangría + 2 del número + 1 de aire + 34 del texto = 39
+  printf '  %s%s%s %s%s%s' "$E_BLD$E_P1" "$1" "$E_RST" "$E_BLD$E_TXT" "$(pad "$2" 34)" "$E_RST"
+}
+
+# Un servicio dentro de la caja derecha, sin icono:
+#   1 de sangría + nombre 21 + puerto 13 = 35
+# El puerto va en menta y el OFF en coral: el mismo par que el menú principal
+# usa para ● ON y ○ OFF. Así se lee prendido o apagado por el color, sin
+# tener que leer el número. En ámbar se confundía con el marco de la caja.
+srv_der() { # $1=índice del catálogo
+  local i="$1" v col
+  v="${PUERTO_DE[${CAT_CLA[i]}]:-}"
+  if [ -z "$v" ]; then v="OFF"; col="$E_BLD$E_ERR"; else col="$E_BLD$E_OK"; fi
+  caja_der " $E_TXT$(pad "${CAT_NOM[i]}" 21)$E_RST$col$(rpad "$v" 13)$E_RST" "$M_CLI"
+}
+
 paneles() {
-  techo "DATOS DE LA CUENTA" "$E_P1" "PARA EL CLIENTE" "$E_P2" "$M_DAT" "$M_CLI"
-  fd "USUARIO"    "$USUARIO"      "$E_BLD$E_TXT" ; fc "IP"       "$IP_PUB"       "$E_BLD$E_TXT"
-  fd "CONTRASEÑA" "$CLAVE"        "$E_BLD$E_TXT" ; fc "PUERTOS"  "$PUERTOS"      "$E_BLD$E_P1"
-  fd "DURACIÓN"   "$(dur_txt)"    "$E_TXT"       ; fc "USUARIO"  "$USUARIO"      "$E_BLD$E_OK"
-  fd "LÍMITE"     "$(lim_txt)"    "$E_TXT"       ; fc "CLAVE"    "$CLAVE"        "$E_BLD$E_OK"
-  fil_dat "ESTADO" "$(estado_col)" "$(estado_txt)" ; fc "VENCE"  "$(vence_txt)"  "$E_INFO"
-  piso "$M_DAT" "$M_CLI"
+  techo "DATOS DE LA CUENTA" "$E_PINK" "PARA EL CLIENTE" "$E_WARN" "$M_DAT" "$M_CLI"
+
+  if (( PASO == 6 )); then
+    # Con la cuenta creada, la caja del cliente sigue hacia abajo con los
+    # servicios: todo lo que hay que mandarle queda en un solo bloque.
+    # La izquierda cierra apenas termina el estado, y el hueco que deja lo
+    # ocupan las opciones, para que no queden perdidas abajo de todo.
+    fd "USUARIO"    "$USUARIO"       "$E_BLD$E_TXT" ; fc "IP"      "$IP_PUB"      "$E_BLD$E_TXT"
+    fd "CONTRASEÑA" "$CLAVE"         "$E_BLD$E_TXT" ; fc "USUARIO" "$USUARIO"     "$E_BLD$E_OK"
+    fd "DURACIÓN"   "$(dur_txt)"     "$E_TXT"       ; fc "CLAVE"   "$CLAVE"       "$E_BLD$E_OK"
+    fd "LÍMITE"     "$(lim_txt)"     "$E_TXT"       ; fc "VENCE"   "$(vence_txt)" "$E_INFO"
+    fil_dat "ESTADO" "$(estado_col)" "$(estado_txt)" ; srv_der 0
+    izq_cierra                                       ; srv_der 1
+    izq_nada                                         ; srv_der 2
+    izq_titulo "¿QUÉ HACÉS AHORA?"                   ; srv_der 3
+    izq_nada                                         ; srv_der 4
+    izq_opcion "01" "CREAR OTRA CUENTA"              ; srv_der 5
+    izq_opcion "00" "VOLVER AL PANEL"                ; srv_der 6
+    izq_nada                                         ; srv_der 7
+    # Sólo cierra la derecha: la izquierda ya cerró más arriba
+    printf '%*s  %s╰%s╯%s\n' 39 '' "$M_CLI" "$(rep '─' 35)" "$E_RST"
+  else
+    fd "USUARIO"    "$USUARIO"      "$E_BLD$E_TXT" ; fc "IP"       "$IP_PUB"       "$E_BLD$E_TXT"
+    fd "CONTRASEÑA" "$CLAVE"        "$E_BLD$E_TXT" ; fc "PUERTOS"  "$PUERTOS"      "$E_BLD$E_P1"
+    fd "DURACIÓN"   "$(dur_txt)"    "$E_TXT"       ; fc "USUARIO"  "$USUARIO"      "$E_BLD$E_OK"
+    fd "LÍMITE"     "$(lim_txt)"    "$E_TXT"       ; fc "CLAVE"    "$CLAVE"        "$E_BLD$E_OK"
+    fil_dat "ESTADO" "$(estado_col)" "$(estado_txt)" ; fc "VENCE"  "$(vence_txt)"  "$E_INFO"
+    piso "$M_DAT" "$M_CLI"
+  fi
 }
 
 linea_aviso() {
@@ -167,10 +268,14 @@ pintar() {
   echo
   paneles
   echo
-  seccion "PASO $PASO · ${NOMBRE_PASO[$PASO]}" "$E_P2"
-  echo
-  printf '  %s%s%s\n' "$E_MUT" "$(pad "${AYUDA[$PASO]}" 76)" "$E_RST"
-  printf '  %s%s%s\n' "$E_OFF" "$(pad "$(salida_txt)" 76)" "$E_RST"
+  if (( PASO == 6 )); then
+    : # los datos y las opciones ya están dentro del panel de arriba
+  else
+    seccion "PASO $PASO · ${NOMBRE_PASO[$PASO]}" "$E_P2"
+    echo
+    printf '  %s%s%s\n' "$E_MUT" "$(pad "${AYUDA[$PASO]}" 76)" "$E_RST"
+    printf '  %s%s%s\n' "$E_OFF" "$(pad "$(salida_txt)" 76)" "$E_RST"
+  fi
   echo
   linea_aviso
 }
@@ -373,12 +478,11 @@ while true; do
       esac
       ;;
     6)
-      # Mismo idioma que el resto del panel: se elige con números, no con
-      # letras sueltas que hay que adivinar.
-      preguntar "1 otra cuenta · 0 volver al panel:"
+      preguntar "Opción:"
       case "${RESP,,}" in
-        1|o|otra|otro) limpiar_campos ;;
-        *)             clear; exit 0 ;;
+        1|01)  limpiar_campos ;;
+        0|00|"") clear; exit 0 ;;
+        *)     AVISO="Elegí 01 para crear otra o 00 para volver" ;;
       esac
       ;;
   esac

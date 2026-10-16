@@ -1,0 +1,129 @@
+#!/bin/bash
+# =============================================================================
+#  KIRA · control de conexiones simultáneas
+#  Lo llama PAM cuando alguien termina de autenticar, ANTES de abrirle la
+#  sesión. Si el usuario ya llegó a su límite, devuelve 1 y SSH le rechaza la
+#  conexión. No mata nada: simplemente no lo deja entrar.
+#
+#  Se instala con:  bash kira-limite --instalar
+#  Se saca con:     bash kira-limite --desinstalar
+#  Se prueba con:   PAM_USER=pepito bash kira-limite --probar
+# =============================================================================
+
+# Dónde está el panel. Si lo moviste, cambiá esta línea.
+KIRA_DIR="${KIRA_DIR:-/root/kira_key}"
+LIMITES="$KIRA_DIR/db/limites"
+DESTINO="/usr/local/sbin/kira-limite"
+PAMFILE="/etc/pam.d/sshd"
+MARCA="# KIRA control de conexiones"
+
+# ---------------------------------------------------------------- decidir ---
+# Devuelve 0 = dejar entrar · 1 = rechazar
+decidir() {
+  local u="${PAM_USER:-}"
+  [ -z "$u" ] && return 0
+
+  # root y las cuentas de sistema no se limitan nunca. Si algo sale mal acá,
+  # mejor dejar pasar: un error en este script no puede dejarte a vos afuera
+  # de tu propio servidor.
+  local uid
+  uid=$(id -u "$u" 2>/dev/null) || return 0
+  [ "$uid" -lt 1000 ] 2>/dev/null && return 0
+
+  # Sin límite declarado, no se limita.
+  local lim
+  lim=$(awk -v n="$u" '$1==n && $2 ~ /^[0-9]+$/ { print $2; exit }' "$LIMITES" 2>/dev/null)
+  [ -z "$lim" ] && return 0
+
+  # Se cuentan las conexiones que YA están abiertas. PAM llama a este script
+  # todavía como root, antes de que exista el proceso de esta conexión, así
+  # que lo que se cuenta es lo de antes: si ya llegó al límite, esta sobra.
+  #
+  # Se cuenta por DUEÑO del proceso, no por utmp. utmp es lo que mira
+  # `maxlogins` de PAM, y ahí los túneles de HTTP Injector no figuran porque
+  # entran con ssh -N, sin pedir terminal. Por eso maxlogins no sirve acá.
+  local n=0 p c k v
+  for p in /proc/[0-9]*; do
+    [ -r "$p/comm" ] || continue
+    read -r c < "$p/comm" 2>/dev/null || continue
+    case "$c" in
+      sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
+      *) continue ;;
+    esac
+    v=""
+    while read -r k v _; do [ "$k" = "Uid:" ] && break; done < "$p/status" 2>/dev/null
+    [ "$v" = "$uid" ] && n=$(( n + 1 ))
+  done
+
+  CUENTA="$n"; LIMITE="$lim"
+  (( n >= lim )) && return 1
+  return 0
+}
+
+# -------------------------------------------------------------- instalar ---
+instalar() {
+  [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
+
+  if ! grep -q "UsePAM yes" /etc/ssh/sshd_config 2>/dev/null; then
+    echo "AVISO: sshd_config no tiene 'UsePAM yes'."
+    echo "       Sin eso, SSH no llama a PAM y el límite no se aplica."
+    echo "       Agregalo y reiniciá ssh antes de seguir."
+  fi
+
+  install -m 755 "${BASH_SOURCE[0]}" "$DESTINO"
+  sed -i "s|^KIRA_DIR=.*|KIRA_DIR=\"\${KIRA_DIR:-$KIRA_DIR}\"|" "$DESTINO"
+
+  if grep -q "$MARCA" "$PAMFILE" 2>/dev/null; then
+    echo "Ya estaba instalado."
+  else
+    # Se agrega ARRIBA de todo en la sección de cuenta, antes de que PAM
+    # decida que sí. Y se guarda una copia por si hay que volver atrás.
+    cp -a "$PAMFILE" "$PAMFILE.kira-backup.$(date +%Y%m%d%H%M%S)"
+    printf '%s\naccount required pam_exec.so quiet %s\n' "$MARCA" "$DESTINO" >> "$PAMFILE"
+    echo "Instalado en $PAMFILE"
+  fi
+
+  echo
+  echo "Listo. El límite sale de: $LIMITES"
+  echo "Los rechazos quedan en el log del sistema:  journalctl -t kira-limite -f"
+  echo
+  echo "OJO: esto cubre OpenSSH. Dropbear no usa PAM, así que sus conexiones"
+  echo "     no pasan por acá y hay que controlarlas con el vigilante."
+}
+
+desinstalar() {
+  [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
+  if grep -q "$MARCA" "$PAMFILE" 2>/dev/null; then
+    grep -v -e "$MARCA" -e "pam_exec.so quiet $DESTINO" "$PAMFILE" > "$PAMFILE.tmp"
+    mv -f "$PAMFILE.tmp" "$PAMFILE"
+    echo "Sacado de $PAMFILE"
+  fi
+  rm -f "$DESTINO"
+  echo "Listo. Las conexiones ya no se limitan."
+}
+
+probar() {
+  CUENTA=0; LIMITE="—"
+  if decidir; then
+    printf 'DEJA ENTRAR  · usuario=%s  abiertas=%s  límite=%s\n' "${PAM_USER:-?}" "$CUENTA" "$LIMITE"
+  else
+    printf 'RECHAZA      · usuario=%s  abiertas=%s  límite=%s\n' "${PAM_USER:-?}" "$CUENTA" "$LIMITE"
+  fi
+}
+
+# ------------------------------------------------------------------ main ---
+case "${1:-}" in
+  --instalar)    instalar ;;
+  --desinstalar) desinstalar ;;
+  --probar)      probar ;;
+  *)
+    # Así lo llama PAM: sin argumentos y con PAM_USER en el entorno.
+    CUENTA=0; LIMITE=0
+    if decidir; then
+      exit 0
+    else
+      logger -t kira-limite "rechazada conexión de ${PAM_USER:-?}: ya tiene $CUENTA de $LIMITE permitidas"
+      exit 1
+    fi
+    ;;
+esac

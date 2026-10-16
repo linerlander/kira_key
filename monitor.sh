@@ -26,7 +26,7 @@ ui_exige() {
   printf '  Actualizalo con:  \e[1mcd %s && git pull\e[0m\n' "$KIRA_DIR"
   exit 1
 }
-ui_exige medidor techo piso banda cabecera cachear_cabecera datos_sistema pad rpad
+ui_exige barra techo piso banda cabecera cachear_cabecera datos_sistema pad rpad
 
 
 BUF=""; PAUSA=0
@@ -158,9 +158,11 @@ f_izq() { caja_izq " $E_MUT$(pad "$1" 9)$E_RST$2" "$MARCO_I"; }
 f_der() { caja_der " $E_MUT$(pad "$1" 9)$E_RST$2" "$MARCO_D"; }
 
 # Contenido de 35 columnas: 1 + etiqueta 9 + cuerpo 25
-cuerpo_barra() { # $1=pct(entero, para el medidor) $2=texto a mostrar
+# Misma barra que el panel de RECURSOS del menú: relleno █ con degradado de
+# carga y riel ░. Así el monitor y el menú se ven como la misma herramienta.
+cuerpo_barra() { # $1=pct(entero, para la barra) $2=texto a mostrar
   local t="${2:-$1%}"
-  printf '%s %s%s%s' "$(medidor "$1" 12)" "$E_BLD$E_TXT" "$(rpad "$t" 7)" "$E_RST$E_MUT$(pad '' 5)$E_RST"
+  printf '%s %s%s%s' "$(barra "$1" 12)" "$E_BLD$E_TXT" "$(rpad "$t" 7)" "$E_RST$E_MUT$(pad '' 5)$E_RST"
 }
 cuerpo_txt() { printf '%s%s%s' "$E_TXT" "$(pad "$1" 25)" "$E_RST"; }
 

@@ -52,6 +52,26 @@ cargar_tablas() {
   done < "$LIMITES"
 }
 
+# Ordena "pid:inicio" de la conexión MÁS NUEVA a la más vieja, sin llamar a
+# `sort`. Son unas pocas decenas de elementos: ordenarlos a mano cuesta menos
+# que el fork, y acá se ordena una vez por usuario excedido, cada 5 segundos.
+ORD=()
+ordenar_nuevas_primero() { # $@ = pid:inicio …
+  ORD=()
+  local x y i
+  for x in "$@"; do
+    i=${#ORD[@]}
+    while (( i > 0 )); do
+      y="${ORD[i-1]}"
+      (( ${y#*:} >= ${x#*:} )) && break
+      ORD[i]="$y"; i=$(( i - 1 ))
+    done
+    ORD[i]="$x"
+  done
+}
+
+declare -A ULT_AVISO=()
+
 # ---------------------------------------------------------------- pasada ----
 una_pasada() {
   cargar_tablas
@@ -86,25 +106,28 @@ una_pasada() {
     lim="${LIMITE_DE[$nombre]:-}"
     [ -z "$lim" ] && continue
 
-    # De la más nueva a la más vieja. Se cortan las nuevas porque las viejas
-    # son las del dueño, que se conectó primero; el que se colgó de la cuenta
-    # llegó después.
-    local -a ord=()
-    mapfile -t ord < <(printf '%s\n' ${CONEX[$uid]} | sort -t: -k2,2nr)
-    n=${#ord[@]}
-    (( n <= lim )) && continue
+    ordenar_nuevas_primero ${CONEX[$uid]}
+    n=${#ORD[@]}
+    if (( n <= lim )); then
+      unset "ULT_AVISO[$nombre]"       # vuelve a estar en regla
+      continue
+    fi
 
     if [ "$MODO" = todas ]; then cortar=$n; else cortar=$(( n - lim )); fi
 
     for ((i=0; i<cortar; i++)); do
-      fila="${ord[i]}"
+      fila="${ORD[i]}"
       pid="${fila%%:*}"
       (( SIMULAR )) || kill -TERM "$pid" 2>/dev/null
     done
 
     if (( SIMULAR )); then
       printf '  %-16s tiene %s de %s permitidas -> cortaría %s\n' "$nombre" "$n" "$lim" "$cortar"
-    else
+    elif [ "${ULT_AVISO[$nombre]:-}" != "$n" ]; then
+      # Sólo se anota cuando CAMBIA la cantidad. El que se cuelga de una
+      # cuenta reconecta sin parar, y anotarlo en cada vuelta llenaba el log
+      # con la misma línea cada 5 segundos, además de costar un fork por vez.
+      ULT_AVISO[$nombre]="$n"
       logger -t kira-vigilante "$nombre tenia $n conexiones de $lim permitidas: cortadas $cortar"
     fi
   done

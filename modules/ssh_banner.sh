@@ -280,9 +280,36 @@ prompt() {
 # La vista previa muestra el banner como lo muestra el celular: las etiquetas
 # se traducen a códigos de terminal nada más que para dibujar el recuadro.
 # Confirmado contra HTTP Injector: color, negrita y cursiva se ven.
+# Convierte lo que hay en el ARCHIVO en los renglones que el CLIENTE ve. No
+# es lo mismo: la app toma los saltos de línea de verdad como simples espacios
+# y corta donde encuentra un <br> o donde termina un bloque. Si la vista
+# previa partiera por las líneas del archivo, mostraría otra cosa.
+declare -a RENGLONES=()
+expandir() { # $@ = líneas del archivo
+  RENGLONES=()
+  local l todo="" hay_html=0
+  for l in "$@"; do
+    case "$l" in *'<br>'*|*'<BR>'*|*'<div'*|*'<p '*|*'<p>'*) hay_html=1 ;; esac
+  done
+  if (( ! hay_html )); then
+    for l in "$@"; do RENGLONES+=("$l"); done
+    return
+  fi
+  for l in "$@"; do todo="$todo$l"; done
+  todo="${todo//<br>/$'\n'}"; todo="${todo//<BR>/$'\n'}"
+  todo="${todo//<br\/>/$'\n'}"; todo="${todo//<br \/>/$'\n'}"
+  todo="${todo//<\/div>/$'\n'}"; todo="${todo//<\/p>/$'\n'}"
+  while IFS= read -r l; do
+    # el cierre del último bloque deja un renglón vacío al final
+    [ -z "$l" ] && continue
+    RENGLONES+=("$l")
+  done <<< "$todo"
+}
+
 vista_previa() { # $@ = líneas tal cual van al archivo
   local l n=0 txt pintada
-  for l in "$@"; do
+  expandir "$@"
+  for l in "${RENGLONES[@]}"; do
     (( n++ )); (( n > MAX_LINEAS )) && break
     txt="$(sin_etiquetas "$l")"
     ancho_visual "$txt"
@@ -391,8 +418,7 @@ pintar_inicio() {
 
 pintar_escribir() {
   local -a v=()
-  local l
-  for l in "${NUEVO[@]}"; do v+=("$(vestir "$l" cian)"); done
+  mapfile -t v < <(envolver_lineas "${NUEVO[@]}")
   marco_superior
   techo_ancho "LO QUE LLEVÁS ESCRITO · ${#NUEVO[@]} DE $MAX_LINEAS LÍNEAS"
   vista_previa "${v[@]}"
@@ -658,20 +684,14 @@ plantilla_prueba() {
     '8 el emoji pinta 🔴🔵<br>'
 }
 
-# Le pone la ropa de HTML a un renglón. Tres cosas pasan acá:
+# Le pone la ropa de color y estilo a un tramo de texto, sin tocar los saltos
+# de renglón. Eso lo resuelve plantilla(), que es la que sabe si va todo en un
+# bloque centrado o renglón por renglón.
 #
-# · El SALTO DE LÍNEA. Sin él la app junta todo en un párrafo corrido. Con
-#   centrado lo da el <div>, que es un bloque y corta solo; sin centrado, lo
-#   da el <br>. Poner los dos juntos deja un renglón vacío en el medio.
-#
-# · El CENTRADO, con <div align="center">. Lo entiende Android 7 para arriba;
-#   en uno más viejo el <div> igual corta el renglón, nada más que el texto
-#   queda a la izquierda. O sea: nunca se rompe, a lo sumo no centra.
-#
-# · El ANCHO FIJO, con <tt>. Es lo que le faltaba al logo: la tipografía
-#   normal del celular es de ancho variable y deforma cualquier dibujo hecho
-#   con caracteres. <tt> pide la de ancho fijo y las columnas se alinean.
-vestir() { # $1=texto $2=color $3=estilo (n|b|i|m)
+# El ANCHO FIJO va con <tt>. Es lo que le faltaba al logo: la tipografía
+# normal del celular es de ancho variable y deforma cualquier dibujo hecho con
+# caracteres. <tt> pide la de ancho fijo y las columnas se alinean.
+vestir_tramo() { # $1=texto $2=color $3=estilo (n|b|i|m)
   if (( ! MODO_APP )); then printf '%s' "$1"; return; fi
   local ini="" fin=""
   case "$3" in
@@ -679,25 +699,62 @@ vestir() { # $1=texto $2=color $3=estilo (n|b|i|m)
     i) ini="<i>";  fin="</i>" ;;
     m) ini="<tt>"; fin="</tt>" ;;
   esac
-  if (( CENTRADO )); then
-    printf '<div align="center">%s<font color="#%s">%s</font>%s</div>' \
-      "$ini" "${BC[$2]:-00FFFF}" "$1" "$fin"
+  printf '%s<font color="#%s">%s</font>%s' "$ini" "${BC[$2]:-00FFFF}" "$1" "$fin"
+}
+
+# Lo que el dueño escribe a mano pasa por el mismo molde que las plantillas:
+# un solo bloque centrado, o renglón por renglón si el centrado está apagado.
+envolver_lineas() { # $@ = textos pelados · imprime lo que va al archivo
+  (( $# == 0 )) && return 0
+  local l
+  if (( MODO_APP )) && (( CENTRADO )); then
+    local salida='<div align="center">' primero=1
+    for l in "$@"; do
+      (( primero )) || salida="$salida<br>"
+      primero=0
+      salida="$salida$(vestir_tramo "$l" cian n)"
+    done
+    printf '%s</div>\n' "$salida"
   else
-    printf '%s<font color="#%s">%s</font>%s<br>' \
-      "$ini" "${BC[$2]:-00FFFF}" "$1" "$fin"
+    for l in "$@"; do
+      vestir_tramo "$l" cian n
+      (( MODO_APP )) && printf '<br>'
+      printf '\n'
+    done
   fi
 }
 
-plantilla() { # $1=número · las líneas finales, listas para guardar
+plantilla() { # $1=número · lo que va a parar al archivo
   local linea col est txt
-  while IFS= read -r linea; do
-    col="${linea%%|*}"
-    linea="${linea#*|}"
-    est="${linea%%|*}"
-    txt="${linea#*|}"
-    vestir "$txt" "$col" "$est"
-    printf '\n'
-  done < <(plant_def "$1")
+  if (( MODO_APP )) && (( CENTRADO )); then
+    # TODO el banner en UN SOLO bloque centrado, con <br> entre renglón y
+    # renglón. Si cada renglón fuera su propio <div>, la app le agrega un
+    # renglón en blanco detrás de cada uno —así es como separa párrafos— y el
+    # banner sale todo desparramado. Un bloque solo queda centrado y juntito.
+    #
+    # Y sale todo en UNA línea del archivo a propósito: los saltos de línea de
+    # verdad la app los toma como espacios, y uno suelto después de un <br>
+    # correría el centrado medio carácter.
+    local salida='<div align="center">' primero=1
+    while IFS= read -r linea; do
+      col="${linea%%|*}"; linea="${linea#*|}"
+      est="${linea%%|*}"; txt="${linea#*|}"
+      (( primero )) || salida="$salida<br>"
+      primero=0
+      salida="$salida$(vestir_tramo "$txt" "$col" "$est")"
+    done < <(plant_def "$1")
+    printf '%s</div>\n' "$salida"
+  else
+    # Sin centrar (o en modo terminal): un renglón del archivo por renglón del
+    # banner, que es más fácil de leer si algún día lo abrís a mano.
+    while IFS= read -r linea; do
+      col="${linea%%|*}"; linea="${linea#*|}"
+      est="${linea%%|*}"; txt="${linea#*|}"
+      vestir_tramo "$txt" "$col" "$est"
+      (( MODO_APP )) && printf '<br>'
+      printf '\n'
+    done < <(plant_def "$1")
+  fi
 }
 
 # ================================================================ ACCIONES ==
@@ -878,8 +935,7 @@ ejecutar() {
           AVISO="No escribiste nada todavía · 00 para cancelar"
         else
           local -a l=()
-          local x
-          for x in "${NUEVO[@]}"; do l+=("$(vestir "$x" cian)"); done
+          mapfile -t l < <(envolver_lineas "${NUEVO[@]}")
           if guardar_banner "${l[@]}"; then
             MENSAJE="Banner guardado · ${#NUEVO[@]} líneas · ya lo ven los que entren"
             NUEVO=(); PANTALLA=inicio

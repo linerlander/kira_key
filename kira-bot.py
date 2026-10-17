@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -415,6 +416,65 @@ def barra(pct, w=10):
     return f"{punto} {'▰' * k}{'▱' * (w - k)} <b>{pct}%</b>"
 
 
+def tira(pct, w=12):
+    """La barra sola, sin número ni color: para meterla en una tabla."""
+    pct = max(0, min(100, int(pct)))
+    k = round(pct * w / 100)
+    if pct > 0 and k == 0:
+        k = 1
+    return "▰" * k + "▱" * (w - k)
+
+
+# =============================================================== ESTILO =====
+# Telegram no deja elegir tipografía, pero Unicode trae letras "dibujadas" en
+# negrita sin serifa y en versalitas. Con eso los títulos se ven como un logo
+# en vez de texto común. Sólo para títulos: el dato que se copia va siempre
+# en letras normales, si no el cliente copiaría caracteres raros.
+
+_NEGRITA = {}
+for _i, _c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+    _NEGRITA[_c] = chr(0x1D5D4 + _i)
+for _i, _c in enumerate("abcdefghijklmnopqrstuvwxyz"):
+    _NEGRITA[_c] = chr(0x1D5EE + _i)
+for _i, _c in enumerate("0123456789"):
+    _NEGRITA[_c] = chr(0x1D7EC + _i)
+_VERSAL = dict(zip("abcdefghijklmnopqrstuvwxyz",
+                   "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ"))
+
+
+def _sin_tildes(t):
+    return "".join(c for c in unicodedata.normalize("NFD", t) if unicodedata.category(c) != "Mn")
+
+
+def negrita(t):
+    return "".join(_NEGRITA.get(c, c) for c in _sin_tildes(t))
+
+
+def versal(t):
+    return "".join(_VERSAL.get(c, c) for c in _sin_tildes(t).lower())
+
+
+def titulo(emoji, txt, sub=""):
+    s = f"{emoji} {negrita(txt)}"
+    return s + (f"  ·  <i>{versal(sub)}</i>" if sub else "")
+
+
+def cita(*lineas):
+    """Recuadro de Telegram: la barrita de color al costado agrupa el bloque."""
+    return "<blockquote>" + "\n".join(l for l in lineas if l is not None) + "</blockquote>"
+
+
+def tabla(pares, ancho=24):
+    """Etiqueta ....... valor, en letra de ancho fijo: las columnas quedan
+    derechas en cualquier celular."""
+    filas = []
+    for k, v in pares:
+        k, v = str(k), str(v)
+        puntos = max(2, ancho - len(k) - len(v) - 2)
+        filas.append(f"{esc(k)} {'·' * puntos} {esc(v)}")
+    return "<pre>" + "\n".join(filas) + "</pre>"
+
+
 def clave_azar():
     # Sin 0/O ni 1/l/i: se confunden al dictarla por WhatsApp
     return "".join(secrets.choice("abcdefghijkmnpqrstuvwxyz23456789") for _ in range(8))
@@ -664,15 +724,17 @@ def pant_inicio(tg):
     online = sum(1 for x in todas.values() if x["conex"] > 0)
     pronto = sum(1 for x in todas.values() if x["estado"] == "pronto")
     venc = sum(1 for x in todas.values() if x["estado"] == "vencida")
-    t = ["🤖 <b>K I R A</b>  ·  <i>tu panel en Telegram</i>", LINEA,
-         f"🌐 Servidor   <code>{ip_publica()}</code>",
-         f"👥 Cuentas    <b>{total}</b>   ·   🟢 <b>{online}</b> en línea",
-         f"⏳ Por vencer <b>{pronto}</b>   ·   🔴 Vencidas <b>{venc}</b>"]
+    pares = [("CUENTAS", total), ("EN LINEA", online), ("POR VENCER", pronto), ("VENCIDAS", venc)]
     if r == "rev":
-        t.append(f"💳 Créditos   <b>{creditos(tg, c)}</b>")
-    t += [LINEA, "<i>Elegí qué hacer 👇  o escribí un nombre para buscarlo.</i>"]
-    filas = [[b("👤 Nueva cuenta", "n"), b(f"🎁 Demo {DEMO_MIN} min", "demo")],
-             [b("📋 Cuentas", "L:t:0"), b("📡 Conectados", "on")]]
+        pares.append(("CREDITOS", creditos(tg, c)))
+    hola = "administrador" if r == "admin" else "revendedor"
+    t = [f"✦ {negrita('KIRA')} ✦   <i>{versal('panel de cuentas')}</i>",
+         cita(f"🌐 <code>{ip_publica()}</code>",
+              f"🕐 {time.strftime('%d/%m · %H:%M')}   ·   👑 {hola}"),
+         tabla(pares, 22),
+         "<i>Elegí una opción, o escribí un nombre para buscarlo.</i>"]
+    filas = [[b("➕ Nueva cuenta", "n"), b(f"🎁 Demo {DEMO_MIN} min", "demo")],
+             [b("📋 Cuentas", "L:t:0"), b(f"📡 Conectados · {online}", "on")]]
     if r == "admin":
         filas += [[b("🖥 Servidor", "vps"), b("🔔 Avisos", "av")],
                   [b("🤝 Revendedores", "rv")]]
@@ -699,11 +761,12 @@ def pant_lista(tg, filtro, pag):
     pags = max(1, (len(sel) + POR_PAGINA - 1) // POR_PAGINA)
     pag = max(0, min(pag, pags - 1))
     trozo = sel[pag * POR_PAGINA:(pag + 1) * POR_PAGINA]
-    t = [f"📋 <b>CUENTAS</b>  ·  {FILTROS[filtro]}", LINEA]
+    t = [titulo("📋", "CUENTAS", FILTROS[filtro])]
     if not sel:
-        t.append("<i>No hay ninguna cuenta en este filtro.</i>")
+        t.append(cita("<i>No hay ninguna cuenta en este filtro.</i>"))
     else:
-        t.append(f"<b>{len(sel)}</b> cuentas  ·  página {pag + 1} de {pags}")
+        t.append(cita(f"<b>{len(sel)}</b> cuentas   ·   página <b>{pag + 1}</b> de {pags}",
+                      "🟢 activa  🟡 por vencer  🔴 vencida  🔒 bloqueada  🎁 demo"))
         t.append("<i>Tocá una para abrirla.</i>")
     filas = []
     for x in trozo:
@@ -724,33 +787,52 @@ def pant_cuenta(tg, x, arriba=""):
     r = rol(tg, c)
     n = x["nombre"]
     lim = x["limite"]
+    ahora = time.time()
     t = []
     if arriba:
-        t += [arriba, ""]
-    t += [f"{ICONO[x['estado']]} <b>{n}</b>  ·  <i>{x['estado']}</i>", LINEA,
-          f"🔑 Clave        <code>{esc(x['clave'])}</code>" if x["clave"] else "🔑 Clave        <i>sin guardar</i>"]
+        # Lo que acaba de pasar va en su propio recuadro, arriba de la tarjeta
+        t.append(arriba if arriba.startswith("<blockquote>") else cita(arriba))
+    t.append(f"{ICONO[x['estado']]} {negrita(n)}   <i>{versal(x['estado'])}</i>")
+
+    # Bloque 1: lo que se copia y cuánto le queda
+    clave = f"<code>{esc(x['clave'])}</code>" if x["clave"] else "<i>sin guardar</i>"
     if x["fin"]:
-        t.append(f"📅 Vence        {fecha_txt(x)}  ·  <b>{restante(x['fin'] - time.time())}</b>")
+        falta = x["fin"] - ahora
+        # La barra se mide contra 30 días, que es la venta más común; la
+        # demo, contra su hora de vida.
+        total = DEMO_MIN * 60 if x["demo"] else 30 * 86400
+        dias = cita(f"🔑 Clave   {clave}",
+                    f"📅 Vence   {fecha_txt(x)}",
+                    f"⏳ Quedan  <b>{restante(falta)}</b>",
+                    f"<code>{tira(falta * 100 / total)}</code>")
     else:
-        t.append("📅 Vence        sin fecha")
-    t.append(f"📱 Conexiones   <b>{x['conex']}</b> de {lim or '∞'}")
-    t.append(f"📊 Consumo      {bytes_hum(x['consumo'])} este mes")
+        dias = cita(f"🔑 Clave   {clave}", "📅 Vence   <i>sin fecha</i>")
+    t.append(dias)
+
+    # Bloque 2: uso
+    cupo = f"<b>{x['conex']}</b> de {lim}" if lim else f"<b>{x['conex']}</b> · sin tope"
+    uso = [f"📱 Conexiones  {cupo}"]
+    if lim:
+        uso.append(f"<code>{tira(x['conex'] * 100 / lim)}</code>")
+    uso.append(f"📊 Consumo  <b>{bytes_hum(x['consumo'])}</b> este mes")
     if r == "admin" and x["dueno"]:
         rv = c["revendedores"].get(x["dueno"], {})
-        t.append(f"🤝 Revendedor   {esc(rv.get('nombre') or x['dueno'])}")
+        uso.append(f"🤝 Revendedor  {esc(rv.get('nombre') or x['dueno'])}")
     if x["estado"] == "bloqueada" and x["motivo"]:
-        t.append(f"🔒 Motivo       {esc(x['motivo'])}")
+        uso.append(f"🔒 Motivo  <i>{esc(x['motivo'])}</i>")
+    t.append(cita(*uso))
     if r == "rev":
-        t += [LINEA, f"💳 Tenés <b>{creditos(tg, c)}</b> créditos · renovar 30 días cuesta "
-                     f"<b>{30 * max(lim, 1)}</b>"]
+        t.append(f"💳 Tenés <b>{creditos(tg, c)}</b> créditos · 30 días cuestan <b>{30 * max(lim, 1)}</b>")
+
     bloq = x["estado"] == "bloqueada"
     filas = [
-        [b("➕7 días", f"R:{n}:7"), b("➕30", f"R:{n}:30"), b("➕60", f"R:{n}:60"), b("➕90", f"R:{n}:90")],
-        [b("🎲 Clave nueva", f"K:{n}"), b("📱 −1", f"M:{n}:-1"), b("📱 +1", f"M:{n}:1")],
-        [b(f"🔌 Cortar ({x['conex']})", f"C:{n}"),
+        [b("➕ 7 días", f"R:{n}:7"), b("➕ 30", f"R:{n}:30"), b("➕ 60", f"R:{n}:60"), b("➕ 90", f"R:{n}:90")],
+        [b("🎲 Clave al azar", f"K:{n}"), b("✏️ Escribir clave", f"W:{n}")],
+        [b("📱 −1 dispositivo", f"M:{n}:-1"), b("📱 +1 dispositivo", f"M:{n}:1")],
+        [b(f"🔌 Cortar · {x['conex']}", f"C:{n}"),
          b("🔓 Desbloquear" if bloq else "🔒 Bloquear", f"B:{n}")],
-        [b("📨 Ficha para el cliente", f"F:{n}"), b("🗑 Borrar", f"D:{n}")],
-        [b("⬅️ Cuentas", "L:t:0"), b("🔄", f"U:{n}"), b("🏠", "m")],
+        [b("📨 Ficha para el cliente", f"F:{n}")],
+        [b("⬅️ Cuentas", "L:t:0"), b("🔄", f"U:{n}"), b("🗑 Borrar", f"D:{n}"), b("🏠", "m")],
     ]
     return "\n".join(t), filas
 
@@ -762,46 +844,49 @@ def ficha(x, extra=""):
     n = x["nombre"]
     clave = x["clave"] or "(la que le diste)"
     ptos = puertos()
-    t = ["✨ <b>TU CUENTA SSH</b> ✨", LINEA,
-         f"🌐 <b>Servidor</b>   <code>{ip}</code>",
-         f"👤 <b>Usuario</b>    <code>{n}</code>",
-         f"🔑 <b>Clave</b>      <code>{esc(clave)}</code>"]
+    t = [f"✦ {negrita('TU CUENTA SSH')} ✦",
+         cita(f"🌐 {versal('servidor')}", f"<code>{ip}</code>",
+              f"👤 {versal('usuario')}", f"<code>{n}</code>",
+              f"🔑 {versal('clave')}", f"<code>{esc(clave)}</code>")]
+    datos = []
     if x["fin"]:
-        t.append(f"📅 <b>Vence</b>      {fecha_txt(x)}")
+        datos.append(f"📅 Vence  <b>{fecha_txt(x)}</b>")
     lim = x["limite"]
     if lim:
-        t.append(f"📱 <b>Límite</b>     {lim} {'dispositivo' if lim == 1 else 'dispositivos'}")
+        datos.append(f"📱 <b>{lim}</b> {'dispositivo' if lim == 1 else 'dispositivos'} a la vez")
     if extra:
-        t.append(extra)
+        datos.append(extra)
+    if datos:
+        t.append(cita(*datos))
     if ptos:
-        t += [LINEA, "🔌 <b>PUERTOS</b>"]
-        for s, ps in ptos:
-            t.append(f"   ▸ {s}:  <code>{' · '.join(map(str, ps))}</code>")
+        t.append(f"🔌 {versal('puertos')}\n"
+                 + tabla([(s.upper(), " · ".join(map(str, ps))) for s, ps in ptos], 26))
     ws = dict(ptos).get("WebSocket")
     if ws:
-        t += [LINEA, "📲 <b>HTTP Injector</b>", f"<code>{ip}:{ws[0]}@{n}:{esc(clave)}</code>"]
+        t.append(f"📲 {versal('http injector')}\n<code>{ip}:{ws[0]}@{n}:{esc(clave)}</code>")
     sop = soporte()
-    t += [LINEA]
+    pie = "<i>Tocá cualquier dato para copiarlo.</i>"
     if sop:
-        t.append(f"💬 Soporte: {esc(sop)}")
-    t.append("<i>Tocá cualquier dato para copiarlo.</i>")
-    return "\n".join(t)
+        pie = f"💬 Soporte  {esc(sop)}\n" + pie
+    t.append(pie)
+    return "\n\n".join(t)
 
 
 def pant_conectados(tg):
     todas = mias(tg, cuentas())
     on = sorted((x for x in todas.values() if x["conex"] > 0), key=lambda x: (-x["conex"], x["nombre"]))
     total = sum(x["conex"] for x in on)
-    t = [f"📡 <b>CONECTADOS AHORA</b>", LINEA]
+    t = [titulo("📡", "CONECTADOS", "ahora mismo")]
     if not on:
-        t.append("<i>No hay nadie conectado en este momento.</i>")
+        t.append(cita("<i>No hay nadie conectado en este momento.</i>"))
     else:
-        t.append(f"<b>{len(on)}</b> cuentas  ·  <b>{total}</b> conexiones")
-        t.append("")
+        t.append(cita(f"🟢 <b>{len(on)}</b> cuentas   ·   🔌 <b>{total}</b> conexiones"))
+        filas_t = []
         for x in on[:25]:
             lim = x["limite"]
-            punto = "🔴" if lim and x["conex"] > lim else "🟢"
-            t.append(f"{punto} <b>{x['nombre']}</b>  —  {x['conex']}/{lim or '∞'}")
+            marca = " !" if lim and x["conex"] > lim else ""
+            filas_t.append((x["nombre"], f"{x['conex']}/{lim or '∞'}{marca}"))
+        t.append(tabla(filas_t, 26))
         if len(on) > 25:
             t.append(f"<i>… y {len(on) - 25} más</i>")
     filas = [[b(f"🔌 {x['nombre']}", f"U:{x['nombre']}") for x in on[i:i + 2]] for i in range(0, min(len(on), 10), 2)]
@@ -831,15 +916,19 @@ def pant_vps():
     srv = {}
     for (nom, _), e in zip(unidades, out):
         srv[nom] = srv.get(nom, False) or e == "active"
-    t = ["🖥 <b>SERVIDOR</b>", LINEA,
-         f"⚙️ CPU     {barra(cpu)}",
-         f"🧠 RAM     {barra(rp)}  <i>{bytes_hum(ru)} de {bytes_hum(rt)}</i>",
-         f"💾 Disco   {barra(dp)}  <i>{bytes_hum(du)} de {bytes_hum(dt)}</i>",
-         LINEA,
-         f"⏱ Encendido  <b>{int(up // 86400)}d {int(up % 86400 // 3600)}h</b>   ·   carga {' '.join(carga)}",
-         f"👥 {len(todas)} cuentas  ·  🔌 {conex} conexiones",
-         LINEA, "<b>SERVICIOS</b>"]
-    t.append("   ".join(f"{'🟢' if on else '⚫'} {nom}" for nom, on in srv.items()))
+    def fila(nom, pct):
+        return f"{nom:<6}{tira(pct, 12)} {pct:>3}%"
+    peor = max(cpu, rp, dp)
+    salud = "🟢 todo en orden" if peor < 70 else ("🟡 exigido" if peor < 90 else "🔴 al límite")
+    t = [titulo("🖥", "SERVIDOR", salud.split(" ", 1)[1]),
+         "<pre>" + "\n".join([fila("CPU", cpu), fila("RAM", rp), fila("DISCO", dp)]) + "</pre>",
+         cita(f"🧠 RAM  {bytes_hum(ru)} de {bytes_hum(rt)}",
+              f"💾 Disco  {bytes_hum(du)} de {bytes_hum(dt)}",
+              f"⏱ Encendido  <b>{int(up // 86400)}d {int(up % 86400 // 3600)}h</b>   ·   carga {' '.join(carga)}",
+              f"👥 {len(todas)} cuentas   ·   🔌 {conex} conexiones"),
+         f"⚙️ {versal('servicios')}",
+         cita("   ".join(f"{'🟢' if on else '⚫'} {nom}" for nom, on in srv.items())
+              or "<i>No pude leer el estado de los servicios.</i>")]
     return "\n".join(t), [[b("🔄 Actualizar", "vps"), b("🏠 Inicio", "m")]]
 
 
@@ -852,10 +941,10 @@ AVISOS_TXT = {
 
 def pant_avisos():
     av = leer_conf()["avisos"]
-    t = ["🔔 <b>AVISOS AUTOMÁTICOS</b>", LINEA, "El bot te escribe solo cuando pasa algo de esto:", ""]
+    t = [titulo("🔔", "AVISOS", "automaticos"), "El bot te escribe solo cuando pasa algo de esto:"]
     for k, (tit, desc) in AVISOS_TXT.items():
-        t.append(f"{'✅' if av.get(k) else '⬜'} <b>{tit}</b>\n      <i>{desc}</i>")
-    t += ["", "<i>Las demos vencidas se borran solas y te avisa.</i>"]
+        t.append(cita(f"{'✅' if av.get(k) else '⬜'} <b>{tit}</b>", f"<i>{desc}</i>"))
+    t.append("<i>Tocá uno para prenderlo o apagarlo. Las demos vencidas se borran solas y te avisa.</i>")
     filas = [[b(f"{'✅' if av.get(k) else '⬜'} {tit}", f"av:{k}")] for k, (tit, _) in AVISOS_TXT.items()]
     filas.append([b("🏠 Inicio", "m")])
     return "\n".join(t), filas
@@ -864,12 +953,12 @@ def pant_avisos():
 def pant_revendedores():
     c = leer_conf()
     todas = cuentas()
-    t = ["🤝 <b>REVENDEDORES</b>", LINEA,
-         "Cada cuenta que crean les cuesta <b>días × dispositivos</b> en créditos.",
-         "Sólo ven y manejan las cuentas que crearon ellos.", ""]
+    t = [titulo("🤝", "REVENDEDORES"),
+         cita("💳 Cada cuenta les cuesta <b>días × dispositivos</b> en créditos.",
+              "👁 Sólo ven y manejan las cuentas que crearon ellos.")]
     filas = []
     if not c["revendedores"]:
-        t.append("<i>Todavía no hay ninguno.</i>")
+        t.append("<i>Todavía no hay ninguno. Tocá ➕ para sumar el primero.</i>")
     for rid, rv in sorted(c["revendedores"].items(), key=lambda kv: kv[1].get("nombre", "")):
         n = sum(1 for x in todas.values() if x["dueno"] == rid)
         filas.append([b(f"🤝 {rv.get('nombre') or rid}  ·  💳 {rv.get('creditos', 0)}  ·  👥 {n}", f"rv:{rid}")])
@@ -885,11 +974,9 @@ def pant_revendedor(rid):
         raise Aviso("Ese revendedor ya no existe")
     mis = [x for x in cuentas().values() if x["dueno"] == rid]
     on = sum(1 for x in mis if x["conex"] > 0)
-    t = [f"🤝 <b>{esc(rv.get('nombre') or rid)}</b>", LINEA,
-         f"🆔 Telegram    <code>{rid}</code>",
-         f"💳 Créditos    <b>{rv.get('creditos', 0)}</b>",
-         f"👥 Cuentas     <b>{len(mis)}</b>  ·  🟢 {on} en línea",
-         f"📅 Desde       {rv.get('alta', '—')}"]
+    t = [f"🤝 {negrita(rv.get('nombre') or rid)}   <i>{versal('revendedor')}</i>",
+         cita(f"🆔 <code>{rid}</code>", f"📅 Desde {rv.get('alta', '—')}"),
+         tabla([("CREDITOS", rv.get("creditos", 0)), ("CUENTAS", len(mis)), ("EN LINEA", on)], 22)]
     filas = [[b("➕100", f"rc:{rid}:100"), b("➕500", f"rc:{rid}:500"), b("➕1000", f"rc:{rid}:1000")],
              [b("➖100", f"rc:{rid}:-100"), b("🗑 Quitar", f"rq:{rid}")],
              [b("⬅️ Revendedores", "rv"), b("🏠", "m")]]
@@ -908,39 +995,44 @@ PASOS = ["usuario", "clave", "dias", "limite", "ok"]
 def pintar_nueva(chat, tg, st, aviso=""):
     d = st["d"]
     i = PASOS.index(st["paso"])
-    progreso = "▰" * (i + 1) + "▱" * (len(PASOS) - i - 1)
+    progreso = "●" * (i + 1) + "○" * (len(PASOS) - i - 1)
 
-    def v(clave, txt):
-        return f"<b>{txt}</b> ✔" if clave in d else "—"
-    t = [f"👤 <b>NUEVA CUENTA</b>   {progreso}", LINEA,
-         f"Usuario    {v('usuario', d.get('usuario', ''))}",
-         f"Clave      {('<code>' + esc(d['clave']) + '</code> ✔') if 'clave' in d else '—'}",
-         f"Días       {v('dias', d.get('dias', ''))}",
-         f"Límite     {v('limite', d.get('limite', ''))}", LINEA]
+    def v(clave, nombre, txt):
+        if clave in d:
+            return f"✅ {nombre}  <b>{txt}</b>"
+        if PASOS[i] == clave:
+            return f"👉 <b>{nombre}</b>"
+        return f"▫️ <i>{nombre}</i>"
+    lim = d.get("limite", "")
+    t = [f"{titulo('➕', 'NUEVA CUENTA')}   <code>{progreso}</code>",
+         cita(v("usuario", "Usuario", d.get("usuario", "")),
+              v("clave", "Clave", "<code>" + esc(d.get("clave", "")) + "</code>"),
+              v("dias", "Días", f"{d.get('dias', '')} días"),
+              v("limite", "Límite", f"{lim} {'dispositivo' if lim == 1 else 'dispositivos'}"))]
     paso = st["paso"]
     atras_cancelar = [b("⬅️ Atrás", "n:b"), b("✖ Cancelar", "x")]
     if paso == "usuario":
-        t += ["👉 <b>Escribí el nombre de usuario</b>",
+        t += ["✏️ <b>Escribí el nombre de usuario</b>",
               "<i>Minúsculas, números y guion. Máximo 20.</i>"]
         filas = [[b("✖ Cancelar", "x")]]
     elif paso == "clave":
-        t += ["👉 <b>Escribí la contraseña</b>", "<i>o generá una fácil de dictar.</i>"]
+        t += ["✏️ <b>Escribí la contraseña</b>", "<i>o tocá 🎲 y te genero una fácil de dictar.</i>"]
         filas = [[b("🎲 Generar una", "n:c")], atras_cancelar]
     elif paso == "dias":
-        t += ["👉 <b>¿Cuántos días dura?</b>", "<i>Tocá uno o escribí otro número.</i>"]
-        filas = [[b(str(n), f"n:d:{n}") for n in (7, 15, 30)],
-                 [b(str(n), f"n:d:{n}") for n in (60, 90, 180)], atras_cancelar]
+        t += ["📅 <b>¿Cuántos días dura?</b>", "<i>Tocá uno o escribí otro número.</i>"]
+        filas = [[b(f"{n} días", f"n:d:{n}") for n in (7, 15, 30)],
+                 [b(f"{n} días", f"n:d:{n}") for n in (60, 90, 180)], atras_cancelar]
     elif paso == "limite":
-        t += ["👉 <b>¿Cuántos dispositivos a la vez?</b>"]
+        t += ["📱 <b>¿Cuántos dispositivos a la vez?</b>"]
         filas = [[b(f"📱 {n}", f"n:l:{n}") for n in (1, 2, 3, 4, 5)], atras_cancelar]
     else:
-        t.append("👉 <b>¿Creo la cuenta?</b>")
+        t.append("✨ <b>Todo listo. ¿Creo la cuenta?</b>")
         if rol(tg) == "rev":
             costo = d["dias"] * d["limite"]
-            t.append(f"💳 Cuesta <b>{costo}</b> créditos · tenés <b>{creditos(tg)}</b>")
+            t.append(cita(f"💳 Cuesta <b>{costo}</b> créditos · tenés <b>{creditos(tg)}</b>"))
         filas = [[b("✅ Crear cuenta", "n:ok")], atras_cancelar]
     if aviso:
-        t += ["", f"⚠️ {aviso}"]
+        t.append(cita(f"⚠️ {aviso}"))
     editar(chat, st.get("msg"), "\n".join(t), filas)
 
 
@@ -1057,22 +1149,63 @@ def rev_texto(chat, tg, st, txt, quien):
     CHARLA.pop(chat, None)
     registro(f"{quien} agrego al revendedor {nombre} ({rid})")
     t, fl = pant_revendedor(rid)
-    editar(chat, st.get("msg"), "✅ <b>Revendedor agregado.</b> Cargale créditos para que empiece.\n\n" + t, fl)
+    editar(chat, st.get("msg"), cita("✅ <b>Revendedor agregado.</b> Cargale créditos para que empiece.") + "\n" + t, fl)
     enviar(int(rid), "🎉 <b>¡Te habilitaron como revendedor!</b>\n\nMandá /start para abrir tu panel.")
 
 
 def pintar_rev(chat, st, aviso=""):
     if st["paso"] == "id":
-        t = ["🤝 <b>NUEVO REVENDEDOR</b>   ▰▱", LINEA,
-             "👉 <b>Escribí su ID de Telegram</b>",
-             "<i>Que le escriba /start a este bot: el bot le contesta con su ID.</i>"]
+        t = [f"{titulo('🤝', 'NUEVO REVENDEDOR')}   <code>●○</code>",
+             cita("👉 <b>ID de Telegram</b>", "▫️ <i>Nombre</i>"),
+             "✏️ <b>Escribí su ID de Telegram</b>",
+             "<i>Que le mande /start a este bot: el bot le contesta con su ID.</i>"]
     else:
-        t = ["🤝 <b>NUEVO REVENDEDOR</b>   ▰▰", LINEA,
-             f"ID   <code>{st['d']['id']}</code> ✔", "",
-             "👉 <b>¿Cómo se llama?</b>", "<i>Es sólo para que lo reconozcas en la lista.</i>"]
+        t = [f"{titulo('🤝', 'NUEVO REVENDEDOR')}   <code>●●</code>",
+             cita(f"✅ ID  <code>{st['d']['id']}</code>", "👉 <b>Nombre</b>"),
+             "✏️ <b>¿Cómo se llama?</b>", "<i>Es sólo para que lo reconozcas en la lista.</i>"]
     if aviso:
-        t += ["", f"⚠️ {aviso}"]
+        t.append(cita(f"⚠️ {aviso}"))
     editar(chat, st.get("msg"), "\n".join(t), [[b("✖ Cancelar", "x")]])
+
+
+def cambiar_clave(chat, mid, tg, x, clave, quien):
+    ok, err = correr(["chpasswd"], f"{x['nombre']}:{clave}\n")
+    if not ok:
+        raise Aviso(f"No se pudo cambiar: {err}")
+    poner_par("claves", x["nombre"], clave, 0o600)
+    # Las conexiones abiertas siguen vivas con la clave vieja y ocupan el
+    # cupo: al reconectar con la nueva parecería que no anda. Se cortan.
+    n = cortar(x["uid"])
+    registro(f"{quien} cambio la clave de {x['nombre']}")
+    t, f = pant_cuenta(tg, obtener(tg, x["nombre"]),
+                       cita(f"🔑 Clave nueva  <code>{esc(clave)}</code>",
+                            f"🔌 Se cortaron {n} conexiones con la clave vieja" if n else None))
+    editar(chat, mid, t, f)
+
+
+def pintar_clave(chat, st, aviso=""):
+    n = st["nombre"]
+    t = [titulo("✏️", "CLAVE NUEVA", n),
+         cita("✏️ <b>Escribí la contraseña nueva</b>",
+              "<i>Mínimo 4 caracteres, sin espacios ni dos puntos.</i>",
+              "<i>Tu mensaje se borra del chat apenas lo leo.</i>"),
+         "🔌 <i>Las conexiones abiertas se cortan para que entre con la nueva.</i>"]
+    if aviso:
+        t.append(cita(f"⚠️ {aviso}"))
+    editar(chat, st.get("msg"), "\n".join(t),
+           [[b("🎲 Mejor una al azar", f"K:{n}")], [b("✖ Cancelar", f"U:{n}")]])
+
+
+def clave_texto(chat, tg, st, txt, quien):
+    clave = txt.strip()
+    e = error_clave(clave)
+    if e:
+        return pintar_clave(chat, st, e)
+    try:
+        cambiar_clave(chat, st.get("msg"), tg, obtener(tg, st["nombre"]), clave, quien)
+        CHARLA.pop(chat, None)
+    except Aviso as a:
+        pintar_clave(chat, st, str(a))
 
 
 def buscar(chat, tg, txt):
@@ -1094,6 +1227,11 @@ def buscar(chat, tg, txt):
 def despachar(chat, mid, tg, r, data, quien):
     p = data.split(":")
     k = p[0]
+    # Tocar cualquier otro botón abandona el asistente que hubiera abierto.
+    # Si no, lo próximo que escribas (una búsqueda, por ejemplo) se tomaría
+    # como la clave nueva de la cuenta que dejaste a medias.
+    if k not in ("n", "W", "ra"):
+        CHARLA.pop(chat, None)
 
     if k == "m":
         CHARLA.pop(chat, None)
@@ -1133,19 +1271,14 @@ def despachar(chat, mid, tg, r, data, quien):
         editar(chat, mid, t, f)
         return f"✔ +{dias} días"
     elif k == "K":
-        x = obtener(tg, p[1])
-        clave = clave_azar()
-        ok, err = correr(["chpasswd"], f"{x['nombre']}:{clave}\n")
-        if not ok:
-            raise Aviso(f"No se pudo cambiar: {err}")
-        poner_par("claves", x["nombre"], clave, 0o600)
-        # Las conexiones abiertas siguen vivas con la clave vieja: se cortan
-        n = cortar(x["uid"])
-        registro(f"{quien} cambio la clave de {x['nombre']}")
-        t, f = pant_cuenta(tg, obtener(tg, p[1]), f"🔑 Clave nueva: <code>{clave}</code>"
-                           + (f"\nSe cortaron {n} conexiones viejas." if n else ""))
-        editar(chat, mid, t, f)
+        CHARLA.pop(chat, None)
+        cambiar_clave(chat, mid, tg, obtener(tg, p[1]), clave_azar(), quien)
         return "🔑 Clave cambiada"
+    elif k == "W":
+        x = obtener(tg, p[1])
+        st = {"t": "clave", "nombre": x["nombre"], "msg": mid}
+        CHARLA[chat] = st
+        pintar_clave(chat, st)
     elif k == "M":
         x = obtener(tg, p[1])
         actual = x["limite"] or 1
@@ -1362,6 +1495,8 @@ def manejar_mensaje(m):
                 nueva_texto(chat, tg, st, texto, quien)
             elif st["t"] == "rev":
                 rev_texto(chat, tg, st, texto, quien)
+            elif st["t"] == "clave":
+                clave_texto(chat, tg, st, texto, quien)
         except Exception as e:
             registro(f"error en asistente: {e}")
             enviar(chat, "⚠️ Algo falló. Probá de nuevo.", [[b("🏠 Inicio", "m")]])

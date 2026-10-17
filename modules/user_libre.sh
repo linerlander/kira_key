@@ -403,7 +403,7 @@ pintar_limite() {
       "$(pad '▸ El vigilante está apagado: el número se guarda pero no se aplica.' 76)" "$E_RST"
   else
     printf '  %s%s%s\n' "$E_MUT" \
-      "$(pad 'Si le bajás el cupo, el vigilante le corta las que sobran en segundos.' 76)" "$E_RST"
+      "$(pad 'Si se pasa, el vigilante le corta las MÁS VIEJAS: la que reconecta gana.' 76)" "$E_RST"
   fi
   echo
   opcion_salir "CANCELAR"

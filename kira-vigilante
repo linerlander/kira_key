@@ -14,7 +14,7 @@
 
 KIRA_DIR="${KIRA_DIR:-/root/kira_key}"
 INTERVALO="${INTERVALO:-5}"      # cada cuántos segundos revisa
-MODO="${MODO:-exceso}"           # exceso = corta las de más · todas = corta todo
+MODO="${MODO:-exceso}"           # exceso = corta las más viejas que sobran · todas = corta todo
 
 LIMITES="$KIRA_DIR/db/limites"
 DESTINO="/usr/local/sbin/kira-vigilante"
@@ -139,7 +139,15 @@ una_pasada() {
 
     if [ "$MODO" = todas ]; then cortar=$n; else cortar=$(( n - lim )); fi
 
-    for ((i=0; i<cortar; i++)); do
+    # Se cortan las MÁS VIEJAS, no las más nuevas. Cuando el celular pierde
+    # señal, la conexión vieja no se entera: queda abierta del lado del
+    # servidor como sesión fantasma, sin nadie del otro lado. El cliente
+    # reconecta, ya tiene 2 de 1, y si se cortara la nueva le estaríamos
+    # tirando justo la que funciona, una y otra vez, mientras el fantasma
+    # sigue ocupando el cupo. Así quedaba sin poder usar la cuenta.
+    # Cortando la vieja, la reconexión siempre gana. Y si la cuenta la usan
+    # dos, igual nunca hay más de las permitidas: se van pisando entre ellos.
+    for ((i=n-1; i>=n-cortar; i--)); do
       fila="${ORD[i]}"
       pid="${fila%%:*}"
       (( SIMULAR )) || kill -TERM "$pid" 2>/dev/null
@@ -157,11 +165,92 @@ una_pasada() {
   done
 }
 
+# ------------------------------------------------------------- keepalive ----
+# Cortar la sesión vieja es el parche; esto es el arreglo de fondo. Cuando el
+# celular se queda sin señal no avisa que se fue: la conexión queda abierta
+# del lado del servidor y, con la configuración de fábrica, sshd tarda HORAS
+# en darse cuenta (lo que tarda el keepalive del kernel). Mientras tanto ese
+# fantasma está vivo, no es un zombi, y ocupa el cupo del cliente.
+#
+# Con ClientAliveInterval, sshd le pregunta al cliente cada 15 segundos si
+# sigue ahí. Tres preguntas sin respuesta y lo da por muerto: a los ~45
+# segundos el fantasma desaparece solo. Las apps de túnel contestan esa
+# pregunta sin que nadie configure nada, así que a una conexión viva no le
+# cambia nada.
+SSHD="/etc/ssh/sshd_config"
+KA_INTERVALO=15
+KA_TOPE=3
+KA_INI="# >>> KIRA · cortar sesiones muertas >>>"
+KA_FIN="# <<< KIRA · cortar sesiones muertas <<<"
+
+# Saca el bloque que haya puesto una instalación anterior
+sin_bloque_ka() { # $1=archivo -> imprime el archivo sin el bloque
+  awk -v a="$KA_INI" -v b="$KA_FIN" '$0==a{f=1; next} $0==b{f=0; next} !f' "$1"
+}
+
+recargar_sshd() {
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null
+  else
+    service ssh reload 2>/dev/null || service sshd reload 2>/dev/null
+  fi
+}
+
+poner_keepalive() {
+  command -v sshd >/dev/null 2>&1 || return 0
+  [ -w "$SSHD" ] || return 0
+  # Si el dueño del VPS ya tiene un valor razonable puesto por su cuenta, no
+  # se le toca. `sshd -T` dice el valor que sshd usa DE VERDAD, sumando los
+  # archivos incluidos, que es lo único que importa.
+  local actual
+  actual=$(sshd -T 2>/dev/null | awk '$1=="clientaliveinterval"{print $2; exit}')
+  if grep -qxF "$KA_INI" "$SSHD" 2>/dev/null; then
+    : # ya es nuestro: se reescribe por si cambiaron los números
+  elif [[ "$actual" =~ ^[0-9]+$ ]] && (( actual > 0 && actual <= 60 )); then
+    return 0
+  fi
+
+  # Arriba de todo del archivo y no al final: OpenSSH se queda con el PRIMER
+  # valor que encuentra, y si el archivo termina en un bloque Match la línea
+  # quedaría adentro y sólo valdría para ese caso. Arriba gana siempre,
+  # incluso contra los archivos de sshd_config.d.
+  local copia tmp="$SSHD.kira.tmp"
+  copia="$SSHD.kira-backup.$(date +%Y%m%d%H%M%S)"
+  cp -a "$SSHD" "$copia" || return 1
+  {
+    printf '%s\n' "$KA_INI"
+    printf 'ClientAliveInterval %s\n' "$KA_INTERVALO"
+    printf 'ClientAliveCountMax %s\n' "$KA_TOPE"
+    printf '%s\n' "$KA_FIN"
+    sin_bloque_ka "$copia"
+  } > "$tmp" && mv -f "$tmp" "$SSHD" || { rm -f "$tmp"; return 1; }
+
+  # Un sshd con la configuración rota te deja afuera de tu propio servidor
+  # la próxima vez que reinicie. Si no la acepta, se vuelve atrás.
+  if ! sshd -t 2>/dev/null; then
+    cp -a "$copia" "$SSHD"
+    echo "AVISO: sshd no aceptó el keepalive, dejé la configuración como estaba."
+    return 1
+  fi
+  # reload no corta a nadie: las conexiones abiertas siguen igual y las
+  # nuevas ya entran con el keepalive puesto.
+  recargar_sshd
+  echo "Sesiones fantasma: sshd las corta solo a los $(( KA_INTERVALO * KA_TOPE )) segundos."
+}
+
+sacar_keepalive() {
+  grep -qxF "$KA_INI" "$SSHD" 2>/dev/null || return 0
+  local tmp="$SSHD.kira.tmp"
+  sin_bloque_ka "$SSHD" > "$tmp" && mv -f "$tmp" "$SSHD"
+  sshd -t 2>/dev/null && recargar_sshd
+}
+
 # -------------------------------------------------------------- instalar ----
 instalar() {
   [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
   install -m 755 "${BASH_SOURCE[0]}" "$DESTINO"
   sed -i "s|^KIRA_DIR=.*|KIRA_DIR=\"\${KIRA_DIR:-$KIRA_DIR}\"|" "$DESTINO"
+  poner_keepalive
 
   if ! command -v systemctl >/dev/null 2>&1; then
     echo "No hay systemd en esta máquina."
@@ -208,6 +297,7 @@ desinstalar() {
     rm -f "$UNIDAD"; systemctl daemon-reload
   fi
   rm -f "$DESTINO"
+  sacar_keepalive
   echo "Vigilante sacado. Las conexiones ya no se limitan."
 }
 

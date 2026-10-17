@@ -1423,7 +1423,7 @@ def pant_estadisticas():
 
 
 # ============================================================= SERVIDORES ===
-def pant_servidores():
+def pant_servidores(admin=False):
     c = leer_conf()
     actual = srv_id()
     t = [titulo("🌎", "SERVIDORES"),
@@ -1433,12 +1433,94 @@ def pant_servidores():
     for sid in lista_srv(c):
         marca = "📍" if sid == actual else "🖥"
         s = c.get("servidores", {}).get(sid, {})
-        extra = f"  ·  {s['host']}" if s.get("host") else "  ·  este VPS"
-        filas.append([b(f"{marca} {nombre_srv(sid, c)}{extra}", f"sv:{sid}")])
+        extra = f"  ·  {s['host']}" if s.get("host") else "  ·  el del bot"
+        fila = [b(f"{marca} {nombre_srv(sid, c)}{extra}", f"sv:{sid}")]
+        if admin and sid != "local":
+            fila.append(b("🗑", f"sq:{sid}"))
+        filas.append(fila)
     if len(filas) == 1:
-        t.append("<i>Para sumar otro VPS: en el panel de este, 01 → 11 → opción 06.</i>")
+        t.append("<i>Para sumar otro VPS: instalá KIRA allá y en su panel cargá este mismo bot "
+                 "(01 → 11 → token). Te llega un aviso acá para confirmarlo.</i>")
     filas.append([b("🏠 Inicio", "m")])
     return "\n".join(t), filas
+
+
+# ================================================== SUMAR VPS AL BOT ========
+# Un VPS nuevo se suma SOLO, sin que nadie escriba claves ni IPs:
+#  1. El bot principal deja su llave pública y los IDs de los admins en la
+#     descripción del bot, en un idioma que no ve nadie (groenlandés, que
+#     Telegram ni siquiera tiene traducido). Cualquiera que tenga el token
+#     puede leerla, y el que tiene el token ya es dueño del bot igual.
+#  2. En el panel del VPS nuevo se carga el mismo token. El panel lee esa
+#     descripción, autoriza la llave (restringida: sólo puede correr KIRA,
+#     no abrir una consola) y le manda a los admins un mensaje con un botón.
+#  3. El admin toca ✅ y el bot principal lo prueba y lo suma.
+IDIOMA_OCULTO = "kl"
+
+
+def asegurar_llave():
+    if not os.path.exists(LLAVE):
+        os.makedirs(os.path.dirname(LLAVE), mode=0o700, exist_ok=True)
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"kira-bot@{os.uname().nodename}",
+                        "-f", LLAVE], capture_output=True)
+    try:
+        return open(LLAVE + ".pub").read().strip()
+    except Exception:
+        return ""
+
+
+def publicar_principal():
+    pub = asegurar_llave()
+    if not pub:
+        registro("no pude crear la llave SSH: no se van a poder sumar otros VPS")
+        return
+    c = leer_conf()
+    admins = ",".join(str(a) for a in c["admins"]) or "-"
+    api("setMyDescription", description=f"KIRA-PRINCIPAL {ip_publica()} {admins} {pub}",
+        language_code=IDIOMA_OCULTO)
+
+
+def sumar_vps(chat, mid, data, texto):
+    """Botón ✅ del mensaje que manda un VPS nuevo. Los datos vienen en el
+    botón (J:ip:puerto) y el nombre y la carpeta en el texto del mensaje."""
+    _, host, puerto = data.split(":", 2)
+    m_nom = re.search(r"Nombre:\s*(.+)", texto or "")
+    m_dir = re.search(r"Carpeta:\s*(\S+)", texto or "")
+    nombre = (m_nom.group(1).strip() if m_nom else host)[:20]
+    entrada = {"nombre": nombre, "host": host, "puerto": int(puerto),
+               "dir": m_dir.group(1) if m_dir else "/root/kira_key"}
+
+    def f(c):
+        sv = c["servidores"]
+        sid = next((k for k, v in sv.items() if v.get("host") == host), None)
+        if sid is None:
+            n = 1
+            while f"s{n}" in sv:
+                n += 1
+            sid = f"s{n}"
+        sv[sid] = entrada
+        return sid
+    sid = cambiar_conf(f)
+    antes = srv_id()
+    ACTUAL.srv = sid
+    try:
+        info = ping()
+    except Aviso as e:
+        ACTUAL.srv = antes
+        cambiar_conf(lambda c: c["servidores"].pop(sid, None))
+        editar(chat, mid, f"⚠️ {negrita('NO SE PUDO SUMAR')}\n"
+                          + cita(f"📍 {esc(nombre)} · <code>{host}</code>", f"<i>{esc(str(e))}</i>")
+                          + "\n<i>Revisá que el puerto SSH de ese VPS esté abierto y volvé a cargar el "
+                            "token en su panel para que mande otro aviso.</i>")
+        return "No se pudo conectar"
+    ACTUAL.srv = antes
+    registro(f"se sumo el VPS {nombre} ({host})")
+    editar(chat, mid, f"✅ {negrita('VPS SUMADO')}\n"
+                      + cita(f"📍 <b>{esc(nombre)}</b> · <code>{host}</code>",
+                             f"🖥 {esc(info.get('host', ''))} · KIRA v{esc(info.get('version', '?'))}")
+                      + "\n<i>Elegilo desde 🌎 en el inicio.</i>",
+           [[b(f"📍 Ir a {nombre}", f"sv:{sid}"), b("🏠 Inicio", "m")]])
+    return f"✅ {nombre} sumado"
 
 
 AVISOS_TXT = {
@@ -1894,12 +1976,23 @@ def despachar(chat, mid, tg, r, data, quien):
             t, f = pant_inicio(tg)
             editar(chat, mid, t, f)
             return f"📍 Ahora estás en {nombre_srv(p[1])}"
-        t, f = pant_servidores()
+        t, f = pant_servidores(r == "admin")
         editar(chat, mid, t, f)
 
     # ---- sólo admin
     elif r != "admin":
         raise Aviso("Eso es sólo para el administrador")
+    elif k == "sq":
+        nom = nombre_srv(p[1])
+        cambiar_conf(lambda c: c["servidores"].pop(p[1], None))
+        for ch, s in list(SRV_DE.items()):
+            if s == p[1]:
+                SRV_DE.pop(ch, None)
+        ACTUAL.srv = "local"
+        registro(f"{quien} quito el VPS {nom}")
+        t, f = pant_servidores(True)
+        editar(chat, mid, t, f)
+        return f"🗑 {nom} quitado · sus cuentas siguen andando"
     elif k == "vps":
         t, f = pant_vps()
         editar(chat, mid, t, f)
@@ -1995,7 +2088,17 @@ def manejar_boton(q):
             SRV_DE[chat] = sid
             ACTUAL.srv = sid
     try:
-        aviso = despachar(chat, msg.get("message_id"), tg, rol(tg), data, nombre_de(q["from"]))
+        if data.startswith("J:") or data == "Jx":
+            # El aviso de un VPS que se quiere sumar
+            if rol(tg) != "admin":
+                raise Aviso("Sólo un administrador puede sumar servidores")
+            if data == "Jx":
+                editar(chat, msg.get("message_id"), "✖ <i>Ignorado. Ese VPS no se sumó.</i>")
+                aviso = "Ignorado"
+            else:
+                aviso = sumar_vps(chat, msg.get("message_id"), data, msg.get("text", ""))
+        else:
+            aviso = despachar(chat, msg.get("message_id"), tg, rol(tg), data, nombre_de(q["from"]))
     except Aviso as e:
         aviso = f"⚠️ {e}"
     except Exception as e:
@@ -2253,6 +2356,7 @@ def main():
     # mensajes a uno o al otro al azar. Se lo apaga.
     subprocess.run(["pkill", "-f", "/etc/kira/bot/telegram_bot.sh"], capture_output=True)
     api("deleteWebhook")
+    publicar_principal()
     api("setMyCommands", commands=[
         {"command": "start", "description": "Abrir el panel"},
         {"command": "nueva", "description": "Crear una cuenta"},

@@ -838,38 +838,41 @@ def pant_cuenta(tg, x, arriba=""):
 
 
 def ficha(x, extra=""):
-    """El mensaje que se le reenvía al cliente. Todo en <code> para que lo
-    copie con un toque."""
+    """El texto que se le pasa al cliente, TODO en un solo bloque <pre>.
+    Telegram le pone a ese bloque un botón de copiar: un toque y se lleva la
+    ficha entera para pegarla en WhatsApp. Por eso adentro va texto común,
+    sin letras de fantasía: pegadas en otra app saldrían como cuadraditos.
+    extra = un renglón más, en texto plano (la duración de una demo)."""
     ip = ip_publica()
     n = x["nombre"]
-    clave = x["clave"] or "(la que le diste)"
+    clave = x["clave"] or "(la que te pasé)"
     ptos = puertos()
-    t = [f"✦ {negrita('TU CUENTA SSH')} ✦",
-         cita(f"🌐 {versal('servidor')}", f"<code>{ip}</code>",
-              f"👤 {versal('usuario')}", f"<code>{n}</code>",
-              f"🔑 {versal('clave')}", f"<code>{esc(clave)}</code>")]
-    datos = []
+    raya = "━" * 22
+    r = [raya, "   ✦ CUENTA SSH PREMIUM ✦", raya,
+         f"🌐 IP      : {ip}",
+         f"👤 Usuario : {n}",
+         f"🔑 Clave   : {clave}"]
     if x["fin"]:
-        datos.append(f"📅 Vence  <b>{fecha_txt(x)}</b>")
+        r.append(f"📅 Vence   : {fecha_txt(x)}")
     lim = x["limite"]
     if lim:
-        datos.append(f"📱 <b>{lim}</b> {'dispositivo' if lim == 1 else 'dispositivos'} a la vez")
+        r.append(f"📱 Límite  : {lim} {'dispositivo' if lim == 1 else 'dispositivos'}")
     if extra:
-        datos.append(extra)
-    if datos:
-        t.append(cita(*datos))
+        r.append(extra)
     if ptos:
-        t.append(f"🔌 {versal('puertos')}\n"
-                 + tabla([(s.upper(), " · ".join(map(str, ps))) for s, ps in ptos], 26))
+        r += [raya, "🔌 PUERTOS"]
+        ancho = max(len(s) for s, _ in ptos)
+        r += [f"   {s.ljust(ancho)} : {' · '.join(map(str, ps))}" for s, ps in ptos]
     ws = dict(ptos).get("WebSocket")
     if ws:
-        t.append(f"📲 {versal('http injector')}\n<code>{ip}:{ws[0]}@{n}:{esc(clave)}</code>")
+        r += [raya, "📲 HTTP Injector", f"{ip}:{ws[0]}@{n}:{clave}"]
     sop = soporte()
-    pie = "<i>Tocá cualquier dato para copiarlo.</i>"
+    r.append(raya)
     if sop:
-        pie = f"💬 Soporte  {esc(sop)}\n" + pie
-    t.append(pie)
-    return "\n\n".join(t)
+        r.append(f"💬 Soporte : {sop}")
+    return (f"📨 {negrita('FICHA PARA EL CLIENTE')}\n"
+            "<i>Tocá el recuadro para copiarla entera y pegala en el chat con tu cliente.</i>\n"
+            "<pre>" + esc("\n".join(r)) + "</pre>")
 
 
 def pant_conectados(tg):
@@ -1124,7 +1127,7 @@ def hacer_demo(chat, tg, msg, quien):
     x = cuentas()[nombre]
     t, f = pant_cuenta(tg, x, f"🎁 <b>Demo creada.</b> Se borra sola en {DEMO_MIN} minutos.")
     editar(chat, msg, t, f)
-    enviar(chat, ficha(x, f"⏱ <b>Prueba</b>     dura {DEMO_MIN} minutos"))
+    enviar(chat, ficha(x, f"⏱ Prueba  : dura {DEMO_MIN} minutos"))
     return "🎁 Demo lista"
 
 

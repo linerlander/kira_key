@@ -2,8 +2,9 @@
 # =============================================================================
 #  KIRA · control de conexiones simultáneas
 #  Lo llama PAM cuando alguien termina de autenticar, ANTES de abrirle la
-#  sesión. Si el usuario ya llegó a su límite, devuelve 1 y SSH le rechaza la
-#  conexión. No mata nada: simplemente no lo deja entrar.
+#  sesión. Si el usuario ya llegó a su límite, le corta las conexiones MÁS
+#  VIEJAS para hacerle lugar a la nueva. La nueva siempre entra: así el que
+#  reconecta después de perder señal nunca queda afuera.
 #
 #  Se instala con:  bash kira-limite --instalar
 #  Se saca con:     bash kira-limite --desinstalar
@@ -42,7 +43,8 @@ decidir() {
   # Se cuenta por DUEÑO del proceso, no por utmp. utmp es lo que mira
   # `maxlogins` de PAM, y ahí los túneles de HTTP Injector no figuran porque
   # entran con ssh -N, sin pedir terminal. Por eso maxlogins no sirve acá.
-  local n=0 p c k v
+  local n=0 p c k v s resto
+  local -a suyas=()
   for p in /proc/[0-9]*; do
     [ -r "$p/comm" ] || continue
     read -r c < "$p/comm" 2>/dev/null || continue
@@ -66,11 +68,35 @@ decidir() {
       esac
     done < "$p/status" 2>/dev/null
     [ "$est" = "Z" ] && continue
-    [ "$v" = "$uid" ] && n=$(( n + 1 ))
+    [ "$v" = "$uid" ] || continue
+    n=$(( n + 1 ))
+    # Momento de arranque: campo 22 de /proc/PID/stat. Se corta desde el
+    # último ") " porque el nombre del proceso puede tener espacios.
+    read -r s < "$p/stat" 2>/dev/null || s=""
+    resto="${s##*) }"
+    local -a f=($resto)
+    suyas+=("${f[19]:-0}:${p##*/}")
   done
 
-  CUENTA="$n"; LIMITE="$lim"
-  (( n >= lim )) && return 1
+  CUENTA="$n"; LIMITE="$lim"; CORTADAS=0
+  (( n < lim )) && return 0
+
+  # Ya llegó al tope. Antes acá se RECHAZABA la conexión nueva, y eso dejaba
+  # al cliente afuera: cuando el celular pierde señal o la app reconecta, la
+  # conexión vieja sigue abierta del lado del servidor un rato (o para
+  # siempre, si el proxy la deja colgada). El cliente era el único usuario
+  # de la cuenta y no podía volver a entrar.
+  #
+  # Ahora la nueva SIEMPRE entra y se cortan las más viejas hasta hacerle
+  # lugar. El tope se respeta igual: nunca quedan más de las permitidas. Si
+  # la cuenta la comparten dos, se van pateando entre ellos, que es justo lo
+  # que tiene que pasar.
+  local sobran=$(( n - lim + 1 )) x
+  while read -r x; do
+    (( sobran > 0 )) || break
+    kill -TERM "${x#*:}" 2>/dev/null && CORTADAS=$(( CORTADAS + 1 ))
+    sobran=$(( sobran - 1 ))
+  done < <(printf '%s\n' "${suyas[@]}" | sort -t: -k1,1n)
   return 0
 }
 
@@ -117,12 +143,12 @@ desinstalar() {
 }
 
 probar() {
-  CUENTA=0; LIMITE="—"
-  if decidir; then
-    printf 'DEJA ENTRAR  · usuario=%s  abiertas=%s  límite=%s\n' "${PAM_USER:-?}" "$CUENTA" "$LIMITE"
-  else
-    printf 'RECHAZA      · usuario=%s  abiertas=%s  límite=%s\n' "${PAM_USER:-?}" "$CUENTA" "$LIMITE"
-  fi
+  # Sólo cuenta: con kill desactivado no corta nada de verdad.
+  kill() { :; }
+  CUENTA=0; LIMITE="—"; CORTADAS=0
+  decidir
+  printf 'DEJA ENTRAR · usuario=%s  abiertas=%s  límite=%s  cortaría=%s\n' \
+    "${PAM_USER:-?}" "$CUENTA" "$LIMITE" "$CORTADAS"
 }
 
 # ------------------------------------------------------------------ main ---
@@ -132,12 +158,13 @@ case "${1:-}" in
   --probar)      probar ;;
   *)
     # Así lo llama PAM: sin argumentos y con PAM_USER en el entorno.
-    CUENTA=0; LIMITE=0
-    if decidir; then
-      exit 0
-    else
-      logger -t kira-limite "rechazada conexión de ${PAM_USER:-?}: ya tiene $CUENTA de $LIMITE permitidas"
-      exit 1
+    # Pase lo que pase se deja entrar: un error en este script no puede
+    # dejar a nadie afuera, y el tope se hace cortando las viejas.
+    CUENTA=0; LIMITE=0; CORTADAS=0
+    decidir
+    if (( CORTADAS > 0 )); then
+      logger -t kira-limite "${PAM_USER:-?} entró con $CUENTA de $LIMITE abiertas: se cortaron las $CORTADAS más viejas"
     fi
+    exit 0
     ;;
 esac

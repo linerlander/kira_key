@@ -353,7 +353,20 @@ asegurar_vigilante() {
   fi
   KIRA_DIR="$DIR" bash "$DIR/kira-vigilante" --instalar >/dev/null 2>&1 &
 }
+
+# kira-limite corre desde una copia en /usr/local/sbin que PAM llama en cada
+# login. Igual que con el vigilante, actualizar el repo no la toca: si ya
+# estaba instalado y la copia quedó vieja, se la reemplaza. Si nunca se
+# instaló, no se instala solo: tocar PAM es decisión del dueño.
+asegurar_limite() {
+  [ "$(id -u)" -eq 0 ] || return 0
+  local puesto="/usr/local/sbin/kira-limite"
+  [ -f "$puesto" ] && [ -f "$DIR/kira-limite" ] || return 0
+  cmp -s "$DIR/kira-limite" "$puesto" && return 0
+  KIRA_DIR="$DIR" bash "$DIR/kira-limite" --instalar >/dev/null 2>&1
+}
 asegurar_vigilante
+asegurar_limite
 
 cargar_fijos
 cachear_cabecera

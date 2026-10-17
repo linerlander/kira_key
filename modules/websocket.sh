@@ -61,8 +61,22 @@ LOCAL_PORT = 80
 TARGET_HOST = '127.0.0.1'
 TARGET_PORT = 22
 
+def vigilar_cliente(s):
+    # Un celular que pierde señal no avisa que se fue. Con esto el kernel
+    # pregunta cada 10 s y, si en 45 s no hay respuesta o no confirma lo que
+    # se le mandó, da la conexión por muerta y el recv de abajo termina.
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 15)
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        s.setsockopt(socket.IPPROTO_TCP, getattr(socket, 'TCP_USER_TIMEOUT', 18), 45000)
+    except Exception:
+        pass
+
 def handle_client(client_socket):
     target_socket = None
+    vigilar_cliente(client_socket)
     try:
         request = b""
         client_socket.settimeout(3.0)
@@ -116,14 +130,20 @@ def handle_client(client_socket):
         target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         target_socket.connect((TARGET_HOST, TARGET_PORT))
 
+        # OJO: cuando un lado se cierra hay que salir de LOS DOS bucles. Antes
+        # el break sólo cortaba el for, el while seguía girando para siempre
+        # y la conexión a sshd nunca se cerraba: la sesión del cliente quedaba
+        # viva como fantasma, ocupándole el cupo, y no podía volver a entrar.
         sockets = [client_socket, target_socket]
-        while True:
+        abierto = True
+        while abierto:
             r, _, _ = select.select(sockets, [], [], 300)
             if not r:
                 break
             for s in r:
                 data = s.recv(32768)
                 if not data:
+                    abierto = False
                     break
                 if s is client_socket:
                     target_socket.sendall(data)

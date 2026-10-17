@@ -240,19 +240,32 @@ fila_dato() { # $1=etiqueta $2=valor [$3=color del valor]
 }
 piso_ancho() { printf '  %s╰%s╯%s\n' "$M_TABLA" "$(rep '─' 74)" "$E_RST"; }
 
+# Lo que se va tecleando se marca con fondo, igual que en el menú principal:
+# así ves a qué le vas a dar ANTES de apretar ENTER. Cada vez que se corta el
+# color hay que volver a poner el fondo, si no el sombreado queda a pedazos.
+sel_de() { # $1=número de fila o letra de opción
+  [ -n "$BUF" ] || return 0
+  local a="${BUF,,}" b="${1,,}"
+  { [ "$a" = "$b" ] || [ "$a" = "${b#0}" ]; } && printf '%s' "$B_SEL"
+  return 0
+}
+
 opcion() { # $1=número $2=emoji $3=texto
-  printf '%s%s%s %s%s%s %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST" \
-         "$E_P2" "$2" "$E_RST" "$E_BLD$E_TXT" "$(pad "$3" 31)" "$E_RST"
+  local f; f="$(sel_de "$1")"
+  printf '%s%s%s%s %s%s%s %s%s%s' "$f$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST$f" \
+         "$E_P2" "$2" "$E_RST$f" "$E_BLD$E_TXT" "$(pad "$3" 31)" "$E_RST"
 }
 opcion_f() { # $1=número $2=emoji $3=texto $4=clave del filtro
-  local c="$E_BLD$E_TXT"
+  local c="$E_BLD$E_TXT" f
   [ "$FILTRO" = "$4" ] && c="$E_BLD$E_PINK"
-  printf '%s%s%s %s%s%s %s%s%s' "$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST" \
-         "$E_P2" "$2" "$E_RST" "$c" "$(pad "$3" 31)" "$E_RST"
+  f="$(sel_de "$1")"
+  printf '%s%s%s%s %s%s%s %s%s%s' "$f$E_BLD$E_P1" "$(pad "$1" 2)" "$E_RST$f" \
+         "$E_P2" "$2" "$E_RST$f" "$c" "$(pad "$3" 31)" "$E_RST"
 }
 opcion_salir() {
-  printf '  %s%s%s %s%s%s %s%s%s\n' \
-    "$E_BLD$E_ERR" "$(pad '00' 2)" "$E_RST" "$E_P2" "🚪" "$E_RST" \
+  local f; f="$(sel_de '00')"
+  printf '  %s%s%s%s %s%s%s %s%s%s\n' \
+    "$f$E_BLD$E_ERR" "$(pad '00' 2)" "$E_RST$f" "$E_P2" "🚪" "$E_RST$f" \
     "$E_BLD$E_TXT" "$(pad "${1:-VOLVER AL PANEL}" 70)" "$E_RST"
 }
 linea_aviso() {
@@ -277,7 +290,7 @@ cab_tabla() {
     "$(pad 'ESTADO' 10)" "$(pad 'DESDE' 10)" "$(pad 'MOTIVO' 19)" "$E_RST")"
 }
 fila_cuenta() { # $1=número a mostrar $2=índice
-  local n="$1" i="$2" col cx de mo
+  local n="$1" i="$2" col cx de mo f
   case "${B_ESTADO[i]}" in
     bloqueada) col="$E_BLD$E_ERR" ;;
     activa)    col="$E_BLD$E_OK" ;;
@@ -286,13 +299,14 @@ fila_cuenta() { # $1=número a mostrar $2=índice
   cx="$E_MUT"; (( ${B_CONEX[i]:-0} > 0 )) && cx="$E_BLD$E_OK"
   de="${B_DESDE[i]}"; [ -z "$de" ] && de="—"
   mo="${B_MOTIVO[i]}"; [ -z "$mo" ] && mo="—"
-  fila_ancha "$(printf ' %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s%s ' \
-    "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST" \
-    "$E_TXT" "$(pad "${B_NOM[i]}" 16)" "$E_RST" \
+  f="$(sel_de "$n")"
+  fila_ancha "$(printf '%s %s%s%s  %s%s%s  %s%s  %s%s%s  %s%s  %s%s%s %s' \
+    "$f" "$E_BLD$E_P1" "$(pad "$n" 2)" "$E_RST$f" \
+    "$E_TXT" "$(pad "${B_NOM[i]}" 16)" "$E_RST$f" \
     "$cx" "$(rpad "${B_CONEX[i]}" 5)" \
-    "$col" "$(pad "${B_ESTADO[i]}" 10)" "$E_RST" \
+    "$col" "$(pad "${B_ESTADO[i]}" 10)" "$E_RST$f" \
     "$E_MUT" "$(pad "$de" 10)" \
-    "$E_MUT" "$(pad "$mo" 19)" "$E_RST")"
+    "$E_MUT" "$(pad "$mo" 19)" "$E_RST$f" "$E_RST")"
 }
 
 indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
@@ -364,15 +378,15 @@ pintar_lista() {
   piso_ancho
   echo
   printf '  %s%s%s\n' "$E_TXT" \
-    "$(pad 'Escribí el número de una cuenta para bloquearla o desbloquearla.' 76)" "$E_RST"
+    "$(pad 'Escribí el número de la cuenta, o la letra de una opción, y ENTER.' 76)" "$E_RST"
   printf '  %s%s%s\n' "$E_MUT" \
     "$(pad 'Bloquear no borra nada: se le guardan los días, el límite y el consumo.' 76)" "$E_RST"
   echo
-  seccion "FILTRAR" "$E_WARN"
+  seccion "OPCIONES · SE ELIGEN CON LETRA" "$E_WARN"
   echo
-  printf '  %s  %s\n' "$(opcion_f '01' '📋' 'TODAS' todas)"       "$(opcion_f '02' '✅' 'SÓLO ACTIVAS' activas)"
-  printf '  %s  %s\n' "$(opcion_f '03' '🔒' 'SÓLO BLOQUEADAS' bloqueadas)" "$(opcion '77' '⏪' 'PÁGINA ANTERIOR')"
-  printf '  %s  %s\n' "$(opcion   '88' '⏩' 'PÁGINA SIGUIENTE')"  "$(pad '' 37)"
+  printf '  %s  %s\n' "$(opcion_f 'A' '📋' 'TODAS' todas)"       "$(opcion_f 'B' '✅' 'SÓLO ACTIVAS' activas)"
+  printf '  %s  %s\n' "$(opcion_f 'C' '🔒' 'SÓLO BLOQUEADAS' bloqueadas)" "$(opcion 'D' '⏪' 'PÁGINA ANTERIOR')"
+  printf '  %s  %s\n' "$(opcion   'E' '⏩' 'PÁGINA SIGUIENTE')"  "$(pad '' 37)"
   opcion_salir
   echo
   linea_aviso
@@ -455,12 +469,16 @@ ejecutar() {
     lista)
       case "$entrada" in
         ""|0|00) clear; exit 0 ;;
-        1|01) FILTRO=todas;      PAGINA=0; aplicar_filtro ;;
-        2|02) FILTRO=activas;    PAGINA=0; aplicar_filtro ;;
-        3|03) FILTRO=bloqueadas; PAGINA=0; aplicar_filtro ;;
-        77) (( PAGINA > 0 )) && PAGINA=$(( PAGINA - 1 )) || AVISO="Ya estás en la primera página" ;;
-        88) (( PAGINA + 1 < $(paginas) )) && PAGINA=$(( PAGINA + 1 )) || AVISO="Ya estás en la última página" ;;
+        a|A) FILTRO=todas;      PAGINA=0; aplicar_filtro ;;
+        b|B) FILTRO=activas;    PAGINA=0; aplicar_filtro ;;
+        c|C) FILTRO=bloqueadas; PAGINA=0; aplicar_filtro ;;
+        d|D) (( PAGINA > 0 )) && PAGINA=$(( PAGINA - 1 )) || AVISO="Ya estás en la primera página" ;;
+        e|E) (( PAGINA + 1 < $(paginas) )) && PAGINA=$(( PAGINA + 1 )) || AVISO="Ya estás en la última página" ;;
         *)
+          # Los NÚMEROS son siempre cuentas y las LETRAS son siempre opciones.
+          # Por eso las de abajo son A, B, C y no 01, 02, 03: la lista numera
+          # de corrido, así que en la página 2 la primera fila es la 11 y
+          # cualquier opción numerada terminaría pisándose con una cuenta.
           if [[ "$entrada" =~ ^[0-9]+$ ]]; then
             idx=$(( 10#$entrada - 1 ))
             if (( idx >= 0 && idx < ${#V_IDX[@]} )); then
@@ -471,8 +489,8 @@ ejecutar() {
                 activa)    PANTALLA=motivo ;;
                 *)         AVISO="$SEL_USR no tiene contraseña: no hay nada que bloquear"; SEL_USR="" ;;
               esac
-            else AVISO="El número $entrada no está en la lista"; fi
-          else AVISO="Escribí el número de una cuenta, o 00 para volver"; fi ;;
+            else AVISO="No hay ninguna cuenta con el número $entrada"; fi
+          else AVISO="Los números son cuentas y las letras son opciones"; fi ;;
       esac ;;
 
     motivo)
@@ -498,7 +516,11 @@ procesar() {
   case "$1" in
     "")            ejecutar "$BUF"; BUF="" ;;
     $'\177'|$'\b') BUF="${BUF%?}" ;;
+    # Números para las cuentas, letras para las opciones. Una letra reemplaza
+    # lo que hubiera: nadie escribe "3a", y si se equivocó de tecla es más
+    # cómodo que se pise sola que tener que borrar.
     [0-9])         (( ${#BUF} < 4 )) && BUF="$BUF$1" ;;
+    [a-eA-E])      BUF="$1" ;;
     $'\e')         read -rsn2 -t 0.05 _ || true ;;
   esac
 }

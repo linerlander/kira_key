@@ -281,6 +281,9 @@ actualizar() {
   paso 5 curso
   if [ -z "${DEMO:-}" ]; then
     systemctl daemon-reload 2>/dev/null; systemctl restart kira 2>/dev/null
+    # El bot corre directo desde el repo: sin reiniciarlo seguiría con el
+    # código viejo en memoria. try-restart no lo prende si estaba apagado.
+    systemctl try-restart kira-bot 2>/dev/null
   else sleep 0.3; fi
   paso 5 ok "al día"
 

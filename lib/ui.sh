@@ -287,6 +287,9 @@ kira_purgar_demos() { # $1 = carpeta del panel
     if (( ahora >= t )); then
       userdel "$u" 2>/dev/null
       [ -w "$lim" ] && { grep -v "^$u " "$lim" > "$lim.tmp" 2>/dev/null; mv -f "$lim.tmp" "$lim"; }
+      # Las que crea un revendedor desde el bot tienen dueño: también se saca
+      [ -w "$1/db/duenos" ] && { grep -v "^$u " "$1/db/duenos" > "$1/db/.duenos.tmp" 2>/dev/null
+                                 mv -f "$1/db/.duenos.tmp" "$1/db/duenos"; }
       borrados=$(( borrados + 1 ))
     else
       printf '%s %s\n' "$u" "$t" >> "$tmp"

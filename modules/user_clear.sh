@@ -497,7 +497,7 @@ borrar_una() { # $1=nombre -> 0 ok, 1 error
   # Y se lo saca de los archivos del panel, para que no quede un límite
   # huérfano que después se le aplique a otro usuario con el mismo nombre.
   local f tmp
-  for f in "$DIR/db/limites" "$DIR/db/demos" "$DIR/db/consumo"; do
+  for f in "$DIR/db/limites" "$DIR/db/demos" "$DIR/db/consumo" "$DIR/db/duenos"; do
     [ -r "$f" ] || continue
     tmp="$f.tmp"
     grep -v "^$u " "$f" > "$tmp" 2>/dev/null

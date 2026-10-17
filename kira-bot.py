@@ -41,6 +41,7 @@ POR_PAGINA = 8
 MAX_DIAS = 3650
 MAX_LIMITE = 99
 MULTI_CORTES = 6          # cortes por hora que ya huelen a cuenta compartida
+HORA_REPORTE = 9          # a qué hora llega el reporte del día anterior
 RE_USUARIO = re.compile(r"^[a-z_][a-z0-9_-]{0,19}$")
 LINEA = "━━━━━━━━━━━━━━━━━━━━"
 esc = html.escape
@@ -74,11 +75,11 @@ def registro(txt):
 
 
 # ========================================================= CONFIGURACIÓN ====
-DEF_AVISOS = {"vence": True, "multi": True, "vps": True}
+DEF_AVISOS = {"vence": True, "multi": True, "vps": True, "reporte": True}
 
 
 def guardar_json(ruta, datos, modo=0o600):
-    os.makedirs(DB, exist_ok=True)
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
     tmp = ruta + ".tmp"
     with open(tmp, "w") as f:
         json.dump(datos, f, indent=2, ensure_ascii=False)
@@ -98,6 +99,7 @@ def _completar(c):
     c.setdefault("token", "")
     c.setdefault("admins", [])
     c.setdefault("revendedores", {})
+    c.setdefault("servidores", {})
     c.setdefault("avisos", {})
     for k, v in DEF_AVISOS.items():
         c["avisos"].setdefault(k, v)
@@ -715,6 +717,278 @@ def borrar_cuenta(nombre, uid):
     poner_par("claves", nombre, None, 0o600, crear=False)
 
 
+def poner_clave(nombre, clave):
+    """Clave nueva + se cortan las conexiones abiertas con la vieja: siguen
+    vivas y ocupan el cupo, así que al reconectar parecería que no anda."""
+    ok, err = correr(["chpasswd"], f"{nombre}:{clave}\n")
+    if not ok:
+        raise Aviso(f"No se pudo cambiar: {err}")
+    poner_par("claves", nombre, clave, 0o600)
+    try:
+        return cortar(pwd.getpwnam(nombre).pw_uid)
+    except KeyError:
+        return 0
+
+
+def poner_limite(nombre, n):
+    poner_par("limites", nombre, str(n) if n else None)
+
+
+def existe(nombre):
+    try:
+        pwd.getpwnam(nombre)
+        return True
+    except KeyError:
+        return False
+
+
+def soltar_dueno(rid):
+    """Cuando se quita un revendedor, sus cuentas pasan a ser del admin."""
+    for n, d in leer_pares("duenos").items():
+        if d == rid:
+            poner_par("duenos", n, None, crear=False)
+
+
+def purgar_demos():
+    """Borra las demos vencidas. Devuelve [(nombre, dueño)] de las borradas."""
+    cli = clientes()
+    due = leer_pares("duenos")
+    borradas = []
+    for n, v in leer_pares("demos").items():
+        v = v.split()[0] if v else ""
+        if v.isdigit() and int(v) <= time.time() and n in cli:
+            try:
+                borrar_cuenta(n, cli[n])
+                borradas.append((n, due.get(n, "")))
+            except Exception:
+                pass
+    return borradas
+
+
+def cortes_desde(desde):
+    """Nombres de las cuentas que kira-limite o el vigilante cortaron desde
+    ese momento, una vez por corte."""
+    try:
+        out = subprocess.run(["journalctl", "-t", "kira-limite", "-t", "kira-vigilante",
+                              f"--since=@{int(desde)}", "-o", "cat", "--no-pager"],
+                             capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return []
+    res = []
+    for l in out.splitlines():
+        m = re.match(r"^(\S+) (?:entró con|tenia) ", l)
+        if m and "cort" in l:
+            res.append(m.group(1))
+    return res
+
+
+def pulso():
+    """Lo que se mira cada minuto: carga y conexiones."""
+    cpu_pct(0.5)
+    con = procesos()
+    return {"cpu": cpu_pct(), "ram": ram_pct()[0], "disco": disco_pct()[0],
+            "conex": sum(len(v) for v in con.values())}
+
+
+def estado_vps():
+    p = pulso()
+    p["ram_u"], p["ram_t"] = ram_pct()[1:]
+    p["disco_u"], p["disco_t"] = disco_pct()[1:]
+    try:
+        p["up"] = float(open("/proc/uptime").read().split()[0])
+        p["carga"] = open("/proc/loadavg").read().split()[:3]
+    except Exception:
+        p["up"], p["carga"] = 0, ["?"] * 3
+    p["cuentas"] = len(clientes())
+    unidades = [("SSH", "ssh"), ("SSH", "sshd"), ("Dropbear", "dropbear"), ("SSL / TLS", "stunnel4"),
+                ("WebSocket", "kira-ws"), ("BadVPN", "kira-badvpn"), ("Vigilante", "kira-vigilante"),
+                ("Consumo", "kira-consumo")]
+    try:
+        out = subprocess.run(["systemctl", "is-active"] + [u for _, u in unidades],
+                             capture_output=True, text=True, timeout=10).stdout.split()
+    except Exception:
+        out = []
+    srv = {}
+    for (nom, _), e in zip(unidades, out):
+        srv[nom] = srv.get(nom, False) or e == "active"
+    p["servicios"] = srv
+    return p
+
+
+def foto():
+    """Lo que se guarda una vez por día para el reporte y las estadísticas:
+    qué cuentas había y cuánto llevaba gastado cada una desde siempre."""
+    tot = {}
+    for l in leer_lineas("consumo"):
+        p = l.split()
+        if len(p) >= 2 and p[1].isdigit():
+            tot[p[0]] = int(p[1])
+    return {"cuentas": {n: {"fin": x["fin"], "dueno": x["dueno"], "demo": x["demo"]}
+                        for n, x in cuentas().items()},
+            "consumo": tot}
+
+
+def velocidad():
+    """Prueba contra los servidores de velocidad de Cloudflare, que tienen
+    nodo en casi cualquier país. Cuatro descargas a la vez durante unos
+    segundos, como hacen los medidores de verdad: con una sola conexión un
+    VPS de 1 Gbps parece de 200."""
+    cab = {"User-Agent": "Mozilla/5.0 KIRA"}
+
+    def pedir(url, datos=None, t=15):
+        return urllib.request.urlopen(urllib.request.Request(url, data=datos, headers=cab), timeout=t)
+    meta = {}
+    try:
+        meta = json.loads(pedir("https://speed.cloudflare.com/meta", t=8).read().decode())
+    except Exception:
+        pass
+    pings = []
+    for _ in range(6):
+        t0 = time.time()
+        try:
+            pedir("https://speed.cloudflare.com/__down?bytes=0", t=5).read()
+            pings.append((time.time() - t0) * 1000)
+        except Exception:
+            pass
+
+    def medir(trabajo, hilos=4):
+        total = [0]
+        cand = threading.Lock()
+        t0 = time.time()
+        hs = [threading.Thread(target=trabajo, args=(total, cand, t0)) for _ in range(hilos)]
+        for h in hs:
+            h.start()
+        for h in hs:
+            h.join(20)
+        s = time.time() - t0
+        return total[0] * 8 / s / 1e6 if s > 0 else 0
+
+    def bajar(total, cand, t0):
+        try:
+            with pedir("https://speed.cloudflare.com/__down?bytes=200000000") as r:
+                while time.time() - t0 < 8:
+                    ch = r.read(262144)
+                    if not ch:
+                        break
+                    with cand:
+                        total[0] += len(ch)
+        except Exception:
+            pass
+    paquete = os.urandom(4 * 1024 * 1024)
+
+    def subir(total, cand, t0):
+        while time.time() - t0 < 8:
+            try:
+                pedir("https://speed.cloudflare.com/__up", paquete, t=12).read()
+                with cand:
+                    total[0] += len(paquete)
+            except Exception:
+                break
+    baja = medir(bajar)
+    sube = medir(subir)
+    return {"baja": round(baja), "sube": round(sube), "ping": round(min(pings)) if pings else None,
+            "ciudad": meta.get("city", ""), "pais": meta.get("country", ""),
+            "isp": meta.get("asOrganization", ""), "colo": meta.get("colo", "")}
+
+
+def ping():
+    try:
+        ver = open(os.path.join(KIRA_DIR, "VERSION")).read().strip()
+    except Exception:
+        ver = "?"
+    return {"version": ver, "host": os.uname().nodename}
+
+
+# ============================================================ SERVIDORES ====
+# Un solo bot maneja varios VPS. El que corre el bot es "local"; a los demás
+# se les habla por SSH con una llave propia, ejecutando ESTE MISMO archivo en
+# el otro lado con --rpc. Así no hay que abrir puertos nuevos ni dejar otro
+# servicio escuchando: viaja cifrado por el SSH que ya tienen.
+#
+# Cada operación sobre el sistema (crear, renovar, listar…) se llama igual que
+# siempre, pero pasa por un envoltorio que mira a qué servidor apunta el chat
+# y, si no es el local, la manda por SSH. Las pantallas no se enteran.
+LLAVE = "/root/.ssh/kira_ed25519"
+ACTUAL = threading.local()
+
+
+def srv_id():
+    return getattr(ACTUAL, "srv", "local")
+
+
+def nombre_srv(sid=None, c=None):
+    sid = sid or srv_id()
+    c = c or leer_conf()
+    if sid == "local":
+        return c.get("nombre_local") or "Principal"
+    return c.get("servidores", {}).get(sid, {}).get("nombre", sid)
+
+
+def lista_srv(c=None):
+    c = c or leer_conf()
+    return ["local"] + sorted(c.get("servidores", {}), key=lambda s: c["servidores"][s].get("nombre", s))
+
+
+def rpc(sid, op, a, kw):
+    s = leer_conf().get("servidores", {}).get(sid)
+    if s is None:
+        raise Aviso("Ese servidor ya no está en la lista")
+    d = s.get("dir") or "/root/kira_key"
+    q = lambda v: "'" + str(v).replace("'", "'\\''") + "'"
+    # ControlMaster deja la conexión abierta diez minutos: la primera orden
+    # tarda un segundo y las siguientes salen casi al instante.
+    cmd = ["ssh", "-i", LLAVE, "-p", str(s.get("puerto", 22)),
+           "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+           "-o", "StrictHostKeyChecking=accept-new",
+           "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/kira-ssh-%C", "-o", "ControlPersist=10m",
+           f"root@{s['host']}", f"KIRA_DIR={q(d)} python3 {q(d + '/kira-bot.py')} --rpc"]
+    try:
+        p = subprocess.run(cmd, input=json.dumps({"op": op, "a": a, "kw": kw}),
+                           capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired:
+        raise Aviso(f"{s.get('nombre', sid)} tardó demasiado en contestar")
+    try:
+        r = json.loads(p.stdout.strip().splitlines()[-1])
+    except Exception:
+        err = (p.stderr or "").strip().splitlines()
+        raise Aviso(f"{s.get('nombre', sid)} no responde" + (f": {err[-1][:80]}" if err else ""))
+    if not r.get("ok"):
+        raise Aviso(r.get("error") or "falló en el otro servidor")
+    return r.get("r")
+
+
+OPS = {f.__name__: f for f in (
+    cuentas, crear_cuenta, renovar, cortar, bloquear, desbloquear, borrar_cuenta,
+    poner_clave, poner_limite, existe, soltar_dueno, purgar_demos, cortes_desde,
+    pulso, estado_vps, foto, velocidad, ping, puertos, ip_publica)}
+
+
+def _envolver(op, fn):
+    def f(*a, **kw):
+        sid = srv_id()
+        if sid == "local":
+            return fn(*a, **kw)
+        return rpc(sid, op, list(a), kw)
+    f.__name__ = op
+    return f
+
+
+for _op, _fn in list(OPS.items()):
+    globals()[_op] = _envolver(_op, _fn)
+
+
+def atender_rpc():
+    """El otro lado: lee la orden por stdin, la hace acá y contesta en JSON."""
+    try:
+        pedido = json.loads(sys.stdin.read())
+        r = OPS[pedido["op"]](*pedido.get("a", []), **pedido.get("kw", {}))
+        print(json.dumps({"ok": True, "r": r}, ensure_ascii=False))
+    except Aviso as e:
+        print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}, ensure_ascii=False))
+
+
 # ============================================================== PANTALLAS ===
 def pant_inicio(tg):
     c = leer_conf()
@@ -728,16 +1002,20 @@ def pant_inicio(tg):
     if r == "rev":
         pares.append(("CREDITOS", creditos(tg, c)))
     hola = "administrador" if r == "admin" else "revendedor"
+    varios = len(lista_srv(c)) > 1
     t = [f"✦ {negrita('KIRA')} ✦   <i>{versal('panel de cuentas')}</i>",
-         cita(f"🌐 <code>{ip_publica()}</code>",
+         cita(f"📍 <b>{esc(nombre_srv(None, c))}</b>   ·   🌐 <code>{ip_publica()}</code>" if varios
+              else f"🌐 <code>{ip_publica()}</code>",
               f"🕐 {time.strftime('%d/%m · %H:%M')}   ·   👑 {hola}"),
          tabla(pares, 22),
          "<i>Elegí una opción, o escribí un nombre para buscarlo.</i>"]
     filas = [[b("➕ Nueva cuenta", "n"), b(f"🎁 Demo {DEMO_MIN} min", "demo")],
              [b("📋 Cuentas", "L:t:0"), b(f"📡 Conectados · {online}", "on")]]
+    if varios:
+        filas.append([b(f"🌎 Cambiar de servidor · {len(lista_srv(c))}", "sv")])
     if r == "admin":
-        filas += [[b("🖥 Servidor", "vps"), b("🔔 Avisos", "av")],
-                  [b("🤝 Revendedores", "rv")]]
+        filas += [[b("🖥 Servidor", "vps"), b("📈 Estadísticas", "st")],
+                  [b("🤝 Revendedores", "rv"), b("🔔 Avisos", "av")]]
     filas.append([b("🔄 Actualizar", "m")])
     return "\n".join(t), filas
 
@@ -898,47 +1176,276 @@ def pant_conectados(tg):
 
 
 def pant_vps():
-    cpu = cpu_pct(0.4)
-    rp, ru, rt = ram_pct()
-    dp, du, dt = disco_pct()
-    try:
-        up = float(open("/proc/uptime").read().split()[0])
-        carga = open("/proc/loadavg").read().split()[:3]
-    except Exception:
-        up, carga = 0, ["?"] * 3
-    todas = cuentas()
-    conex = sum(x["conex"] for x in todas.values())
-    unidades = [("SSH", "ssh"), ("SSH", "sshd"), ("Dropbear", "dropbear"), ("SSL / TLS", "stunnel4"),
-                ("WebSocket", "kira-ws"), ("BadVPN", "kira-badvpn"), ("Vigilante", "kira-vigilante"),
-                ("Consumo", "kira-consumo")]
-    try:
-        out = subprocess.run(["systemctl", "is-active"] + [u for _, u in unidades],
-                             capture_output=True, text=True, timeout=10).stdout.split()
-    except Exception:
-        out = []
-    srv = {}
-    for (nom, _), e in zip(unidades, out):
-        srv[nom] = srv.get(nom, False) or e == "active"
+    e = estado_vps()
+    cpu, rp, dp = e["cpu"], e["ram"], e["disco"]
+    up = e["up"]
+
     def fila(nom, pct):
         return f"{nom:<6}{tira(pct, 12)} {pct:>3}%"
     peor = max(cpu, rp, dp)
-    salud = "🟢 todo en orden" if peor < 70 else ("🟡 exigido" if peor < 90 else "🔴 al límite")
-    t = [titulo("🖥", "SERVIDOR", salud.split(" ", 1)[1]),
+    salud = "todo en orden" if peor < 70 else ("exigido" if peor < 90 else "al limite")
+    t = [titulo("🖥", nombre_srv().upper(), salud),
          "<pre>" + "\n".join([fila("CPU", cpu), fila("RAM", rp), fila("DISCO", dp)]) + "</pre>",
-         cita(f"🧠 RAM  {bytes_hum(ru)} de {bytes_hum(rt)}",
-              f"💾 Disco  {bytes_hum(du)} de {bytes_hum(dt)}",
-              f"⏱ Encendido  <b>{int(up // 86400)}d {int(up % 86400 // 3600)}h</b>   ·   carga {' '.join(carga)}",
-              f"👥 {len(todas)} cuentas   ·   🔌 {conex} conexiones"),
+         cita(f"🌐 <code>{ip_publica()}</code>",
+              f"🧠 RAM  {bytes_hum(e['ram_u'])} de {bytes_hum(e['ram_t'])}",
+              f"💾 Disco  {bytes_hum(e['disco_u'])} de {bytes_hum(e['disco_t'])}",
+              f"⏱ Encendido  <b>{int(up // 86400)}d {int(up % 86400 // 3600)}h</b>   ·   carga {' '.join(e['carga'])}",
+              f"👥 {e['cuentas']} cuentas   ·   🔌 {e['conex']} conexiones"),
          f"⚙️ {versal('servicios')}",
-         cita("   ".join(f"{'🟢' if on else '⚫'} {nom}" for nom, on in srv.items())
+         cita("   ".join(f"{'🟢' if on else '⚫'} {nom}" for nom, on in e["servicios"].items())
               or "<i>No pude leer el estado de los servicios.</i>")]
-    return "\n".join(t), [[b("🔄 Actualizar", "vps"), b("🏠 Inicio", "m")]]
+    return "\n".join(t), [[b("🚀 Velocidad", "vel"), b("📈 Estadísticas", "st")],
+                          [b("🔄 Actualizar", "vps"), b("🏠 Inicio", "m")]]
+
+
+# ============================================================ VELOCIDAD =====
+def medir_velocidad(chat, mid, sid):
+    ACTUAL.srv = sid
+    try:
+        v = velocidad()
+    except Exception as e:
+        editar(chat, mid, f"{titulo('🚀', 'VELOCIDAD', nombre_srv(sid))}\n" + cita(f"⚠️ {esc(str(e))}"),
+               [[b("🔁 Probar de nuevo", "vel"), b("🏠 Inicio", "m")]])
+        return
+    # La barra se mide contra 1 Gbps, que es lo que trae un VPS común
+    def fila(nom, mbps):
+        return f"{nom:<7}{tira(min(100, mbps / 10), 12)} {mbps:>5} Mbps"
+    donde = ", ".join(x for x in (v.get("ciudad"), v.get("pais")) if x)
+    t = [titulo("🚀", "VELOCIDAD", nombre_srv(sid)),
+         "<pre>" + "\n".join([fila("BAJADA", v["baja"]), fila("SUBIDA", v["sube"])]) + "</pre>",
+         cita(f"📶 Ping  <b>{v['ping']} ms</b>" if v.get("ping") is not None else "📶 Ping  —",
+              f"🏢 {esc(v['isp'])}" if v.get("isp") else None,
+              f"📍 Medido contra Cloudflare {esc(v.get('colo', ''))} · {esc(donde)}" if donde else None),
+         f"<i>{time.strftime('%d/%m %H:%M')} · medido desde el VPS, no desde tu celular.</i>"]
+    editar(chat, mid, "\n".join(t), [[b("🔁 Probar de nuevo", "vel"), b("🖥 Servidor", "vps")],
+                                     [b("🏠 Inicio", "m")]])
+
+
+# ============================================================== HISTORIA ====
+# Lo necesario para el reporte y los gráficos se guarda en el VPS del bot,
+# por servidor, en db/historia/<servidor>/:
+#   AAAA-MM-DD.json  la foto de cada día (qué cuentas había y su consumo)
+#   conexiones.json  conexiones por hora de cada día: suma y cantidad de
+#                    muestras, para sacar el promedio
+# Se guardan 40 días: alcanza para el mes y no crece sin fin.
+SRV_DE = {}         # chat -> servidor que está mirando
+DIAS_HISTORIA = 40
+
+
+def ruta_foto(sid, dia):
+    return os.path.join(DB, "historia", sid, f"{dia}.json")
+
+
+def leer_foto(sid, dia):
+    return _cargar(ruta_foto(sid, dia)) or None
+
+
+def anotar_conexiones(sid, n):
+    ruta_c = os.path.join(DB, "historia", sid, "conexiones.json")
+    os.makedirs(os.path.dirname(ruta_c), exist_ok=True)
+    d = _cargar(ruta_c)
+    dia, hora = time.strftime("%Y-%m-%d"), time.localtime().tm_hour
+    suma, cant = d.setdefault(dia, [[0] * 24, [0] * 24])
+    suma[hora] += n
+    cant[hora] += 1
+    for k in sorted(d)[:-DIAS_HISTORIA]:
+        del d[k]
+    guardar_json(ruta_c, d, 0o600)
+    # Las fotos viejas también se van
+    carpeta = os.path.dirname(ruta_c)
+    fotos = sorted(f for f in os.listdir(carpeta) if re.match(r"^\d{4}-\d\d-\d\d\.json$", f))
+    for f in fotos[:-DIAS_HISTORIA]:
+        try:
+            os.remove(os.path.join(carpeta, f))
+        except Exception:
+            pass
+
+
+def evento(tipo, tg, cuenta, creditos_usados):
+    """Lo que hace cada uno desde el bot, para el reporte: créditos vendidos
+    por revendedor y cuentas creadas por quién."""
+    try:
+        os.makedirs(DB, exist_ok=True)
+        with open(os.path.join(DB, "eventos.jsonl"), "a") as f:
+            f.write(json.dumps({"t": int(time.time()), "tipo": tipo, "tg": tg, "srv": srv_id(),
+                                "cuenta": cuenta, "creditos": creditos_usados}) + "\n")
+    except Exception:
+        pass
+
+
+def eventos_del(dia):
+    res = []
+    try:
+        with open(os.path.join(DB, "eventos.jsonl")) as f:
+            for l in f:
+                try:
+                    e = json.loads(l)
+                except Exception:
+                    continue
+                if time.strftime("%Y-%m-%d", time.localtime(e.get("t", 0))) == dia:
+                    res.append(e)
+    except Exception:
+        pass
+    return res
+
+
+def _dia(desplazamiento):
+    return (datetime.date.today() + datetime.timedelta(days=desplazamiento)).isoformat()
+
+
+def reporte_dia():
+    """Cómo fue AYER: se compara la foto de hoy (sacada pasada la medianoche)
+    con la de ayer. Lo que está en la de hoy y no en la de ayer, se creó ayer;
+    la diferencia del consumo acumulado es lo que se gastó ayer."""
+    c = leer_conf()
+    ayer, hoy = _dia(-1), _dia(0)
+    ini_ayer = time.mktime(datetime.date.today().timetuple()) - 86400
+    t = [f"📊 {negrita('REPORTE')}   <i>{versal('ayer')} {ayer[8:]}/{ayer[5:7]}</i>"]
+    tops = []
+    sin_datos = []
+    tot_nuevas = tot_venc = tot_bytes = 0
+    for sid in lista_srv(c):
+        f_hoy, f_ayer = leer_foto(sid, hoy), leer_foto(sid, ayer)
+        nom = nombre_srv(sid, c)
+        if not f_hoy or not f_ayer:
+            sin_datos.append(nom)
+            continue
+        ch, ca = f_hoy["cuentas"], f_ayer["cuentas"]
+        nuevas = [n for n, x in ch.items() if n not in ca and not x.get("demo")]
+        venc = [n for n, x in ch.items()
+                if not x.get("demo") and x.get("fin") and ini_ayer <= x["fin"] < ini_ayer + 86400]
+        gasto = {}
+        for n, v in f_hoy["consumo"].items():
+            d = v - f_ayer["consumo"].get(n, 0)
+            gasto[n] = d if d >= 0 else v       # si se reinició el registro, cuenta lo de hoy
+        total = sum(gasto.values())
+        tot_nuevas += len(nuevas)
+        tot_venc += len(venc)
+        tot_bytes += total
+        tops += [(g, n, nom) for n, g in gasto.items() if g > 0]
+        t.append(cita(f"📍 <b>{esc(nom)}</b>",
+                      f"➕ {len(nuevas)} nuevas   ·   ⌛ {len(venc)} vencieron   ·   📶 {bytes_hum(total)}",
+                      f"<i>{', '.join(nuevas[:8])}{'…' if len(nuevas) > 8 else ''}</i>" if nuevas else None))
+    if len(lista_srv(c)) > 1 and (tot_nuevas or tot_bytes):
+        t.append(tabla([("NUEVAS", tot_nuevas), ("VENCIERON", tot_venc), ("CONSUMO", bytes_hum(tot_bytes))], 24))
+    if tops:
+        tops.sort(reverse=True)
+        varios = len(lista_srv(c)) > 1
+        t.append(f"🏆 {versal('los que mas consumieron')}\n"
+                 + tabla([(n if not varios else f"{n} ({s[:6]})", bytes_hum(g)) for g, n, s in tops[:5]], 28))
+    ventas = {}
+    for e in eventos_del(ayer):
+        if e.get("creditos"):
+            ventas[str(e["tg"])] = ventas.get(str(e["tg"]), 0) + int(e["creditos"])
+    if ventas:
+        t.append(f"💳 {versal('creditos usados por revendedor')}\n" + tabla(
+            [(c["revendedores"].get(k, {}).get("nombre") or k, v)
+             for k, v in sorted(ventas.items(), key=lambda kv: -kv[1])], 24))
+    if sin_datos:
+        t.append(f"<i>⏳ Sin datos de ayer todavía en: {esc(', '.join(sin_datos))}. "
+                 "El bot guarda una foto por día: el reporte completo sale a partir del segundo día.</i>")
+    return "\n".join(t), [[b("📈 Estadísticas", "st"), b("🏠 Inicio", "m")]]
+
+
+# ========================================================= ESTADÍSTICAS =====
+def grafico(vals, alto=6):
+    """Barras verticales en letra de ancho fijo: una columna por hora."""
+    m = max(vals) or 1
+    medios = " ▁▂▃▄▅▆▇█"
+    filas = []
+    for r in range(alto, 0, -1):
+        linea = ""
+        for v in vals:
+            h = v / m * alto
+            if h >= r:
+                linea += "█"
+            elif h > r - 1:
+                linea += medios[max(1, int((h - (r - 1)) * 8))]
+            else:
+                linea += " "
+        filas.append(linea)
+    filas.append("└" + "─" * (len(vals) - 1))
+    filas.append("0     6     12    18   ")
+    return filas
+
+
+def pant_estadisticas():
+    sid = srv_id()
+    c = leer_conf()
+    t = [titulo("📈", "ESTADISTICAS", nombre_srv(sid, c))]
+
+    # 1. Cuentas nuevas por semana de este mes, comparando foto con foto
+    hoy = datetime.date.today()
+    semanas = [0] * 5
+    hubo_datos = False
+    for d in range(1, hoy.day + 1):
+        dia = hoy.replace(day=d)
+        f1, f0 = leer_foto(sid, dia.isoformat()), leer_foto(sid, (dia - datetime.timedelta(days=1)).isoformat())
+        if not f1 or not f0:
+            continue
+        hubo_datos = True
+        nuevas = sum(1 for n, x in f1["cuentas"].items() if n not in f0["cuentas"] and not x.get("demo"))
+        semanas[min(4, (d - 1) // 7)] += nuevas
+    if hubo_datos:
+        m = max(semanas) or 1
+        t.append(f"➕ {versal('cuentas nuevas por semana')}\n<pre>" + "\n".join(
+            f"SEM {i + 1}  {tira(v * 100 / m, 12)} {v:>3}" for i, v in enumerate(semanas)
+            if i * 7 < hoy.day) + "</pre>")
+    else:
+        t.append(cita("➕ <i>Cuentas nuevas por semana: el bot empieza a juntarlas desde hoy.</i>"))
+
+    # 2. Conexiones por hora: el promedio de cada hora en los últimos 30 días
+    d = _cargar(os.path.join(DB, "historia", sid, "conexiones.json"))
+    suma, cant = [0] * 24, [0] * 24
+    for dia in sorted(d)[-30:]:
+        for h in range(24):
+            suma[h] += d[dia][0][h]
+            cant[h] += d[dia][1][h]
+    prom = [round(suma[h] / cant[h]) if cant[h] else 0 for h in range(24)]
+    if any(cant):
+        pico = max(range(24), key=lambda h: prom[h])
+        t.append(f"📡 {versal('conexiones por hora')}\n<pre>" + "\n".join(grafico(prom)) + "</pre>"
+                 + cita(f"🔝 Hora pico <b>{pico:02d}:00</b> con <b>{prom[pico]}</b> conexiones en promedio",
+                        f"🌙 La más tranquila: {min(range(24), key=lambda h: prom[h] if cant[h] else 1e9):02d}:00"))
+    else:
+        t.append(cita("📡 <i>Conexiones por hora: se mide cada minuto, el gráfico aparece en una hora.</i>"))
+
+    # 3. Los diez que más consumieron este mes
+    todas = sorted(cuentas().values(), key=lambda x: -x["consumo"])
+    top = [x for x in todas if x["consumo"] > 0][:10]
+    if top:
+        t.append(f"🏆 {versal('top 10 consumo del mes')}\n"
+                 + tabla([(f"{i + 1}. {x['nombre']}", bytes_hum(x["consumo"])) for i, x in enumerate(top)], 28))
+    else:
+        t.append(cita("🏆 <i>Sin consumo anotado este mes. ¿Está activa la contabilidad (01 → 07 en el panel)?</i>"))
+    return "\n".join(t), [[b("📊 Reporte de ayer", "rep"), b("🔄", "st")],
+                          [b("🖥 Servidor", "vps"), b("🏠 Inicio", "m")]]
+
+
+# ============================================================= SERVIDORES ===
+def pant_servidores():
+    c = leer_conf()
+    actual = srv_id()
+    t = [titulo("🌎", "SERVIDORES"),
+         cita(f"📍 Estás en <b>{esc(nombre_srv(actual, c))}</b>",
+              "<i>Lo que hagas (crear, renovar, listar) va al servidor elegido.</i>")]
+    filas = []
+    for sid in lista_srv(c):
+        marca = "📍" if sid == actual else "🖥"
+        s = c.get("servidores", {}).get(sid, {})
+        extra = f"  ·  {s['host']}" if s.get("host") else "  ·  este VPS"
+        filas.append([b(f"{marca} {nombre_srv(sid, c)}{extra}", f"sv:{sid}")])
+    if len(filas) == 1:
+        t.append("<i>Para sumar otro VPS: en el panel de este, 01 → 11 → opción 06.</i>")
+    filas.append([b("🏠 Inicio", "m")])
+    return "\n".join(t), filas
 
 
 AVISOS_TXT = {
     "vence": ("⏳ Cuentas por vencer", "Te avisa cuando a una cuenta le quedan menos de 24 horas."),
     "multi": ("🚨 Cuentas compartidas", f"Si a una cuenta le cortan {MULTI_CORTES} conexiones en una hora por pasarse del límite, la están compartiendo."),
-    "vps": ("🔥 Servidor exigido", "CPU, RAM o disco por encima del 90%."),
+    "vps": ("🔥 Servidor exigido", "CPU, RAM o disco por encima del 90%. También avisa si un VPS deja de contestar."),
+    "reporte": ("📊 Reporte diario", f"A las {HORA_REPORTE}:00, cómo fue el día anterior: cuentas nuevas, vencidas, consumo y créditos vendidos."),
 }
 
 
@@ -1046,11 +1553,8 @@ def nueva_texto(chat, tg, st, txt, quien):
         u = txt.strip().lower()
         if not RE_USUARIO.match(u):
             return pintar_nueva(chat, tg, st, "Sólo minúsculas, números, guion y guion bajo (máx. 20, sin empezar con número)")
-        try:
-            pwd.getpwnam(u)
+        if existe(u):
             return pintar_nueva(chat, tg, st, f"<b>{u}</b> ya existe. Probá con otro.")
-        except KeyError:
-            pass
         d["usuario"] = u
         st["paso"] = "clave"
     elif paso == "clave":
@@ -1087,8 +1591,9 @@ def nueva_confirmar(chat, tg, st, quien):
             devolver(tg, costo)
         return pintar_nueva(chat, tg, st, err)
     CHARLA.pop(chat, None)
-    registro(f"{quien} creo {d['usuario']} ({d['dias']} dias, {d['limite']} disp.)"
+    registro(f"{quien} creo {d['usuario']} en {nombre_srv()} ({d['dias']} dias, {d['limite']} disp.)"
              + (f" -{costo} creditos" if costo else ""))
+    evento("crear", tg, d["usuario"], costo)
     x = cuentas()[d["usuario"]]
     arriba = "✅ <b>Cuenta creada.</b> Abajo te mandé la ficha para reenviarle al cliente."
     if costo:
@@ -1108,12 +1613,9 @@ def hacer_demo(chat, tg, msg, quien):
     nombre = ""
     for _ in range(20):
         cand = f"demo{secrets.randbelow(9000) + 1000}"
-        if cand not in todas:
-            try:
-                pwd.getpwnam(cand)
-            except KeyError:
-                nombre = cand
-                break
+        if cand not in todas and not existe(cand):
+            nombre = cand
+            break
     if not nombre:
         raise Aviso("No encontré un nombre libre para la demo")
     clave = clave_azar()
@@ -1123,7 +1625,8 @@ def hacer_demo(chat, tg, msg, quien):
     err = crear_cuenta(nombre, clave, vence, 1, str(tg) if r == "rev" else "", fin)
     if err:
         raise Aviso(err)
-    registro(f"{quien} creo la demo {nombre}")
+    registro(f"{quien} creo la demo {nombre} en {nombre_srv()}")
+    evento("demo", tg, nombre, 0)
     x = cuentas()[nombre]
     t, f = pant_cuenta(tg, x, f"🎁 <b>Demo creada.</b> Se borra sola en {DEMO_MIN} minutos.")
     editar(chat, msg, t, f)
@@ -1172,13 +1675,7 @@ def pintar_rev(chat, st, aviso=""):
 
 
 def cambiar_clave(chat, mid, tg, x, clave, quien):
-    ok, err = correr(["chpasswd"], f"{x['nombre']}:{clave}\n")
-    if not ok:
-        raise Aviso(f"No se pudo cambiar: {err}")
-    poner_par("claves", x["nombre"], clave, 0o600)
-    # Las conexiones abiertas siguen vivas con la clave vieja y ocupan el
-    # cupo: al reconectar con la nueva parecería que no anda. Se cortan.
-    n = cortar(x["uid"])
+    n = poner_clave(x["nombre"], clave)
     registro(f"{quien} cambio la clave de {x['nombre']}")
     t, f = pant_cuenta(tg, obtener(tg, x["nombre"]),
                        cita(f"🔑 Clave nueva  <code>{esc(clave)}</code>",
@@ -1269,6 +1766,7 @@ def despachar(chat, mid, tg, r, data, quien):
                 devolver(tg, costo)
             raise
         registro(f"{quien} renovo {x['nombre']} {dias} dias" + (f" -{costo} creditos" if costo else ""))
+        evento("renovar", tg, x["nombre"], costo)
         t, f = pant_cuenta(tg, obtener(tg, p[1]), f"✅ Renovada <b>{dias} días</b>."
                            + (f" Se descontaron {costo} créditos." if costo else ""))
         editar(chat, mid, t, f)
@@ -1296,8 +1794,15 @@ def despachar(chat, mid, tg, r, data, quien):
             costo = max(1, -(-int(max(0, x["fin"] - time.time())) // 86400))
             if not cobrar(tg, costo):
                 raise Aviso(f"Sumar un dispositivo cuesta {costo} créditos y tenés {creditos(tg)}")
-        poner_par("limites", x["nombre"], str(nuevo))
+        try:
+            poner_limite(x["nombre"], nuevo)
+        except Aviso:
+            if costo:
+                devolver(tg, costo)
+            raise
         registro(f"{quien} puso {x['nombre']} en {nuevo} disp.")
+        if costo:
+            evento("limite", tg, x["nombre"], costo)
         t, f = pant_cuenta(tg, obtener(tg, p[1]))
         editar(chat, mid, t, f)
         return f"📱 Límite: {nuevo}" + (f" · -{costo} créditos" if costo else "")
@@ -1373,11 +1878,45 @@ def despachar(chat, mid, tg, r, data, quien):
         CHARLA.pop(chat, None)
         return hacer_demo(chat, tg, mid, quien)
 
+    # ---- servidores
+    elif k == "sv":
+        if len(p) > 1:
+            if p[1] not in lista_srv():
+                raise Aviso("Ese servidor ya no está en la lista")
+            antes = srv_id()
+            ACTUAL.srv = p[1]
+            try:
+                ping()
+            except Aviso:
+                ACTUAL.srv = antes
+                raise
+            SRV_DE[chat] = p[1]
+            t, f = pant_inicio(tg)
+            editar(chat, mid, t, f)
+            return f"📍 Ahora estás en {nombre_srv(p[1])}"
+        t, f = pant_servidores()
+        editar(chat, mid, t, f)
+
     # ---- sólo admin
     elif r != "admin":
         raise Aviso("Eso es sólo para el administrador")
     elif k == "vps":
         t, f = pant_vps()
+        editar(chat, mid, t, f)
+    elif k == "vel":
+        # Tarda unos 20 segundos: va en un hilo aparte para que el bot siga
+        # contestando a los demás mientras tanto.
+        sid = srv_id()
+        editar(chat, mid, f"{titulo('🚀', 'VELOCIDAD', nombre_srv(sid))}\n"
+                          + cita("⏳ <b>Midiendo…</b>", "<i>Bajada y subida, unos 20 segundos.</i>"))
+        threading.Thread(target=medir_velocidad, args=(chat, mid, sid), daemon=True).start()
+        return "🚀 Midiendo"
+    elif k == "st":
+        t, f = pant_estadisticas()
+        editar(chat, mid, t, f)
+    elif k == "rep":
+        editar(chat, mid, f"{titulo('📊', 'REPORTE')}\n" + cita("⏳ <i>Juntando los datos de los servidores…</i>"))
+        t, f = reporte_dia()
         editar(chat, mid, t, f)
     elif k == "av":
         if len(p) > 1 and p[1] in DEF_AVISOS:
@@ -1411,9 +1950,15 @@ def despachar(chat, mid, tg, r, data, quien):
     elif k == "rqq":
         rid = p[1]
         nom = cambiar_conf(lambda c: (c["revendedores"].pop(rid, None) or {}).get("nombre") or rid)
-        for n, x in cuentas().items():
-            if x["dueno"] == rid:
-                poner_par("duenos", n, None, crear=False)
+        # Sus cuentas pueden estar en cualquiera de los servidores
+        antes = srv_id()
+        for sid in lista_srv():
+            ACTUAL.srv = sid
+            try:
+                soltar_dueno(rid)
+            except Aviso as e:
+                registro(f"no se pudo soltar las cuentas de {nom} en {nombre_srv(sid)}: {e}")
+        ACTUAL.srv = antes
         registro(f"{quien} quito al revendedor {nom}")
         t, f = pant_revendedores()
         editar(chat, mid, t, f)
@@ -1425,6 +1970,14 @@ def despachar(chat, mid, tg, r, data, quien):
     return None
 
 
+def fijar_servidor(chat):
+    sid = SRV_DE.get(chat, "local")
+    if sid not in lista_srv():
+        sid = "local"
+        SRV_DE.pop(chat, None)
+    ACTUAL.srv = sid
+
+
 def manejar_boton(q):
     tg = q["from"]["id"]
     msg = q.get("message") or {}
@@ -1432,8 +1985,17 @@ def manejar_boton(q):
     if not chat or rol(tg) is None:
         api("answerCallbackQuery", callback_query_id=q["id"], text="⛔ No autorizado")
         return
+    data = q.get("data", "")
+    fijar_servidor(chat)
+    # Los botones de los avisos llevan el servidor adelante ("@s2|R:pepe:30"):
+    # el aviso puede ser de un VPS distinto al que estás mirando.
+    if data.startswith("@") and "|" in data:
+        sid, data = data[1:].split("|", 1)
+        if sid in lista_srv():
+            SRV_DE[chat] = sid
+            ACTUAL.srv = sid
     try:
-        aviso = despachar(chat, msg.get("message_id"), tg, rol(tg), q.get("data", ""), nombre_de(q["from"]))
+        aviso = despachar(chat, msg.get("message_id"), tg, rol(tg), data, nombre_de(q["from"]))
     except Aviso as e:
         aviso = f"⚠️ {e}"
     except Exception as e:
@@ -1459,6 +2021,7 @@ def manejar_mensaje(m):
                      "Pasáselo al dueño del servidor para que te habilite.")
         return
     quien = nombre_de(m["from"])
+    fijar_servidor(chat)
     if texto.startswith("/"):
         cmd = texto.split()[0].split("@")[0].lower()
         CHARLA.pop(chat, None)
@@ -1522,93 +2085,109 @@ def avisar(c, dueno, texto, filas=None, admins=True):
 
 
 def hilo_avisos():
+    """Cada minuto, servidor por servidor: borra demos vencidas, avisa lo que
+    haya que avisar y va guardando la historia para el reporte y los
+    gráficos. Un servidor caído no frena a los demás."""
     est = _cargar(ESTADO)
-    vence_av = est.get("vence", {})
-    hist, multi_av = {}, {}
-    vps_av = 0.0
-    desde = int(time.time())
-    cpu_pct()                    # primera muestra: la siguiente ya mide un intervalo
+    vence_av = est.get("vence", {})          # "sid:usuario" -> día en que se avisó
+    hist, multi_av, vps_av, caido_av = {}, {}, {}, {}
+    desde = {}
     while True:
         time.sleep(60)
-        try:
-            c = leer_conf()
-            av = c["avisos"]
-            ahora = time.time()
+        c = leer_conf()
+        av = c["avisos"]
+        hoy = time.strftime("%Y-%m-%d")
+        for sid in lista_srv(c):
+            ACTUAL.srv = sid
+            nom = nombre_srv(sid, c)
+            pref = f"@{sid}|"
+            # Con un solo servidor no hace falta decir de cuál es el aviso
+            donde = f"📍 {esc(nom)}\n" if len(lista_srv(c)) > 1 else ""
+            try:
+                ahora = time.time()
 
-            # 1. Demos vencidas: se borran acá. El panel también las borra,
-            #    pero sólo cuando alguien lo abre.
-            cli = clientes()
-            due = leer_pares("duenos")
-            for n, v in leer_pares("demos").items():
-                v = v.split()[0] if v else ""
-                if v.isdigit() and int(v) <= ahora and n in cli:
-                    try:
-                        borrar_cuenta(n, cli[n])
-                        registro(f"la demo {n} termino y se borro")
-                        avisar(c, due.get(n, ""), f"⌛ La demo <b>{n}</b> terminó y se borró sola.", admins=False)
-                    except Exception as e:
-                        registro(f"no se pudo borrar la demo {n}: {e}")
+                # 1. Demos vencidas: se borran acá. El panel también las
+                #    borra, pero sólo cuando alguien lo abre.
+                for n, dueno in purgar_demos():
+                    registro(f"la demo {n} termino y se borro ({nom})")
+                    avisar(c, dueno, f"{donde}⌛ La demo <b>{n}</b> terminó y se borró sola.", admins=False)
 
-            todas = cuentas()
+                todas = cuentas()
 
-            # 2. Cuentas que vencen en menos de 24 horas, una vez por día
-            if av.get("vence"):
-                hoy = time.strftime("%Y-%m-%d")
-                for n, x in todas.items():
-                    if x["demo"] or not x["fin"] or x["estado"] in ("bloqueada", "sin clave"):
-                        continue
-                    falta = x["fin"] - ahora
-                    if 0 < falta <= 86400 and vence_av.get(n) != hoy:
-                        vence_av[n] = hoy
-                        avisar(c, x["dueno"], f"⏳ <b>{n}</b> vence en <b>{restante(falta)}</b>.\n"
-                                              "¿Lo renovás?",
-                               [[b("➕30 días", f"R:{n}:30"), b("👤 Ver", f"U:{n}")]], admins=False)
-                vence_av = {k: v for k, v in vence_av.items() if k in todas}
-                guardar_json(ESTADO, {"vence": vence_av})
+                # 2. Cuentas que vencen en menos de 24 horas, una vez por día
+                if av.get("vence"):
+                    for n, x in todas.items():
+                        if x["demo"] or not x["fin"] or x["estado"] in ("bloqueada", "sin clave"):
+                            continue
+                        falta = x["fin"] - ahora
+                        clave = f"{sid}:{n}"
+                        if 0 < falta <= 86400 and vence_av.get(clave) != hoy:
+                            vence_av[clave] = hoy
+                            avisar(c, x["dueno"], f"{donde}⏳ <b>{n}</b> vence en <b>{restante(falta)}</b>.\n"
+                                                  "¿Lo renovás?",
+                                   [[b("➕ 30 días", f"{pref}R:{n}:30"), b("👤 Ver", f"{pref}U:{n}")]],
+                                   admins=False)
 
-            # 3. Cuentas compartidas: se leen los cortes que hacen kira-limite
-            #    y el vigilante. Uno suelto es un celular que reconectó; muchos
-            #    en una hora son dos o más personas peleándose el cupo.
-            out = ""
-            if av.get("multi"):
-                try:
-                    out = subprocess.run(["journalctl", "-t", "kira-limite", "-t", "kira-vigilante",
-                                          f"--since=@{desde}", "-o", "cat", "--no-pager"],
-                                         capture_output=True, text=True, timeout=20).stdout
-                except Exception:
-                    out = ""
-            desde = int(ahora)
-            for l in out.splitlines():
-                m = re.match(r"^(\S+) (?:entró con|tenia) ", l)
-                if m and "cort" in l:
-                    hist.setdefault(m.group(1), []).append(ahora)
-            for n in list(hist):
-                hist[n] = [t for t in hist[n] if ahora - t < 3600]
-                if not hist[n]:
-                    del hist[n]
-                    continue
-                if len(hist[n]) >= MULTI_CORTES and ahora - multi_av.get(n, 0) > 3600 and n in todas:
-                    multi_av[n] = ahora
-                    x = todas[n]
-                    avisar(c, x["dueno"],
-                           f"🚨 <b>{n}</b> parece estar <b>compartiendo la cuenta</b>.\n"
-                           f"Se le cortaron {len(hist[n])} conexiones en la última hora por pasarse "
-                           f"de su límite ({x['limite'] or '∞'}).",
-                           [[b("🔒 Bloquear", f"B:{n}"), b("👤 Ver", f"U:{n}")]])
+                # 3. Cuentas compartidas: se leen los cortes de kira-limite y
+                #    el vigilante. Uno suelto es un celular que reconectó;
+                #    muchos en una hora son varios peleándose el cupo.
+                cortes = cortes_desde(desde.get(sid, ahora - 60)) if av.get("multi") else []
+                desde[sid] = int(ahora)
+                for n in cortes:
+                    hist.setdefault((sid, n), []).append(ahora)
+                for k in [k for k in hist if k[0] == sid]:
+                    hist[k] = [t for t in hist[k] if ahora - t < 3600]
+                    n = k[1]
+                    if not hist[k]:
+                        del hist[k]
+                    elif len(hist[k]) >= MULTI_CORTES and ahora - multi_av.get(k, 0) > 3600 and n in todas:
+                        multi_av[k] = ahora
+                        x = todas[n]
+                        avisar(c, x["dueno"],
+                               f"{donde}🚨 <b>{n}</b> parece estar <b>compartiendo la cuenta</b>.\n"
+                               f"Se le cortaron {len(hist[k])} conexiones en la última hora por pasarse "
+                               f"de su límite ({x['limite'] or '∞'}).",
+                               [[b("🔒 Bloquear", f"{pref}B:{n}"), b("👤 Ver", f"{pref}U:{n}")]])
 
-            # 4. Servidor exigido, como mucho un aviso por hora
-            cpu = cpu_pct()
-            if av.get("vps"):
-                rp = ram_pct()[0]
-                dp = disco_pct()[0]
-                if max(cpu, rp, dp) >= 90 and ahora - vps_av > 3600:
-                    vps_av = ahora
-                    t = ["🔥 <b>El servidor está exigido</b>", LINEA,
-                         f"⚙️ CPU    {barra(cpu)}", f"🧠 RAM    {barra(rp)}", f"💾 Disco  {barra(dp)}"]
+                # 4. Pulso: carga del servidor y conexiones de esta hora
+                pl = pulso()
+                anotar_conexiones(sid, pl["conex"])
+                if av.get("vps") and max(pl["cpu"], pl["ram"], pl["disco"]) >= 90 \
+                        and ahora - vps_av.get(sid, 0) > 3600:
+                    vps_av[sid] = ahora
+                    t = [f"🔥 {negrita('SERVIDOR EXIGIDO')}", cita(f"📍 {esc(nom)}"),
+                         "<pre>" + "\n".join(f"{k:<6}{tira(v, 12)} {v:>3}%" for k, v in
+                                             (("CPU", pl["cpu"]), ("RAM", pl["ram"]), ("DISCO", pl["disco"])))
+                         + "</pre>"]
                     for a in c["admins"]:
-                        enviar(a, "\n".join(t), [[b("🖥 Ver servidor", "vps")]])
-        except Exception as e:
-            registro(f"error en avisos: {e}")
+                        enviar(a, "\n".join(t), [[b("🖥 Ver servidor", f"{pref}vps")]])
+
+                # 5. Foto del día, para el reporte y las estadísticas
+                if not os.path.exists(ruta_foto(sid, hoy)):
+                    guardar_json(ruta_foto(sid, hoy), foto(), 0o600)
+                caido_av.pop(sid, None)
+            except Exception as e:
+                registro(f"avisos en {nom}: {e}")
+                # Un VPS que no contesta es algo que el dueño quiere saber ya
+                if sid != "local" and time.time() - caido_av.get(sid, 0) > 3600:
+                    caido_av[sid] = time.time()
+                    for a in c["admins"]:
+                        enviar(a, f"📴 {negrita('SERVIDOR SIN RESPUESTA')}\n"
+                                  + cita(f"📍 {esc(nom)}", f"<i>{esc(str(e)[:200])}</i>"))
+        ACTUAL.srv = "local"
+        vence_av = {k: v for k, v in vence_av.items() if v == hoy}
+        guardar_json(ESTADO, {"vence": vence_av, "reporte": est.get("reporte", "")})
+
+        # 6. El reporte de ayer, a las 9 de la mañana
+        if av.get("reporte") and time.localtime().tm_hour >= HORA_REPORTE and est.get("reporte") != hoy:
+            est["reporte"] = hoy
+            guardar_json(ESTADO, {"vence": vence_av, "reporte": hoy})
+            try:
+                t, f = reporte_dia()
+                for a in c["admins"]:
+                    enviar(a, t, f)
+            except Exception as e:
+                registro(f"no se pudo armar el reporte: {e}")
 
 
 # ============================================================== MIGRACIÓN ===
@@ -1647,6 +2226,11 @@ def migrar_viejo():
 # ================================================================== MAIN =====
 def main():
     global TOKEN
+    if "--rpc" in sys.argv:
+        # Llamado por SSH desde el bot principal: hace una orden y termina.
+        # No necesita token ni arranca nada.
+        atender_rpc()
+        return
     if os.geteuid() != 0:
         print("El bot tiene que correr como root: crea y borra cuentas.")
         sys.exit(1)

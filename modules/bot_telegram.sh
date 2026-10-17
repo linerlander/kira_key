@@ -71,9 +71,14 @@ print("CF_ADMINS=%s" % shlex.quote(" ".join(str(x) for x in c.get("admins", []))
 print("CF_NREV=%d" % len(rv))
 print("CF_CRED=%d" % sum(int(r.get("creditos", 0)) for r in rv.values()))
 print("CF_BOTUSR=%s" % shlex.quote(str(c.get("bot_usuario", ""))))
+print("CF_LOCAL=%s" % shlex.quote(str(c.get("nombre_local") or "Principal")))
+sv = c.get("servidores", {})
+filas = ["%s|%s|%s|%s|%s" % (k, v.get("nombre", k), v.get("host", ""), v.get("puerto", 22),
+                             v.get("dir", "/root/kira_key")) for k, v in sorted(sv.items())]
+print("CF_SRV=(%s)" % " ".join(shlex.quote(f) for f in filas))
 PY
 )"
-  CF_TOKEN=""; CF_ADMINS=""; CF_NREV=0; CF_CRED=0; CF_BOTUSR=""
+  CF_TOKEN=""; CF_ADMINS=""; CF_NREV=0; CF_CRED=0; CF_BOTUSR=""; CF_LOCAL="Principal"; CF_SRV=()
   eval "$salida"
 }
 
@@ -92,6 +97,22 @@ c.setdefault("revendedores", {})
 if accion == "token":
     c["token"] = valor
     c.pop("bot_usuario", None)
+elif accion == "nombre_local":
+    c["nombre_local"] = valor
+elif accion == "srv_agregar":
+    s = json.loads(valor)
+    c.setdefault("servidores", {})
+    # Si ya estaba ese mismo VPS, se actualiza en vez de duplicarlo
+    sid = next((k for k, v in c["servidores"].items() if v.get("host") == s["host"]), None)
+    if sid is None:
+        n = 1
+        while f"s{n}" in c["servidores"]:
+            n += 1
+        sid = f"s{n}"
+    c["servidores"][sid] = s
+    print(sid)
+elif accion == "srv_quitar":
+    c.setdefault("servidores", {}).pop(valor, None)
 elif accion == "admin":
     n = int(valor)
     if n in c["admins"]:
@@ -208,6 +229,85 @@ mensaje_prueba() {
   done
   if (( ok > 0 )); then MENSAJE="Mensaje enviado a $ok administrador(es) · mirá tu Telegram"
   else AVISO="No llegó · ¿le mandaste /start al bot al menos una vez desde ese Telegram?"; fi
+}
+
+# ============================================================ SERVIDORES ====
+# El bot de ESTE VPS maneja los demás por SSH, con una llave propia. Para
+# sumar uno hay que dejar esa llave autorizada allá: se hace una sola vez,
+# escribiendo la clave root del otro VPS acá mismo, en la terminal.
+LLAVE="/root/.ssh/kira_ed25519"
+declare -A SRV_EST=()      # id -> ok · sin kira · sin respuesta
+ALTA_IP=""; ALTA_PTO=""; ALTA_NOM=""
+SRV_QUITAR=""
+
+asegurar_llave() {
+  [ -f "$LLAVE" ] && return 0
+  mkdir -p /root/.ssh && chmod 700 /root/.ssh
+  ssh-keygen -q -t ed25519 -N "" -C "kira-bot@$(hostname)" -f "$LLAVE" >/dev/null 2>&1
+}
+
+ssh_kira() { # $1=host $2=puerto $3..=orden
+  local h="$1" p="$2"; shift 2
+  ssh -i "$LLAVE" -p "$p" -o BatchMode=yes -o ConnectTimeout=6 \
+      -o StrictHostKeyChecking=accept-new "root@$h" "$@" 2>/dev/null
+}
+
+# Dónde está KIRA en el otro VPS. Devuelve la carpeta, o nada.
+buscar_kira_remoto() { # $1=host $2=puerto
+  ssh_kira "$1" "$2" 'for d in /root/kira_key /home/*/kira_key; do [ -f "$d/kira-bot.py" ] && { echo "$d"; break; }; done'
+}
+
+probar_servidores() {
+  local f id nom host pto dir r
+  SRV_EST=()
+  for f in "${CF_SRV[@]}"; do
+    IFS='|' read -r id nom host pto dir <<< "$f"
+    if ! ssh_kira "$host" "$pto" true; then SRV_EST[$id]="sin respuesta"; continue; fi
+    r="$(ssh_kira "$host" "$pto" "[ -f '$dir/kira-bot.py' ] && echo si")"
+    if [ "$r" = si ]; then SRV_EST[$id]="ok"; else SRV_EST[$id]="sin kira"; fi
+  done
+}
+
+# Sale del dibujo y deja la terminal normal: ssh-copy-id pide la clave del
+# otro VPS y hay que verla escribir.
+alta_servidor() {
+  local dir sid
+  asegurar_llave || { AVISO="No pude crear la llave SSH en $LLAVE"; return 1; }
+  cursor_on; printf '\e[0m'; clear
+  printf '\n  \e[1m🔑 Autorizar a este bot en %s\e[0m\n\n' "$ALTA_IP"
+  printf '  Te va a pedir la \e[1mclave de root del otro VPS\e[0m. Es una sola vez:\n'
+  printf '  después el bot entra con su llave y no necesita ninguna clave.\n\n'
+  if command -v ssh-copy-id >/dev/null 2>&1; then
+    ssh-copy-id -i "$LLAVE.pub" -p "$ALTA_PTO" -o StrictHostKeyChecking=accept-new "root@$ALTA_IP"
+  else
+    ssh -p "$ALTA_PTO" -o StrictHostKeyChecking=accept-new "root@$ALTA_IP" \
+      'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys' \
+      < "$LLAVE.pub"
+  fi
+  if ! ssh_kira "$ALTA_IP" "$ALTA_PTO" true; then
+    printf '\n  \e[1;38;2;255;95;109m✖ No pude entrar con la llave.\e[0m\n\n'
+    printf '  Si ese VPS no deja entrar a root con clave, pegá esta línea en el\n'
+    printf '  archivo \e[1m/root/.ssh/authorized_keys\e[0m del otro VPS y volvé a intentar:\n\n'
+    printf '  \e[38;2;45;212;232m%s\e[0m\n\n' "$(cat "$LLAVE.pub")"
+    read -rsn1 -p "  Pulsá una tecla para volver…"
+    cursor_off; clear
+    AVISO="No se pudo autorizar la llave en $ALTA_IP"
+    return 1
+  fi
+  dir="$(buscar_kira_remoto "$ALTA_IP" "$ALTA_PTO")"
+  cursor_off; clear
+  sid="$(conf_cambiar srv_agregar "$(python3 -c 'import json,sys; print(json.dumps({"nombre":sys.argv[1],"host":sys.argv[2],"puerto":int(sys.argv[3]),"dir":sys.argv[4]}))' \
+          "$ALTA_NOM" "$ALTA_IP" "$ALTA_PTO" "${dir:-/root/kira_key}")")"
+  cargar
+  reiniciar_si_anda
+  if [ -z "$dir" ]; then
+    SRV_EST[$sid]="sin kira"
+    AVISO="Agregado, pero $ALTA_IP no tiene KIRA: instalalo allá y tocá B para probar"
+  else
+    SRV_EST[$sid]="ok"
+    MENSAJE="$ALTA_NOM agregado · ya lo podés elegir desde el bot"
+  fi
+  return 0
 }
 
 # ====================================================== MARCO A LO ANCHO ===
@@ -329,9 +429,9 @@ pintar_inicio() {
   printf '  %s  %s\n' "$(opcion '01' '🔑' 'CARGAR EL TOKEN')" "$(opcion '02' '👑' 'ADMINISTRADORES')"
   if [ "$EST" = "en línea" ]; then
     printf '  %s  %s\n' "$(opcion '03' '🛑' 'APAGAR EL BOT')" "$(opcion '04' '🔄' 'REINICIAR')"
-    printf '  %s  %s\n' "$(opcion '05' '📨' 'MANDARME UN MENSAJE')" "$(pad '' 37)"
+    printf '  %s  %s\n' "$(opcion '05' '📨' 'MANDARME UN MENSAJE')" "$(opcion '06' '🌎' "SERVIDORES · $(( ${#CF_SRV[@]} + 1 ))")"
   else
-    printf '  %s  %s\n' "$(opcion '03' '⚡' 'ENCENDER EL BOT')" "$(pad '' 37)"
+    printf '  %s  %s\n' "$(opcion '03' '⚡' 'ENCENDER EL BOT')" "$(opcion '06' '🌎' "SERVIDORES · $(( ${#CF_SRV[@]} + 1 ))")"
   fi
   opcion_salir
   echo
@@ -379,11 +479,93 @@ pintar_admins() {
   prompt "ID:"
 }
 
+pintar_servidores() {
+  local f id nom host pto dir est c i=0
+  marco_superior
+  techo_ancho "SERVIDORES QUE MANEJA EL BOT"
+  fila_ancha "$(printf '  %s%s%s%s%s%s%s ' "$E_BLD$E_P1" "$(pad '·' 3)" "$E_RST" \
+    "$E_BLD$E_TXT" "$(pad "$CF_LOCAL" 24)" "$E_RST$E_MUT" "$(pad 'este VPS · el bot corre acá' 44)")$E_RST"
+  for f in "${CF_SRV[@]}"; do
+    i=$(( i + 1 )); (( i > 7 )) && break
+    IFS='|' read -r id nom host pto dir <<< "$f"
+    est="${SRV_EST[$id]:-sin probar}"
+    case "$est" in
+      ok)              c="$E_BLD$E_OK";  est="● conectado" ;;
+      "sin kira")      c="$E_BLD$E_WARN"; est="▲ falta instalar KIRA" ;;
+      "sin respuesta") c="$E_BLD$E_ERR"; est="✖ no responde" ;;
+      *)               c="$E_MUT" ;;
+    esac
+    fila_ancha "$(printf '  %s%s%s%s%s%s%s%s%s%s ' "$E_BLD$E_P1" "$(pad "$i" 3)" "$E_RST" \
+      "$E_BLD$E_TXT" "$(pad "$nom" 24)" "$E_RST$E_MUT" "$(pad "$host:$pto" 22)" "$E_RST$c" \
+      "$(pad "$est" 22)" "$E_RST")"
+  done
+  (( i == 0 )) && fila_texto "Todavía no sumaste ningún otro VPS." "$E_MUT"
+  for ((; i<7; i++)); do fila_texto ""; done
+  piso_ancho
+  echo
+  printf '  %s%s%s\n' "$E_MUT" "$(pad 'En cada VPS que sumes tiene que estar KIRA instalado: el bot lo usa allá.' 76)" "$E_RST"
+  printf '  %s%s%s\n' "$E_MUT" "$(pad 'Escribí el número de un servidor para quitarlo de la lista.' 76)" "$E_RST"
+  echo
+  seccion "OPCIONES · SE ELIGEN CON LETRA" "$E_WARN"
+  echo
+  printf '  %s  %s\n' "$(opcion 'A' '➕' 'SUMAR UN VPS')" "$(opcion 'B' '🔁' 'PROBAR LA CONEXIÓN')"
+  printf '  %s  %s\n' "$(opcion 'C' '📝' 'NOMBRE DE ESTE VPS')" "$(pad '' 37)"
+  opcion_salir "VOLVER"
+  echo
+  linea_aviso
+  prompt "Opción:"
+}
+
+pintar_alta() {
+  local et
+  marco_superior
+  techo_ancho "SUMAR UN VPS"
+  fila_dato "IP"     "${ALTA_IP:-—}"
+  fila_dato "PUERTO" "${ALTA_PTO:-—}"
+  fila_dato "NOMBRE" "${ALTA_NOM:-—}"
+  fila_texto ""
+  case "$PANTALLA" in
+    alta_ip)  et="IP:";     fila_texto "La IP pública del otro VPS, por ejemplo 161.132.47.70" "$E_TXT" ;;
+    alta_pto) et="Puerto:"; fila_texto "El puerto SSH del otro VPS. ENTER solo = 22" "$E_TXT" ;;
+    alta_nom) et="Nombre:"; fila_texto "Cómo lo vas a ver en el bot, por ejemplo: Perú 2, EE.UU." "$E_TXT" ;;
+    *)        et="Nombre:"; fila_texto "Cómo se llama ESTE VPS en el bot, por ejemplo: Perú 1" "$E_TXT" ;;
+  esac
+  piso_ancho
+  echo
+  opcion_salir "CANCELAR"
+  echo
+  linea_aviso
+  prompt "$et"
+}
+
+pintar_quitar() {
+  local f id nom host pto dir
+  for f in "${CF_SRV[@]}"; do
+    IFS='|' read -r id nom host pto dir <<< "$f"
+    [ "$id" = "$SRV_QUITAR" ] && break
+  done
+  marco_superior
+  seccion "QUITAR $nom" "$E_ERR"
+  echo
+  printf '  %s%s%s\n' "$E_BLD$E_TXT" "$(pad "El bot deja de manejar $host. Las cuentas de allá siguen andando igual." 76)" "$E_RST"
+  printf '  %s%s%s\n' "$E_MUT" "$(pad 'Lo podés volver a sumar cuando quieras con la opción A.' 76)" "$E_RST"
+  echo
+  printf '  %s  %s\n' "$(opcion '01' '✅' 'SÍ, QUITARLO')" "$(pad '' 37)"
+  opcion_salir "NO, VOLVER"
+  echo
+  linea_aviso
+  prompt "Opción:"
+}
+
 pintar() {
   case "$PANTALLA" in
-    token)  pintar_token ;;
-    admins) pintar_admins ;;
-    *)      pintar_inicio ;;
+    token)      pintar_token ;;
+    admins)     pintar_admins ;;
+    servidores) pintar_servidores ;;
+    alta_*)     pintar_alta ;;
+    renombrar)  pintar_alta ;;
+    quitar)     pintar_quitar ;;
+    *)          pintar_inicio ;;
   esac
 }
 render() { local f; f="$(pintar)"; volcar "$f"; }
@@ -415,7 +597,61 @@ ejecutar() {
         5|05)
           if [ "$EST" = "en línea" ]; then mensaje_prueba
           else AVISO="Encendé el bot primero"; fi ;;
+        6|06)
+          PANTALLA=servidores
+          if (( ${#CF_SRV[@]} > 0 )); then
+            MENSAJE="Probando la conexión con los servidores…"; render; MENSAJE=""
+            probar_servidores
+          fi ;;
         *) AVISO="Elegí una opción de la lista" ;;
+      esac ;;
+
+    servidores)
+      case "$entrada" in
+        ""|0|00) PANTALLA=inicio ;;
+        a|A) ALTA_IP=""; ALTA_PTO=""; ALTA_NOM=""; PANTALLA=alta_ip ;;
+        b|B)
+          MENSAJE="Probando…"; render; MENSAJE=""
+          probar_servidores
+          MENSAJE="Listo · conexión probada con ${#CF_SRV[@]} servidor(es)" ;;
+        c|C) ALTA_NOM=""; PANTALLA=renombrar ;;
+        *)
+          if [[ "$entrada" =~ ^[0-9]+$ ]] && (( 10#$entrada >= 1 && 10#$entrada <= ${#CF_SRV[@]} )); then
+            SRV_QUITAR="${CF_SRV[$(( 10#$entrada - 1 ))]%%|*}"; PANTALLA=quitar
+          else AVISO="Los números son servidores y las letras son opciones"; fi ;;
+      esac ;;
+
+    alta_ip)
+      case "$entrada" in ""|00) PANTALLA=servidores; return ;; esac
+      if ! [[ "$entrada" =~ ^[A-Za-z0-9.:-]{3,60}$ ]]; then AVISO="Escribí la IP o el dominio del otro VPS"; return; fi
+      ALTA_IP="$entrada"; PANTALLA=alta_pto ;;
+    alta_pto)
+      case "$entrada" in 00) PANTALLA=servidores; return ;; "") entrada=22 ;; esac
+      if ! [[ "$entrada" =~ ^[0-9]+$ ]] || (( 10#$entrada < 1 || 10#$entrada > 65535 )); then
+        AVISO="Un puerto es un número de 1 a 65535"; return
+      fi
+      ALTA_PTO=$(( 10#$entrada )); PANTALLA=alta_nom ;;
+    alta_nom)
+      case "$entrada" in ""|00) PANTALLA=servidores; return ;; esac
+      ALTA_NOM="${entrada:0:20}"
+      PANTALLA=servidores
+      alta_servidor ;;
+
+    renombrar)
+      case "$entrada" in ""|00) PANTALLA=servidores; return ;; esac
+      conf_cambiar nombre_local "${entrada:0:20}" >/dev/null
+      cargar; reiniciar_si_anda
+      PANTALLA=servidores
+      MENSAJE="Este VPS ahora se llama ${entrada:0:20} en el bot" ;;
+
+    quitar)
+      case "$entrada" in
+        1|01)
+          conf_cambiar srv_quitar "$SRV_QUITAR" >/dev/null
+          unset "SRV_EST[$SRV_QUITAR]"
+          cargar; reiniciar_si_anda
+          MENSAJE="Servidor quitado de la lista"; PANTALLA=servidores ;;
+        *) PANTALLA=servidores ;;
       esac ;;
 
     token)
@@ -461,6 +697,13 @@ procesar() {
       case "$PANTALLA" in
         token)  case "$1" in [[:print:]]) (( ${#BUF} < 80 )) && BUF="$BUF$1" ;; esac ;;
         admins) case "$1" in [0-9-]) (( ${#BUF} < 15 )) && BUF="$BUF$1" ;; esac ;;
+        alta_*|renombrar)
+                case "$1" in [[:print:]]) (( ${#BUF} < 60 )) && BUF="$BUF$1" ;; esac ;;
+        servidores)
+                case "$1" in
+                  [0-9])     (( ${#BUF} < 2 )) && BUF="$BUF$1" ;;
+                  [a-cA-C])  BUF="$1" ;;
+                esac ;;
         *)      case "$1" in [0-9]) (( ${#BUF} < 2 )) && BUF="$BUF$1" ;; esac ;;
       esac ;;
   esac

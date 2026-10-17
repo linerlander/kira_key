@@ -1,0 +1,223 @@
+#!/bin/bash
+# =============================================================================
+#  KIRA · contador de consumo por usuario
+#
+#  QUÉ MIDE, Y POR QUÉ ESO. Linux puede contar los bytes que SALEN marcándolos
+#  con el dueño del proceso que los manda (-m owner --uid-owner). En la
+#  dirección contraria no se puede: cuando un paquete ENTRA, el núcleo
+#  todavía no sabe de qué proceso es, así que esa misma regla en la cadena
+#  INPUT la rechaza iptables directamente.
+#
+#  Por suerte lo que sale es justo lo que interesa. En un túnel, el que le
+#  manda los datos al cliente es el proceso de sshd que corre COMO ESE
+#  USUARIO: todo lo que tu cliente baja pasa por ahí y queda contado. Lo que
+#  no se cuenta es lo que el cliente sube, que en este negocio es una miga al
+#  lado de lo otro. Por eso la pantalla dice BAJADA y no "total": decir total
+#  sería prometer un número que no se puede medir.
+#
+#  CÓMO LO GUARDA. Los contadores de iptables se van a cero cuando reinicia la
+#  máquina o cuando se rehacen las reglas, así que no sirven como total. Este
+#  script les saca una foto cada pocos segundos y va sumando la DIFERENCIA en
+#  db/consumo, que sí sobrevive a todo.
+#
+#  Se instala con:  bash kira-consumo --instalar
+#  Se saca con:     bash kira-consumo --desinstalar
+#  Una pasada:      bash kira-consumo --una-vez
+# =============================================================================
+
+KIRA_DIR="${KIRA_DIR:-/root/kira_key}"
+CADENA="KIRA_CONSUMO"
+DESTINO="/usr/local/sbin/kira-consumo"
+UNIDAD="/etc/systemd/system/kira-consumo.service"
+INTERVALO="${INTERVALO:-20}"
+ARCHIVO="$KIRA_DIR/db/consumo"
+
+# ============================================================== UTILERÍA ====
+hoy_id()  { printf '%(%Y%m%d)T' -1; }
+mes_id()  { printf '%(%Y%m)T' -1; }
+
+clientes() { # los usuarios vendibles: UID >= 1000
+  awk -F: '$3>=1000 && $3!=65534 && $1!="nobody" && $1!="nogroup" {print $1" "$3}' /etc/passwd
+}
+
+# ============================================================ LAS REGLAS ====
+# Una regla por usuario, en una cadena propia colgada de OUTPUT. La cadena
+# propia es para no ensuciar las reglas del cliente: si algún día quiere
+# sacar todo esto, se borra la cadena y listo.
+#
+# Las reglas son -j RETURN: no aceptan ni descartan nada, sólo cuentan y
+# siguen de largo. Este script NO puede cortarle el tráfico a nadie.
+armar_cadena() {
+  command -v iptables >/dev/null 2>&1 || return 1
+  iptables -nL "$CADENA" >/dev/null 2>&1 || iptables -N "$CADENA" 2>/dev/null
+  iptables -C OUTPUT -j "$CADENA" 2>/dev/null || iptables -I OUTPUT 1 -j "$CADENA" 2>/dev/null
+
+  # Qué UIDs ya tienen regla puesta
+  local puestos u uid
+  puestos=" $(iptables -S "$CADENA" 2>/dev/null | grep -o -- '--uid-owner [0-9]*' | awk '{print $2}' | tr '\n' ' ') "
+  while read -r u uid; do
+    [ -n "$uid" ] || continue
+    case "$puestos" in
+      *" $uid "*) ;;
+      *) iptables -A "$CADENA" -m owner --uid-owner "$uid" -j RETURN 2>/dev/null ;;
+    esac
+  done < <(clientes)
+  return 0
+}
+
+# Lee los contadores: imprime "uid bytes" por cada regla de la cadena.
+leer_contadores() {
+  iptables -L "$CADENA" -vxn 2>/dev/null | awk '
+    /owner UID match/ {
+      uid = ""
+      for (i = 1; i <= NF; i++) if ($i == "match" && $(i-1) == "UID") uid = $(i+1)
+      if (uid != "") print uid, $2
+    }'
+}
+
+# ============================================================== EL REGISTRO =
+# Formato de db/consumo, una línea por usuario:
+#   usuario total mes mes_id hoy dia_id ultimo
+# `ultimo` es la última foto del contador de iptables, para poder sacar la
+# diferencia en la pasada siguiente.
+una_pasada() {
+  armar_cadena || return 1
+  mkdir -p "$KIRA_DIR/db" 2>/dev/null || return 1
+
+  local M D
+  M="$(mes_id)"; D="$(hoy_id)"
+
+  # Quién es quién, por número de usuario
+  declare -A NOM=()
+  local u uid
+  while read -r u uid; do NOM[$uid]="$u"; done < <(clientes)
+
+  # Lo que había guardado
+  declare -A TOT=() MES=() MESID=() HOY=() DIAID=() ULT=()
+  local n t m mi h di ul
+  if [ -r "$ARCHIVO" ]; then
+    while read -r n t m mi h di ul; do
+      [ -n "$n" ] || continue
+      TOT[$n]="${t:-0}"; MES[$n]="${m:-0}"; MESID[$n]="${mi:-$M}"
+      HOY[$n]="${h:-0}"; DIAID[$n]="${di:-$D}"; ULT[$n]="${ul:-0}"
+    done < "$ARCHIVO"
+  fi
+
+  # La foto de ahora
+  local bytes delta
+  while read -r uid bytes; do
+    n="${NOM[$uid]:-}"
+    [ -n "$n" ] || continue
+    [[ "$bytes" =~ ^[0-9]+$ ]] || continue
+    ul="${ULT[$n]:-0}"
+    # Si el contador bajó es que se reinició (arrancó la máquina, o se
+    # rehicieron las reglas). En ese caso lo que hay ahora ES la diferencia:
+    # restar daría un número negativo y arruinaría el total.
+    if (( bytes >= ul )); then delta=$(( bytes - ul )); else delta=$bytes; fi
+    # Cambió el día o el mes: el contador de ese período arranca de nuevo.
+    if [ "${MESID[$n]:-$M}" != "$M" ]; then MES[$n]=0; MESID[$n]="$M"; fi
+    if [ "${DIAID[$n]:-$D}" != "$D" ]; then HOY[$n]=0; DIAID[$n]="$D"; fi
+    TOT[$n]=$(( ${TOT[$n]:-0} + delta ))
+    MES[$n]=$(( ${MES[$n]:-0} + delta ))
+    HOY[$n]=$(( ${HOY[$n]:-0} + delta ))
+    ULT[$n]=$bytes
+    MESID[$n]="${MESID[$n]:-$M}"; DIAID[$n]="${DIAID[$n]:-$D}"
+  done < <(leer_contadores)
+
+  # Y se vuelve a escribir entero. Primero a un temporal y después mv: si se
+  # corta la luz a mitad de camino, el archivo viejo queda intacto en vez de
+  # quedar a medio escribir.
+  local tmp="$KIRA_DIR/db/.consumo.tmp"
+  : > "$tmp" 2>/dev/null || return 1
+  for n in "${!TOT[@]}"; do
+    printf '%s %s %s %s %s %s %s\n' "$n" "${TOT[$n]:-0}" "${MES[$n]:-0}" \
+      "${MESID[$n]:-$M}" "${HOY[$n]:-0}" "${DIAID[$n]:-$D}" "${ULT[$n]:-0}" >> "$tmp"
+  done
+  mv -f "$tmp" "$ARCHIVO" 2>/dev/null
+  chmod 600 "$ARCHIVO" 2>/dev/null
+  return 0
+}
+
+# ================================================================ INSTALAR ==
+instalar() {
+  [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
+  if ! command -v iptables >/dev/null 2>&1; then
+    echo "No encontré iptables: sin eso no se puede contar el consumo."
+    exit 1
+  fi
+  install -m 755 "${BASH_SOURCE[0]}" "$DESTINO"
+  sed -i "s|^KIRA_DIR=.*|KIRA_DIR=\"\${KIRA_DIR:-$KIRA_DIR}\"|" "$DESTINO"
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "No hay systemd en esta máquina."
+    echo "Agregá esto al cron de root:"
+    echo "  * * * * * $DESTINO --una-vez"
+    exit 0
+  fi
+
+  cat > "$UNIDAD" <<EOF
+[Unit]
+Description=KIRA - contador de consumo por usuario
+After=network.target
+
+[Service]
+Type=simple
+Environment=KIRA_DIR=$KIRA_DIR
+ExecStart=$DESTINO
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable kira-consumo >/dev/null 2>&1
+  # restart y no `enable --now`: si ya estaba corriendo, --now no hace nada y
+  # el proceso sigue con el código viejo en memoria.
+  systemctl restart kira-consumo >/dev/null 2>&1
+  sleep 1
+  if systemctl is-active --quiet kira-consumo; then
+    echo "Contador activo. Toma nota cada $INTERVALO segundos."
+  else
+    echo "El servicio no quedó activo. Mirá:  journalctl -u kira-consumo -n 30"
+  fi
+}
+
+desinstalar() {
+  [ "$(id -u)" -eq 0 ] || { echo "Hay que ser root."; exit 1; }
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now kira-consumo >/dev/null 2>&1
+  fi
+  rm -f "$UNIDAD" "$DESTINO"
+  command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload
+  # Las reglas se sacan al final: primero que deje de correr, si no las vuelve
+  # a poner en la pasada siguiente.
+  iptables -D OUTPUT -j "$CADENA" 2>/dev/null
+  iptables -F "$CADENA" 2>/dev/null
+  iptables -X "$CADENA" 2>/dev/null
+  echo "Contador sacado. Lo anotado hasta ahora sigue en db/consumo."
+}
+
+estado() {
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet kira-consumo; then
+    echo "activo"
+  elif iptables -nL "$CADENA" >/dev/null 2>&1; then
+    echo "reglas puestas, servicio parado"
+  else
+    echo "sin instalar"
+  fi
+}
+
+# ==================================================================== MAIN ==
+case "${1:-}" in
+  --instalar)    instalar ;;
+  --desinstalar) desinstalar ;;
+  --una-vez)     una_pasada && echo "Anotado en $ARCHIVO" ;;
+  --estado)      estado ;;
+  *)
+    # Sin argumentos corre para siempre: es así como lo arranca systemd.
+    while true; do
+      una_pasada
+      sleep "$INTERVALO"
+    done ;;
+esac

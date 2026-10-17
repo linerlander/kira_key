@@ -142,10 +142,17 @@ cargar_conexiones() {
       sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
       *) continue ;;
     esac
-    uid=""
+    uid=""; est=""
+    # Los ZOMBIS no se cuentan: ver la nota larga en kira-vigilante. Resumen:
+    # un sshd que ya murió sigue en /proc con su dueño hasta que lo levantan,
+    # y contarlo infla el número de conexiones de una cuenta para siempre.
     while read -r k v resto; do
-      [ "$k" = "Uid:" ] && { uid="$v"; break; }
+      case "$k" in
+        State:) est="$v" ;;
+        Uid:)   uid="$v"; break ;;
+      esac
     done < "$p/status" 2>/dev/null
+    [ "$est" = "Z" ] && continue
     [ -n "$uid" ] || continue
     u="${NOM_DE_UID[$uid]:-}"
     [ -n "$u" ] && (( CON_USR[$u]++ ))

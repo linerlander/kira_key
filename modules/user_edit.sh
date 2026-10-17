@@ -60,8 +60,22 @@ cargar_conexiones() {
       sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
       *) continue ;;
     esac
-    v=""
-    while read -r k v _; do [ "$k" = "Uid:" ] && break; done < "$p/status" 2>/dev/null
+    v=""; est=""
+    # OJO con los ZOMBIS. Cuando una conexión se cae, el proceso de sshd queda
+    # un rato en estado Z: ya murió, pero sigue en /proc con su nombre y su
+    # dueño intactos hasta que el padre lo levanta. Contarlo es contar una
+    # conexión que no existe, y como el número nunca baja, el cupo se llena de
+    # fantasmas y el cliente deja de poder entrar. Se reconecta, deja otro
+    # zombi, y empeora. Por eso hay que mirar el estado y saltearlos.
+    # State: viene antes que Uid: en /proc/PID/status, así que cuando
+    # encontramos el Uid el estado ya está leído.
+    while read -r k v _; do
+      case "$k" in
+        State:) est="$v" ;;
+        Uid:)   break ;;
+      esac
+    done < "$p/status" 2>/dev/null
+    [ "$est" = "Z" ] && continue
     [[ "$v" =~ ^[0-9]+$ ]] || continue
     u="${NOM_DE_UID[$v]:-}"
     [ -n "$u" ] && (( CON_USR[$u]++ ))
@@ -377,8 +391,22 @@ cortar_conexiones() { # $1=usuario
       sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
       *) continue ;;
     esac
-    v=""
-    while read -r k v _; do [ "$k" = "Uid:" ] && break; done < "$p/status" 2>/dev/null
+    v=""; est=""
+    # OJO con los ZOMBIS. Cuando una conexión se cae, el proceso de sshd queda
+    # un rato en estado Z: ya murió, pero sigue en /proc con su nombre y su
+    # dueño intactos hasta que el padre lo levanta. Contarlo es contar una
+    # conexión que no existe, y como el número nunca baja, el cupo se llena de
+    # fantasmas y el cliente deja de poder entrar. Se reconecta, deja otro
+    # zombi, y empeora. Por eso hay que mirar el estado y saltearlos.
+    # State: viene antes que Uid: en /proc/PID/status, así que cuando
+    # encontramos el Uid el estado ya está leído.
+    while read -r k v _; do
+      case "$k" in
+        State:) est="$v" ;;
+        Uid:)   break ;;
+      esac
+    done < "$p/status" 2>/dev/null
+    [ "$est" = "Z" ] && continue
     [ "$v" = "$uid" ] && { kill -9 "${p##*/}" 2>/dev/null && n=$(( n + 1 )); }
   done
   printf '%s' "$n"

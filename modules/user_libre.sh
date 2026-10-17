@@ -65,8 +65,22 @@ cargar_conexiones() {
       sshd|sshd-session|sshd-auth|dropbear|dropbearmulti) ;;
       *) continue ;;
     esac
-    v=""
-    while read -r k v _; do [ "$k" = "Uid:" ] && break; done < "$p/status" 2>/dev/null
+    v=""; est=""
+    # OJO con los ZOMBIS. Cuando una conexión se cae, el proceso de sshd queda
+    # un rato en estado Z: ya murió, pero sigue en /proc con su nombre y su
+    # dueño intactos hasta que el padre lo levanta. Contarlo es contar una
+    # conexión que no existe, y como el número nunca baja, el cupo se llena de
+    # fantasmas y el cliente deja de poder entrar. Se reconecta, deja otro
+    # zombi, y empeora. Por eso hay que mirar el estado y saltearlos.
+    # State: viene antes que Uid: en /proc/PID/status, así que cuando
+    # encontramos el Uid el estado ya está leído.
+    while read -r k v _; do
+      case "$k" in
+        State:) est="$v" ;;
+        Uid:)   break ;;
+      esac
+    done < "$p/status" 2>/dev/null
+    [ "$est" = "Z" ] && continue
     [[ "$v" =~ ^[0-9]+$ ]] || continue
     u="${NOM_DE_UID[$v]:-}"
     [ -n "$u" ] && (( CON_USR[$u]++ ))
@@ -300,10 +314,13 @@ indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
 
 # El renglón que dice si esto está cortando de verdad o es sólo un número
 # guardado. Sin el vigilante andando, los límites no se aplican.
+# Cuando el vigilante está andando no se dice nada: que funcione es lo
+# normal y un cartel verde fijo sólo ocupa lugar. El renglón aparece
+# únicamente cuando hay algo que avisar, que es cuando NO está cortando.
 linea_vigilante() {
   local c t
   case "$VIGILA" in
-    activo) c="$E_OK";   t="✔ Vigilante encendido · corta las conexiones que sobran" ;;
+    activo) return 0 ;;
     parado) c="$E_WARN"; t="▸ Vigilante apagado · los límites están guardados pero NO se aplican" ;;
     *)      c="$E_ERR";  t="✖ Vigilante sin instalar · hoy nadie corta nada · opción C" ;;
   esac

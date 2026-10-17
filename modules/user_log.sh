@@ -24,7 +24,7 @@ ui_exige() {
   exit 1
 }
 ui_exige banda cabecera cachear_cabecera datos_sistema seccion encabezado pad rpad \
-         volcar rep bytes_hum barra_fija
+         volcar rep bytes_hum barra
 
 # ================================================================ ESTADO ====
 POR_PAGINA=10
@@ -216,14 +216,16 @@ fila_consumo() { # $1=número a mostrar $2=índice
   v="$(valor_de "$i")"
   pct=0
   (( TOTAL_VISTA > 0 )) && pct=$(( v * 100 / TOTAL_VISTA ))
-  # La barra dice qué parte del gasto se lleva ESTE usuario. Un solo color:
-  # acá el color no significa peligro, sólo cuánto del total es suyo.
+  # La barra dice qué parte del gasto se lleva ESTE usuario, con el mismo
+  # degradado del monitor: arranca verde y se va poniendo ámbar y después
+  # rojo a medida que crece. Así el que se está comiendo la VPS se ve por el
+  # color antes de leer el número.
   #
-  # Con 0% no se dibuja la barra vacía: once caracteres de relleno en cada
+  # Con 0% no se dibuja la barra vacía: doce caracteres de relleno en cada
   # fila sin consumo arman un bloque oscuro que no dice nada y le gana la
   # vista a las barras que sí importan.
-  if (( pct > 0 )); then barra="$(barra_fija "$pct" 11 "$E_P1")"
-  else                   barra="$(pad '' 11)"; fi
+  if (( pct > 0 )); then barra="$(barra "$pct" 12)"
+  else                   barra="$(pad '' 12)"; fi
   ch="$E_MUT"; (( ${C_HOY[i]} > 0 )) && ch="$E_BLD$E_OK"
   cm="$E_TXT"; (( ${C_MES[i]} > 0 )) && cm="$E_BLD$E_TXT"
   fila_ancha "$(printf ' %s%s%s  %s%s%s  %s%s  %s%s  %s%s%s  %s %s%s%s ' \
@@ -232,7 +234,7 @@ fila_consumo() { # $1=número a mostrar $2=índice
     "$ch" "$(rpad "$(bytes_hum "${C_HOY[i]}")" 9)" \
     "$cm" "$(rpad "$(bytes_hum "${C_MES[i]}")" 9)" \
     "$E_MUT" "$(rpad "$(bytes_hum "${C_TOT[i]}")" 9)" "$E_RST" \
-    "$barra" "$E_MUT" "$(rpad "$pct%" 5)" "$E_RST")"
+    "$barra" "$E_MUT" "$(rpad "$pct%" 4)" "$E_RST")"
 }
 
 indicador_paginas() { # $1=páginas $2=desde $3=hasta $4=total
